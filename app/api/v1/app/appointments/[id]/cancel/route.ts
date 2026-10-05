@@ -13,16 +13,22 @@ export async function POST(
   const { id } = await ctx.params;
   const appt = await prisma.appointment.findFirst({
     where: { id, accountId: account.id },
-    select: { id: true, status: true },
+    select: { id: true, status: true, serviceOrderId: true },
   });
   if (!appt) return jsonError(404, "Цаг олдсонгүй.");
   if (appt.status !== "PENDING" && appt.status !== "CONFIRMED") {
     return jsonError(409, "Энэ цагийг цуцлах боломжгүй.");
   }
+  // Засварын хуудас холбогдсон бол цуцлахгүй — ServiceOrder хөндөгдөхгүй тул
+  // ажил үргэлжилсээр байна (web + апп-ын UI ч мөн нуудаг).
+  if (appt.serviceOrderId) {
+    return jsonError(409, "Засвар эхэлсэн тул энэ цагийг цуцлах боломжгүй.");
+  }
 
-  await prisma.appointment.update({
-    where: { id: appt.id },
+  const updated = await prisma.appointment.updateMany({
+    where: { id: appt.id, accountId: account.id, status: { in: ["PENDING", "CONFIRMED"] }, serviceOrderId: null },
     data: { status: "CANCELLED" },
   });
+  if (updated.count !== 1) return jsonError(409, "Энэ цагийг цуцлах боломжгүй.");
   return jsonOk({ ok: true });
 }

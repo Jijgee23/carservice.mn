@@ -383,9 +383,12 @@ export async function cancelAppointmentByAccountCommand(input: {
   const { account, appointmentId } = input;
   const appt = await prisma.appointment.findFirst({
     where: { id: appointmentId, accountId: account.id },
-    select: { id: true, status: true, tenantId: true, branchId: true, requestedAt: true },
+    select: { id: true, status: true, tenantId: true, branchId: true, requestedAt: true, serviceOrderId: true },
   });
-  if (!appt || (appt.status !== "PENDING" && appt.status !== "CONFIRMED")) {
+  // Засварын хуудас холбогдсон (ажил эхэлсэн байж болох) цагийг үйлчлүүлэгч
+  // цуцлахгүй — appointment-ийг цуцлахад ServiceOrder хөндөгдөхгүй тул ажил
+  // үргэлжилсээр, ажилтанд төөрөгдүүлсэн мэдэгдэл очно (апп ч мөн нуудаг).
+  if (!appt || appt.serviceOrderId || (appt.status !== "PENDING" && appt.status !== "CONFIRMED")) {
     return { appointmentId, cancelled: false };
   }
 
@@ -394,6 +397,7 @@ export async function cancelAppointmentByAccountCommand(input: {
       id: appt.id,
       accountId: account.id,
       status: { in: ["PENDING", "CONFIRMED"] },
+      serviceOrderId: null,
     },
     data: { status: "CANCELLED" },
   });

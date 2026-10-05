@@ -205,3 +205,19 @@ test("confirmAppointmentCommand rejects overdue appointments with APPOINTMENT_OV
   assert.match(body, /isAppointmentOverdue\(appt\)/);
   assert.match(body, /APPOINTMENT_OVERDUE/);
 });
+
+test("account cancel refuses an appointment that already has a linked service order", () => {
+  const source = commandsSource();
+  const start = source.indexOf("export async function cancelAppointmentByAccountCommand");
+  assert.notEqual(start, -1);
+  const body = source.slice(start, source.indexOf("export type RescheduleAppointmentResult", start));
+  assert.match(body, /serviceOrderId: true/);
+  assert.match(body, /if \(!appt \|\| appt\.serviceOrderId \|\|/);
+  assert.match(body, /serviceOrderId: null,\s*\},\s*data: \{ status: "CANCELLED" \}/);
+});
+
+test("app cancel route refuses an appointment with a linked service order (409)", () => {
+  const route = readFileSync(new URL("../app/api/v1/app/appointments/[id]/cancel/route.ts", import.meta.url), "utf8");
+  assert.match(route, /if \(appt\.serviceOrderId\) \{\s*return jsonError\(409,/);
+  assert.match(route, /updateMany\(\{\s*where: \{.*serviceOrderId: null \}/);
+});

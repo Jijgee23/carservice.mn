@@ -233,8 +233,9 @@ export default async function AccountPage({
         ) : (
           <div className="flex flex-col gap-2">
             {sortedAppts.map((a) => {
-              const canCancel =
-                a.status === "PENDING" || a.status === "CONFIRMED";
+              const isActive = a.status === "PENDING" || a.status === "CONFIRMED";
+              // Засварын хуудас холбогдсон бол цуцлахгүй (апп-тай ижил).
+              const canCancel = isActive && !a.serviceOrder;
               const dt = dateParts(a.requestedAt);
 
               // Хураамжийн badge: Invoice (payment) төлөгдсөн, эсвэл fee*
@@ -250,7 +251,7 @@ export default async function AccountPage({
                 <div
                   key={a.id}
                   id={`appt-${a.id}`}
-                  className={`scroll-mt-4 rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-3 flex items-stretch gap-3 target:border-[var(--oc-accent)] target:ring-2 target:ring-[var(--oc-accent)]/40 ${canCancel ? "" : "opacity-70"
+                  className={`scroll-mt-4 rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-3 flex items-stretch gap-3 target:border-[var(--oc-accent)] target:ring-2 target:ring-[var(--oc-accent)]/40 ${isActive ? "" : "opacity-70"
                     }`}
                 >
                   {/* Огнооны chip + мэдээлэл — дэлгэрэнгүй хуудас руу линк.

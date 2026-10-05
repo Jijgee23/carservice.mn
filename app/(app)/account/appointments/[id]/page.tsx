@@ -128,7 +128,8 @@ export default async function AccountAppointmentDetailPage({
   });
   if (!appt) notFound();
 
-  const canCancel = appt.status === "PENDING" || appt.status === "CONFIRMED";
+  // Засварын хуудас холбогдсон бол цуцлахгүй (апп-тай ижил, server ч шалгана).
+  const canCancel = (appt.status === "PENDING" || appt.status === "CONFIRMED") && !appt.serviceOrderId;
   // Захиалга (ServiceOrder) аль хэдийн үүссэн бол онлайнаар шилжүүлэхийг
   // зөвшөөрөхгүй (харах: app/_actions/appointments.ts-ийн
   // rescheduleAppointmentByAccount тайлбар).
