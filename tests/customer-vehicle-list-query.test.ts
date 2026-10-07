@@ -78,6 +78,7 @@ test("customers: search covers fullName, email and a normalised plate match (pho
       { fullName: { contains: "Jane Doe", mode: "insensitive" } },
       { email: { contains: "Jane Doe", mode: "insensitive" } },
       { tenantVehicles: { some: { vehicle: { plate: { contains: "JАNЕDОЕ" } } } } },
+      { orgName: { contains: "Jane Doe", mode: "insensitive" } },
     ],
   });
 });

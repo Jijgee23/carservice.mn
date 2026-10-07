@@ -3,10 +3,11 @@ import { FilterSelect, SearchBox } from "@/app/_components/list-filters";
 import { PageHeader } from "@/app/_components/page-header";
 import { Pagination } from "@/app/_components/pagination";
 import { requireSuperAdmin } from "@/lib/auth/system";
-import { customerLabel } from "@/lib/customers";
+import { customerLabel, orgRegnumLabel } from "@/lib/customers";
 import { buildMeta, getPageInfo } from "@/lib/pagination";
 import { formatPhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
+import { customerTextSearchClauses } from "@/lib/customers/customer-search";
 
 export const metadata = { title: "Үйлчлүүлэгчид" };
 
@@ -23,8 +24,7 @@ export default async function SystemCustomersPage({
     ...(q
       ? {
           OR: [
-            { fullName: { contains: q, mode: "insensitive" } },
-            { phone: { contains: q } },
+            ...customerTextSearchClauses(q),
             { email: { contains: q, mode: "insensitive" } },
           ],
         }
@@ -43,6 +43,8 @@ export default async function SystemCustomersPage({
         fullName: true,
         phone: true,
         email: true,
+        isOrganization: true,
+        orgRegnum: true,
         accountId: true,
         createdAt: true,
         tenant: { select: { name: true } },
@@ -65,7 +67,7 @@ export default async function SystemCustomersPage({
       />
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        <SearchBox placeholder="Нэр, утас, имэйлээр хайх" />
+        <SearchBox placeholder="Нэр, утас, имэйл, регистрээр хайх" />
         <FilterSelect
           paramName="tenantId"
           placeholder="Бүх байгууллага"
@@ -112,6 +114,9 @@ export default async function SystemCustomersPage({
                       <div className="text-sm font-medium text-[var(--oc-ink2)]">
                         {customerLabel(c)}
                       </div>
+                      {orgRegnumLabel(c) ? (
+                        <div className="text-xs text-[var(--oc-muted3)]">{orgRegnumLabel(c)}</div>
+                      ) : null}
                       {c.email ? (
                         <div className="text-xs text-[var(--oc-muted3)]">{c.email}</div>
                       ) : null}

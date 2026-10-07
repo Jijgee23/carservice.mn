@@ -5,9 +5,15 @@
 
 import { Prisma, type Plan } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { orderReadWhere, type OrderAccessUser } from "@/lib/auth/order-access";
 import { workingBranchScopeId } from "@/lib/auth/roles";
 import { getLimitsMap } from "@/lib/plan-limits-server";
 import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
+import {
+  RECEIVABLE_ORDER_SELECT,
+  RECEIVABLE_ORDER_WHERE,
+  sumReceivable,
+} from "@/lib/orders/order-receivable";
 import { resolveActiveSubscription } from "@/lib/subscription";
 import { dailyTrend, type Trend } from "@/app/dashboard/trend";
 import {
@@ -37,6 +43,12 @@ export type OverviewUser = {
    * Omit it (e.g. from an API-token actor) and the loader fetches it itself.
    */
   tenantPlan?: string;
+  /**
+   * Order read-access identity (id/isOwner/role). When given, the receivable is
+   * limited by `orderReadWhere` so the card equals what the user can see in the
+   * orders list (own-scope users: only their assigned orders). Omit = unscoped.
+   */
+  orderAccess?: OrderAccessUser;
 };
 
 export type OverviewParams = {
@@ -93,6 +105,7 @@ export async function loadOverviewData(
     openOrderCount,
     completedThisMonth,
     incomeOrders,
+    internalCostSums,
     subscriptions,
     orderDates,
     completedDates,
@@ -102,7 +115,7 @@ export async function loadOverviewData(
     employeeDates,
     recentlyUpdatedOrders,
     postpaidVehicleCount,
-    postpaidSums,
+    receivableOrders,
     todayOrderCount,
     planLimits,
   ] = await Promise.all([
@@ -132,9 +145,21 @@ export async function loadOverviewData(
         tenantId: user.tenantId,
         ...orderBranchFilter,
         status: "COMPLETED",
+        // Дотоод засвар орлогод орохгүй — «Дотоод зардал»-д тусад нь.
+        isInternal: false,
         completedAt: { gte: incomeRange.fetchFrom, lte: incomeRange.to },
       },
       select: { completedAt: true, totalAmount: true },
+    }),
+    prisma.serviceOrder.aggregate({
+      where: {
+        tenantId: user.tenantId,
+        ...orderBranchFilter,
+        status: "COMPLETED",
+        isInternal: true,
+        completedAt: { gte: incomeRange.from, lte: incomeRange.to },
+      },
+      _sum: { totalAmount: true },
     }),
     prisma.subscription.findMany({
       where: { tenantId: user.tenantId },
@@ -193,14 +218,15 @@ export async function loadOverviewData(
     prisma.tenantVehicle.count({
       where: { tenantId: user.tenantId, isPostpaid: true },
     }),
-    prisma.serviceOrder.aggregate({
+    // Авлага: бүх дууссан (дотоод биш) захиалгын төлөгдөөгүй үлдэгдэл — дараа төлбөрт эсэхээс үл хамаарна.
+    prisma.serviceOrder.findMany({
       where: {
         tenantId: user.tenantId,
         ...orderBranchFilter,
-        isPostpaid: true,
-        status: { not: "CANCELLED" },
+        ...(user.orderAccess ? orderReadWhere(user.orderAccess) : {}),
+        ...RECEIVABLE_ORDER_WHERE,
       },
-      _sum: { totalAmount: true, paidAmount: true },
+      select: RECEIVABLE_ORDER_SELECT,
     }),
     prisma.serviceOrder.count({
       where: { tenantId: user.tenantId, createdAt: { gte: todayStart } },
@@ -214,12 +240,11 @@ export async function loadOverviewData(
   ]);
   const activeSub = resolveActiveSubscription(subscriptions);
 
-  // Дараа төлбөрт (гэрээт) машинуудын төлөгдөөгүй үлдэгдэл — авлага.
-  const receivable = new Prisma.Decimal(
-    postpaidSums._sum.totalAmount ?? 0,
-  ).minus(new Prisma.Decimal(postpaidSums._sum.paidAmount ?? 0));
+  const receivable = sumReceivable(receivableOrders);
 
   const income = buildIncomeSeries(incomeOrders, incomeRange);
+  // Сонгосон хугацааны дууссан дотоод засварын нийт дүн (орлогын мужтай ижил).
+  const internalCost = new Prisma.Decimal(internalCostSums._sum.totalAmount ?? 0);
 
   // Per-card growth/decline trends.
   const orderTrend = dailyTrend(orderDates.map((o) => o.createdAt));
@@ -245,6 +270,7 @@ export async function loadOverviewData(
     todayOrderCount,
     planLimits,
     income,
+    internalCost,
     orderTrend,
     completedTrend,
     customerTrend,

@@ -90,7 +90,7 @@ export async function GET(req: Request) {
         template: { select: { name: true, type: true } },
         vehicle: { select: { plate: true, make: true, model: true, year: true } },
         branch: { select: { name: true } },
-        order: { select: { id: true, number: true } },
+        order: { select: { id: true, number: true, isInternal: true } },
       },
     }),
     prisma.diagnosticReport.count({ where }),
@@ -105,7 +105,8 @@ export async function GET(req: Request) {
     createdAt: r.createdAt,
     vehicle: r.vehicle,
     branch: r.branch,
-    order: r.order,
+    // Дотоод засварын захиалгыг үйлчлүүлэгчид ил гаргахгүй (тайлан өөрөө үлдэнэ).
+    order: r.order && !r.order.isInternal ? { id: r.order.id, number: r.order.number } : null,
   }));
 
   return jsonOk({

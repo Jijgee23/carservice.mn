@@ -64,7 +64,7 @@ export default async function SystemTenantsPage({
   const ids = tenants.map((t) => t.id);
   const revenueAgg = await prisma.serviceOrder.groupBy({
     by: ["tenantId"],
-    where: { tenantId: { in: ids }, status: "COMPLETED" },
+    where: { tenantId: { in: ids }, status: "COMPLETED", isInternal: false },
     _sum: { totalAmount: true },
   });
   const revenueByTenant = Object.fromEntries(

@@ -20,11 +20,14 @@ import {
   rejectUnknownParams,
   type ListQueryParseError,
 } from "@/lib/list-query-params";
+import { customerRegnumClause } from "@/lib/customers/customer-search";
 
-const ALLOWED_PARAMS = ["q", "page", "pageSize", "limit"] as const;
+const ALLOWED_PARAMS = ["q", "kind", "page", "pageSize", "limit"] as const;
 
 export type CustomerListQuery = {
   q?: string;
+  /** Phase 4a: байгууллага / хувь хүн шүүлт. */
+  kind?: "org" | "person";
   page: number;
   pageSize: number;
   skip: number;
@@ -34,6 +37,15 @@ export type CustomerListQuery = {
 export type CustomerListQueryParseResult =
   | { ok: true; value: CustomerListQuery }
   | ListQueryParseError;
+
+/** Хоосон/байхгүй → undefined; org|person → утга; бусад → "invalid". */
+export function parseCustomerKind(
+  raw: string | null | undefined,
+): "org" | "person" | undefined | "invalid" {
+  const v = raw?.trim();
+  if (!v) return undefined;
+  return v === "org" || v === "person" ? v : "invalid";
+}
 
 /** Parse and validate the shared customers list/search query. */
 export function parseCustomerListQuery(
@@ -45,10 +57,16 @@ export function parseCustomerListQuery(
   const pagination = parsePagination(searchParams);
   if ("ok" in pagination) return pagination;
 
+  const kind = parseCustomerKind(searchParams.get("kind"));
+  if (kind === "invalid") {
+    return { ok: false, field: "kind", message: "kind нь org эсвэл person байх ёстой." };
+  }
+
   return {
     ok: true,
     value: {
       q: optionalText(searchParams, "q"),
+      ...(kind ? { kind } : {}),
       ...pagination,
     },
   };
@@ -64,6 +82,8 @@ export function buildCustomerListWhere(
   options: BuildCustomerListWhereOptions,
 ): Prisma.CustomerWhereInput {
   const where: Prisma.CustomerWhereInput = { tenantId: options.tenantId };
+  if (query.kind === "org") where.isOrganization = true;
+  else if (query.kind === "person") where.isOrganization = false;
   if (query.q) {
     const digits = query.q.replace(/[\s-]/g, "");
     // Хадгалагдсан дугаарууд normalizePlate-ээр канончлогдсон (зураасгүй,
@@ -80,6 +100,10 @@ export function buildCustomerListWhere(
       });
     }
     if (/\d/.test(digits)) or.push({ phone: { contains: digits } });
+    // Phase 4a: байгууллагын нэр/регистрээр хайна (бусад заавруудын дараа).
+    or.push({ orgName: { contains: query.q, mode: "insensitive" } });
+    const regnum = customerRegnumClause(query.q);
+    if (regnum) or.push(regnum);
     where.OR = or;
   }
   return where;

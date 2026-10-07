@@ -41,6 +41,7 @@ import {
   rejectAppointmentCommand,
   rescheduleAppointmentByAccountCommand,
   rescheduleAppointmentCommand,
+  setAppointmentAssigneeCommand,
   type AppointmentCommandActor,
 } from "@/lib/appointments/appointment-commands";
 import { registerAppointmentByStaffCommand } from "@/lib/appointments/appointment-create-command";
@@ -383,6 +384,8 @@ export async function registerAppointmentByStaff(
   const branchId = s(formData, "branchId");
   const customerId = s(formData, "customerId");
   const vehicleId = s(formData, "vehicleId") || null;
+  // QA #28: хариуцах мастер заавал (orders.assign-гүй бол өөрөө) — шалгалтыг command хийнэ.
+  const assignedToId = s(formData, "assignedToId") || null;
   const requestedRaw = s(formData, "requestedAt");
   const note = s(formData, "note");
 
@@ -413,6 +416,7 @@ export async function registerAppointmentByStaff(
       note: note || null,
       categoryIds: requestedCategoryIds,
       confirmed,
+      assignedToId,
     });
   } catch (error) {
     if (error instanceof AppointmentCommandError) {
@@ -625,7 +629,12 @@ export async function confirmAppointment(
   }
 
   try {
-    await confirmAppointmentCommand({ actor: actorFrom(user), appointmentId: id });
+    await confirmAppointmentCommand({
+      actor: actorFrom(user),
+      appointmentId: id,
+      // QA #28: мастергүй цагийг батлахад мастер заавал (command шийднэ); хоосон = өгөөгүй.
+      ...(s(formData, "assignedToId") ? { assignedToId: s(formData, "assignedToId") } : {}),
+    });
   } catch (e) {
     const known = knownAuthorizationMessage(e, STAFF_SCOPE_MESSAGES);
     if (known) return { ok: false, message: known };
@@ -635,6 +644,44 @@ export async function confirmAppointment(
   revalidatePath("/dashboard/appointments");
   revalidatePath("/account");
   return { ok: true, message: "Цаг баталгаажлаа." };
+}
+
+/**
+ * QA #28: цагийн хариуцах мастер солих (арилгах боломжгүй — хоосон = ASSIGNEE_REQUIRED).
+ * Шалгалт, эрх, audit бүгд setAppointmentAssigneeCommand-д.
+ */
+export async function setAppointmentAssigneeAction(
+  _prev: AppointmentActionState,
+  formData: FormData,
+): Promise<AppointmentActionState> {
+  const id = s(formData, "id");
+  if (!id) return { ok: false, message: "Буруу хүсэлт." };
+  try {
+    let user;
+    try {
+      user = await requireUser();
+    } catch (e) {
+      unstable_rethrow(e);
+      return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
+    }
+    await setAppointmentAssigneeCommand({
+      actor: actorFrom(user),
+      appointmentId: id,
+      assignedToId: s(formData, "assignedToId") || null,
+    });
+  } catch (e) {
+    unstable_rethrow(e);
+    const known = knownAuthorizationMessage(e, STAFF_SCOPE_MESSAGES);
+    if (known) return { ok: false, message: known };
+    if (e instanceof AppointmentCommandError) {
+      return { ok: false, message: e.message, fieldErrors: e.fieldErrors };
+    }
+    logUnexpectedActionError("appointments:set-assignee", e);
+    return { ok: false, message: ACTION_GENERIC_ERROR_MESSAGE };
+  }
+  revalidatePath("/dashboard/appointments");
+  revalidatePath("/dashboard/appointments/calendar");
+  return { ok: true, message: "Хариуцах мастер шинэчлэгдлээ." };
 }
 
 /** Ажилтан цаг татгалзах. */

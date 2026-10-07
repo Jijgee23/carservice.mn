@@ -33,7 +33,7 @@ export async function GET(
       template: { select: { name: true, type: true, schema: true } },
       vehicle: { select: { plate: true, make: true, model: true, year: true } },
       branch: { select: { name: true } },
-      order: { select: { id: true, number: true } },
+      order: { select: { id: true, number: true, isInternal: true } },
     },
   });
   if (!report) return jsonError(404, "Тайлан олдсонгүй.");
@@ -53,7 +53,8 @@ export async function GET(
       createdAt: report.createdAt,
       vehicle: report.vehicle,
       branch: report.branch,
-      order: report.order,
+      // Дотоод засварын захиалгыг ил гаргахгүй.
+      order: report.order && !report.order.isInternal ? { id: report.order.id, number: report.order.number } : null,
     },
   });
 }

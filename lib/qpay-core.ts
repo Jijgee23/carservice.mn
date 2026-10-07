@@ -78,6 +78,31 @@ export type QPayExactCheckResult =
     }
   | { error: string };
 
+export type QPayCancelInvoiceResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: "not_configured" | "already_paid" | "not_found" | "http_error";
+      status?: number;
+      message?: string;
+    };
+
+/**
+ * Classify a failed `DELETE /invoice/{id}`.
+ * ⚠️ The error codes below (INVOICE_PAID, INVOICE_NOTFOUND, INVOICE_ALREADY_CANCELED) MUST be verified against the
+ * QPay sandbox before production use. Fail-safe rule: "gone" (not_found) is reported ONLY when the body explicitly
+ * says the invoice does not exist / is already cancelled. A bare, HTML or unknown 404 (wrong URL/path, gateway) is an
+ * http_error so the caller never cancels locally while the invoice may still be live.
+ */
+export function classifyCancelInvoiceFailure(status: number, body: string): QPayCancelInvoiceResult {
+  const text = body.slice(0, 300);
+  if (/INVOICE_PAID/i.test(text)) return { ok: false, reason: "already_paid", status, message: text };
+  if (/INVOICE_NOTFOUND|INVOICE_NOT_FOUND|INVOICE_ALREADY_CANCEL(?:L)?ED/i.test(text)) {
+    return { ok: false, reason: "not_found", status, message: text };
+  }
+  return { ok: false, reason: "http_error", status, message: text };
+}
+
 /** Тохиргооны эх сурвалжид байх ёстой QPay-ийн нийтлэг талбарууд. */
 export type QPayTokenFields = {
   username: string | null;
@@ -415,9 +440,55 @@ export function createQPayClient<Id, Settings extends QPayTokenFields = QPayToke
     return { ok: true };
   }
 
+  /**
+   * Invoice-ийг QPay дээр цуцална: `DELETE /v2/invoice/{invoice_id}`.
+   * HTTP алдааг ХЭЗЭЭ Ч throw хийхгүй — төрөлжсөн үр дүн буцаана:
+   *   - `ok: true`                       — цуцлагдлаа
+   *   - `reason: "not_found"`            — QPay-д аль хэдийн байхгүй/цуцлагдсан (дуудагчид OK)
+   *   - `reason: "already_paid"`         — invoice төлөгдсөн тул цуцлах боломжгүй
+   *   - `reason: "not_configured"`       — tenant-ийн QPay тохиргоо байхгүй/идэвхгүй/дутуу
+   *   - `reason: "http_error"`           — бусад бүх алдаа (сүлжээ, 5xx, token гэх мэт)
+   */
+  async function cancelInvoice(id: Id, invoiceId: string): Promise<QPayCancelInvoiceResult> {
+    if (!invoiceId) return { ok: false, reason: "not_found" };
+    try {
+      const settings = await store.getSettings(id);
+      if (
+        !settings ||
+        store.checkAvailable?.(settings) ||
+        !settings.username ||
+        !settings.password ||
+        !settings.invoiceCode
+      ) {
+        return { ok: false, reason: "not_configured" };
+      }
+      const tokenResult = await getAccessToken(id);
+      if ("error" in tokenResult) {
+        return { ok: false, reason: "http_error", message: tokenResult.error };
+      }
+      const res = await fetch(`${QPAY_URL}invoice/${encodeURIComponent(invoiceId)}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${tokenResult.accessToken}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (res.ok) return { ok: true };
+      const text = await res.text().catch(() => "");
+      return classifyCancelInvoiceFailure(res.status, text);
+    } catch (error) {
+      return {
+        ok: false,
+        reason: "http_error",
+        message: error instanceof Error ? error.name : "UnknownError",
+      };
+    }
+  }
+
   return {
     getAccessToken,
     createInvoice,
+    cancelInvoice,
     getInvoiceUrls,
     checkPayment,
     checkPaymentExact,

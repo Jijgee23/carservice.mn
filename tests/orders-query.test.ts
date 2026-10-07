@@ -25,6 +25,7 @@ test("parses every orders-list filter and decodes encoded search text", () => {
     assignedToId: "user-1",
     paymentStatus: "PARTIAL",
     postpaid: true,
+    internal: undefined,
     dateFrom: "2026-09-01",
     dateTo: "2026-09-30",
     q: "Jane Doe/9911",
@@ -91,21 +92,27 @@ test("search covers number, customer, phone, plate, make and model", () => {
         { number: { contains: "Jane Doe", mode: "insensitive" } },
         { customer: { fullName: { contains: "Jane Doe", mode: "insensitive" } } },
         { customer: { phone: { contains: "Jane Doe", mode: "insensitive" } } },
+        { plateSnapshot: { contains: "Jane Doe", mode: "insensitive" } },
         { vehicle: { plate: { contains: "Jane Doe", mode: "insensitive" } } },
         { vehicle: { make: { contains: "Jane Doe", mode: "insensitive" } } },
         { vehicle: { model: { contains: "Jane Doe", mode: "insensitive" } } },
+        { vinSnapshot: { contains: "JANEDOE", mode: "insensitive" } },
+        { vehicle: { vin: { contains: "JANEDOE", mode: "insensitive" } } },
       ],
     },
   ]);
 });
 
-test("plate filter matches only the vehicle plate, conjunctive with search", () => {
+test("plate filter matches the snapshot or the vehicle plate, conjunctive with search", () => {
   const where = buildOrderListWhere(query("plate=1234&q=Jane"), {
     tenantId: "tenant-a",
     readWhere: {},
   });
   assert.deepEqual((where.AND as unknown[]).at(-1), {
-    vehicle: { plate: { contains: "1234", mode: "insensitive" } },
+    OR: [
+      { plateSnapshot: { contains: "1234", mode: "insensitive" } },
+      { vehicle: { plate: { contains: "1234", mode: "insensitive" } } },
+    ],
   });
   assert.equal((where.AND as unknown[]).length, 3);
 });
@@ -176,9 +183,12 @@ test("empty access remains conjunctive with all client filters", () => {
         { number: { contains: "secret", mode: "insensitive" } },
         { customer: { fullName: { contains: "secret", mode: "insensitive" } } },
         { customer: { phone: { contains: "secret", mode: "insensitive" } } },
+        { plateSnapshot: { contains: "secret", mode: "insensitive" } },
         { vehicle: { plate: { contains: "secret", mode: "insensitive" } } },
         { vehicle: { make: { contains: "secret", mode: "insensitive" } } },
         { vehicle: { model: { contains: "secret", mode: "insensitive" } } },
+        { vinSnapshot: { contains: "SECRET", mode: "insensitive" } },
+        { vehicle: { vin: { contains: "SECRET", mode: "insensitive" } } },
       ],
     },
   ]);

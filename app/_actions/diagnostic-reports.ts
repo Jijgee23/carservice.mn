@@ -128,7 +128,7 @@ export async function createReportAction(
           id: itemId,
           orderId: order.id,
           kind: "DIAGNOSTIC",
-          status: { not: "CANCELLED" },
+          status: { in: ["PENDING", "IN_PROGRESS"] }, // COMPLETED мөр түгжигдсэн
           diagnosticReportId: null,
         },
         select: { id: true, startedAt: true },
@@ -355,8 +355,12 @@ export async function deleteReportAction(formData: FormData): Promise<ConfirmAct
   // нь бөглөх хүлээгдэж буй болгож буцаана.
   const linkedItem = await prisma.serviceItem.findUnique({
     where: { diagnosticReportId: report.id },
-    select: { id: true },
+    select: { id: true, status: true },
   });
+  // Дууссан оношилгооны мөр түгжигдсэн — тайланг устгаж мөрийг буцаах боломжгүй.
+  if (linkedItem?.status === "COMPLETED") {
+    return { error: "Дууссан ажлыг засах боломжгүй." };
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.diagnosticReport.delete({ where: { id: report.id } });

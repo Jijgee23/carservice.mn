@@ -125,7 +125,8 @@ export function isValidVin(v: string): boolean {
 }
 
 // Олдсон машины хоосон талбарыг шинэ мэдээллээр баяжуулна (байгаа утгыг
-// дарж бичихгүй); mileage-г илүү ихээр шинэчилнэ. plate-г ХӨНДӨХГҮЙ.
+// дарж бичихгүй); mileage-г илүү ихээр шинэчилнэ. plate-г ХӨНДӨХГҮЙ (дугаар
+// солих ганц зам нь resolveVehicleForOwner-ийн VIN-ээр олдсон тохиолдол).
 function enrichData(
   existing: {
     vin: string | null;
@@ -171,6 +172,8 @@ export type VehicleOwner = {
   customerId?: string | null;
   accountId?: string | null;
   phone?: string | null;
+  /** Байгууллага Customer-ийн 7 оронтой регистр — байвал утасны оронд эзний түлхүүр болно. */
+  orgRegnum?: string | null;
 };
 
 /**
@@ -187,15 +190,27 @@ export type VehicleOwner = {
  * үйлчлүүлэгчийнх биш" гэж мухардана.
  */
 function ownerMatchWhere(
-  plate: string,
+  plate: string | null,
   owner: VehicleOwner,
 ): Prisma.VehicleWhereInput | null {
   const or: Prisma.VehicleWhereInput[] = [];
   const tenantId = owner.tenantId || null;
   const customerId = owner.customerId || null;
   const accountId = owner.accountId || null;
-  const pm = phoneMatch(owner.phone);
+  const orgRegnum = owner.orgRegnum || null;
+  // Байгууллагын эзний түлхүүр = orgRegnum (утас БИШ) — өөр холбоо барих
+  // хүнтэй ч ижил регистртэй Customer-ийн машин ижил эзэнд тооцогдоно.
+  const pm = orgRegnum ? null : phoneMatch(owner.phone);
 
+  if (orgRegnum) {
+    or.push({
+      tenantLinks: {
+        // Зөвхөн ажиллаж буй tenant-ийн link — orgRegnum дангаараа tenant дамнасан
+        // эзэмшил болохгүй.
+        some: { ...(tenantId ? { tenantId } : {}), customer: { isOrganization: true, orgRegnum } },
+      },
+    });
+  }
   if (tenantId && customerId) {
     or.push({ tenantLinks: { some: { tenantId, customerId } } });
   }
@@ -223,14 +238,25 @@ function ownerMatchWhere(
   }
   if (or.length === 0) return null;
 
-  const where: Prisma.VehicleWhereInput = { plate, OR: or };
+  const where: Prisma.VehicleWhereInput = plate ? { plate, OR: or } : { OR: or };
   if (tenantId) {
+    // Байгууллага: ижил orgRegnum-тай ӨӨР Customer-т link-тэй мөр мөн ижил эзэн.
+    const sameOrg: Prisma.TenantVehicleWhereInput[] = orgRegnum
+      ? [{ NOT: { customer: { isOrganization: true, orgRegnum } } }]
+      : [];
     where.NOT = {
       tenantLinks: {
         some: {
           tenantId,
           customerId: { not: null },
-          ...(customerId ? { NOT: { customerId } } : {}),
+          ...(customerId || sameOrg.length
+            ? {
+                AND: [
+                  ...(customerId ? [{ NOT: { customerId } }] : []),
+                  ...sameOrg,
+                ],
+              }
+            : {}),
         },
       },
     };
@@ -253,7 +279,7 @@ function ownerMatchWhere(
 export async function resolveVehicleForOwner(
   client: Client,
   input: { plate: string; owner: VehicleOwner | null } & VehicleAttrs,
-): Promise<{ id: string; created: boolean }> {
+): Promise<{ id: string; created: boolean; plateChanged?: { from: string; to: string } }> {
   const plate = normalizePlate(input.plate);
   const vin = normalizeVin(input.vin);
   const attrs = input;
@@ -263,38 +289,87 @@ export async function resolveVehicleForOwner(
   // гэж үзнэ — эс бөгөөс нэг эзний өөр өөр дугааргүй машин нэгтгэгдэнэ.
   const ownerWhere = input.owner ? ownerMatchWhere(plate, input.owner) : null;
   const where = ownerWhere && noPlate ? (vin ? { ...ownerWhere, vin } : null) : ownerWhere;
+  // Option A: хүчинтэй VIN + ижил эзэн → дугаар солигдсон ч ижил машин.
+  const vinOwnerWhere =
+    vin && isValidVin(vin) && input.owner ? ownerMatchWhere(null, input.owner) : null;
   // Vehicle нь глобал (unique constraint-гүй) тул ижил дугаарын зэрэгцээ
-  // "шалгаад үүсгэх" хоёр хүсэлт давхар мөр үүсгэж болно. Дугаараар advisory
-  // xact lock авч цувуулна — транзакц дуусахад автоматаар суллагдана.
-  if (where) {
-    const lockKey = noPlate ? `vehicle-vin:${vin}` : `vehicle-plate:${plate}`;
-    await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
+  // "шалгаад үүсгэх" хоёр хүсэлт давхар мөр үүсгэж болно. Advisory xact lock
+  // авч цувуулна (дараалал: VIN, дараа нь дугаар) — транзакц дуусахад суллагдана.
+  if (vinOwnerWhere) {
+    await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`vehicle-vin:${vin}`}))`;
   }
-  const existing = where
+  if (where && !noPlate) {
+    await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`vehicle-plate:${plate}`}))`;
+  } else if (where && !vinOwnerWhere) {
+    await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`vehicle-vin:${vin}`}))`;
+  }
+  const select = {
+    id: true,
+    plate: true,
+    vin: true,
+    year: true,
+    fuelType: true,
+    wheelPosition: true,
+    colorName: true,
+    capacity: true,
+    purpose: true,
+    ownerRegnum: true,
+    mileage: true,
+  } as const;
+  // I3: ижил дугаар+эзний мөр байвал түүнийг дахин ашиглана (давхар дугаартай
+  // мөр үүсгэхгүй); VIN-ээр нэрлэн солих нь зөвхөн дугаарын мөр байхгүй үед.
+  const byPlate = where
     ? await client.vehicle.findFirst({
         where,
         orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          vin: true,
-          year: true,
-          fuelType: true,
-          wheelPosition: true,
-          colorName: true,
-          capacity: true,
-          purpose: true,
-          ownerRegnum: true,
-          mileage: true,
-        },
+        select,
       })
     : null;
+  // C1: глобал Vehicle мөрийг VIN-ээр дахин ашиглах/дугаар солих нь ЗӨВХӨН бусад
+  // tenant/account найдаагүй мөрөнд зөвшөөрөгдөнө.
+  let byVin: Awaited<ReturnType<typeof client.vehicle.findFirst<{ select: typeof select }>>> = null;
+  if (!byPlate && vinOwnerWhere && input.owner) {
+    const tenantId = input.owner.tenantId || null;
+    const accountId = input.owner.accountId || null;
+    const scope: Prisma.VehicleWhereInput[] = [];
+    if (tenantId) {
+      // `every` нь 0 link дээр хоосон үнэн тул `some` + account link-гүй байхыг
+      // нэмж шалгана (customer-app-only мөрийг tenant нэрлэн солиж чадахгүй).
+      scope.push({ tenantLinks: { every: { tenantId } } });
+      scope.push({ tenantLinks: { some: { tenantId } } });
+      scope.push({ accountLinks: { none: {} } });
+    } else if (accountId) {
+      scope.push({ tenantLinks: { every: { customer: { accountId } } } });
+      scope.push({
+        OR: [{ tenantLinks: { some: {} } }, { accountLinks: { some: { accountId } } }],
+      });
+      scope.push({ accountLinks: { every: { accountId } } });
+    }
+    if (scope.length > 0) {
+      byVin = await client.vehicle.findFirst({
+        where: { ...vinOwnerWhere, vin, AND: scope },
+        orderBy: { createdAt: "desc" },
+        select,
+      });
+    }
+  }
+  const existing = byPlate ?? byVin;
 
   if (existing) {
+    // Дугаар солигдсон (VIN-ээр олдсон): жинхэнэ шинэ дугаар бол шинэчилнэ.
+    // Өмнөх захиалгын дугаар ServiceOrder.plateSnapshot-д хадгалагдсан.
+    const plateChanged =
+      byVin && !noPlate && existing.plate !== plate
+        ? { from: existing.plate, to: plate }
+        : undefined;
     await client.vehicle.update({
       where: { id: existing.id },
-      data: enrichData(existing, vin, attrs),
+      data: {
+        ...enrichData(existing, vin, attrs),
+        ...(plateChanged ? { plate } : {}),
+      },
     });
-    return { id: existing.id, created: false };
+    return { id: existing.id, created: false, ...(plateChanged ? { plateChanged } : {}) };
   }
 
   const created = await client.vehicle.create({
@@ -329,10 +404,22 @@ export async function ownerFromCustomer(
   if (!customerId) return null;
   const c = await client.customer.findFirst({
     where: { id: customerId, tenantId },
-    select: { id: true, accountId: true, phone: true },
+    select: {
+      id: true,
+      accountId: true,
+      phone: true,
+      isOrganization: true,
+      orgRegnum: true,
+    },
   });
   if (!c) return null;
-  return { tenantId, customerId: c.id, accountId: c.accountId, phone: c.phone };
+  return {
+    tenantId,
+    customerId: c.id,
+    accountId: c.accountId,
+    phone: c.phone,
+    orgRegnum: c.isOrganization && c.orgRegnum ? c.orgRegnum : null,
+  };
 }
 
 /**

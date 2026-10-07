@@ -90,7 +90,7 @@ export default async function AccountVehiclePage({
   const owned = customerOwnershipFilters(account.id, account.phone);
   const [orders, appointments] = await Promise.all([
     prisma.serviceOrder.findMany({
-      where: { vehicleId: id, OR: owned },
+      where: { vehicleId: id, isInternal: false, OR: owned },
       orderBy: { createdAt: "desc" },
       take: 100,
       select: {

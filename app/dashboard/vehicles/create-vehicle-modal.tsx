@@ -13,7 +13,7 @@ import { Modal } from "@/app/_components/modal";
 import { Select } from "@/app/_components/select";
 import { useToast } from "@/app/_components/toast";
 import { useRouter } from "next/navigation";
-import { customerLabel } from "@/lib/customers";
+import { customerLabel, customerPickerHint } from "@/lib/customers";
 import { normalizeWheelPosition } from "@/lib/hur_service";
 import type { LookupVehicle } from "@/lib/hur-lookup";
 import { NO_PLATE } from "@/lib/vehicle-plate";
@@ -25,7 +25,13 @@ import { NO_PLATE } from "@/lib/vehicle-plate";
 const PLATE_PATTERN = /^\d{4}[А-ЯЁӨҮA-Z]{3}$/;
 const PLATE_FETCH_DEBOUNCE_MS = 400;
 
-type Customer = { id: string; fullName: string; phone: string };
+type Customer = {
+  id: string;
+  fullName: string;
+  phone: string;
+  isOrganization?: boolean;
+  orgRegnum?: string | null;
+};
 
 export type CreatedVehicle = {
   id: string;
@@ -514,7 +520,7 @@ function CreateVehicleForm({
             options={customersList.map((c) => ({
               value: c.id,
               label: customerLabel(c),
-              hint: c.phone,
+              hint: customerPickerHint(c),
             }))}
           />
           <SquareAddButton

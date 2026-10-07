@@ -54,6 +54,7 @@ import {
   validateOrderAssignee,
 } from "@/lib/orders/order-commands";
 import { createOrderCommand } from "@/lib/orders/order-create-command";
+import { internalHasPaymentsViolation, internalPostpaidConflict, resolveUpdatedIsPostpaid } from "@/lib/orders/order-internal";
 import {
   addOrderItemCommand,
   cancelOrderItemCommand,
@@ -230,6 +231,19 @@ type OrderInput = {
   notes: string | null;
 };
 
+// "Дараа тооцоо" checkbox: the form always sends the marker field so an
+// unchecked box is an explicit false (not "omitted → derive from vehicle").
+function parseIsPostpaid(fd: FormData): boolean | undefined {
+  if (!fd.has("isPostpaidField")) return undefined;
+  return fd.get("isPostpaid") === "on";
+}
+
+// "Дотоод засвар" checkbox — same marker convention as isPostpaid.
+function parseIsInternal(fd: FormData): boolean | undefined {
+  if (!fd.has("isInternalField")) return undefined;
+  return fd.get("isInternal") === "on";
+}
+
 function parseOrderInput(fd: FormData): {
   data: OrderInput;
   errors: Record<string, string>;
@@ -281,7 +295,7 @@ async function validateOrderUpdateRefs(tenantId: string, data: OrderInput) {
     }),
     prisma.tenantVehicle.findUnique({
       where: { tenantId_vehicleId: { tenantId, vehicleId: data.vehicleId } },
-      select: { customerId: true, isPostpaid: true },
+      select: { customerId: true, isPostpaid: true, vehicle: { select: { plate: true, vin: true } } },
     }),
     data.assignedToId
       ? prisma.user.findFirst({ where: { id: data.assignedToId, tenantId }, select: { id: true } })
@@ -299,6 +313,10 @@ async function validateOrderUpdateRefs(tenantId: string, data: OrderInput) {
   return {
     errors,
     vehicleIsPostpaid: vehicle?.isPostpaid ?? false,
+    vehicleSnapshot: {
+      plateSnapshot: vehicle?.vehicle.plate ?? null,
+      vinSnapshot: vehicle?.vehicle.vin ?? null,
+    },
     branchSlotMinutes: branch?.slotMinutes && branch.slotMinutes > 0 ? branch.slotMinutes : DEFAULT_SLOT_MINUTES,
   };
 }
@@ -359,6 +377,8 @@ export async function createOrderAction(
       appointmentId,
       estimatedDurationMinutes,
       workingBranchId: scope,
+      isPostpaid: parseIsPostpaid(formData),
+      isInternal: parseIsInternal(formData),
     });
 
     if (appointmentId) {
@@ -398,7 +418,7 @@ export async function updateOrderAction(
     return { ok: false, fieldErrors: errors };
   }
 
-  const { errors: refErrors, vehicleIsPostpaid, branchSlotMinutes } = await validateOrderUpdateRefs(
+  const { errors: refErrors, vehicleIsPostpaid, vehicleSnapshot, branchSlotMinutes } = await validateOrderUpdateRefs(
     user.tenantId,
     data,
   );
@@ -474,7 +494,7 @@ export async function updateOrderAction(
     const updated = await withOrderTransaction(
       user.tenantId,
       id,
-      { status: true, scheduledAt: true, estimatedDurationMinutes: true, branchId: true, assignedToId: true },
+      { status: true, scheduledAt: true, estimatedDurationMinutes: true, branchId: true, assignedToId: true, vehicleId: true, isInternal: true },
       async (tx, freshRaw) => {
         const fresh = freshRaw as {
           status: OrderStatus;
@@ -482,6 +502,8 @@ export async function updateOrderAction(
           estimatedDurationMinutes: number | null;
           branchId: string;
           assignedToId: string | null;
+          vehicleId: string;
+          isInternal: boolean;
         } | null;
         if (!fresh || (scope && fresh.branchId !== scope)) {
           throw new OrderActionValidationError("Засварын хуудас олдсонгүй.");
@@ -514,13 +536,41 @@ export async function updateOrderAction(
             orderBranchId: data.branchId,
           });
         }
+        const vehicleChanged = fresh.vehicleId !== data.vehicleId;
+        const explicitPostpaid = parseIsPostpaid(formData);
+        const explicitInternal = parseIsInternal(formData);
+        const nextInternal = explicitInternal ?? fresh.isInternal;
+        const conflict = internalPostpaidConflict(nextInternal, explicitPostpaid);
+        if (conflict) {
+          throw new OrderActionValidationError(conflict.message, {
+            isInternal: conflict.message,
+            isPostpaid: conflict.message,
+          });
+        }
+        if (explicitInternal === true && !fresh.isInternal) {
+          const paidRow = await tx.orderPayment.findFirst({
+            where: { orderId: id, tenantId: user.tenantId, status: "PAID" },
+            select: { id: true },
+          });
+          const violation = internalHasPaymentsViolation(explicitInternal, fresh.isInternal, Boolean(paidRow));
+          if (violation) throw new OrderActionValidationError(violation.message, { isInternal: violation.message });
+        }
+        // Дотоод захиалгад машин солигдоход дараа тооцоог дахин идэвхжүүлэхгүй.
+        const nextPostpaid = resolveUpdatedIsPostpaid({
+          nextIsInternal: nextInternal,
+          explicitPostpaid,
+          vehicleChanged,
+          vehicleIsPostpaid,
+        });
         const freshScheduledChanged =
           (fresh.scheduledAt?.getTime() ?? null) !== (data.scheduledAt?.getTime() ?? null);
         const result = await tx.serviceOrder.updateMany({
           where: scopedOrderWhere,
           data: {
             ...data,
-            isPostpaid: vehicleIsPostpaid,
+            ...(nextPostpaid !== undefined ? { isPostpaid: nextPostpaid } : {}),
+            ...(explicitInternal !== undefined ? { isInternal: explicitInternal } : {}),
+            ...(vehicleChanged ? vehicleSnapshot : {}),
             ...(fresh.status === "SCHEDULED" && freshScheduledChanged
               ? { occupiesCapacity: data.scheduledAt != null }
               : {}),
@@ -623,7 +673,6 @@ export async function changeOrderStatusAction(
         hours: s(formData, "durationHours"),
         minutes: s(formData, "durationMinutes"),
       },
-      scope: workingBranchScopeId(user),
     });
   } catch (e) {
     return orderActionErrorResult(e);
@@ -674,7 +723,6 @@ export async function bulkChangeOrderStatusAction(
         actor: user,
         orderId: id,
         nextStatus: next,
-        scope: workingBranchScopeId(user),
       });
       succeeded++;
     } catch (e) {
@@ -747,7 +795,7 @@ export async function bulkAssignOrderAction(
       continue;
     }
     try {
-      await assignOrderCommand({ actor: user, orderId: id, assignedToId, scope: workingBranchScopeId(user) });
+      await assignOrderCommand({ actor: user, orderId: id, assignedToId });
       succeeded++;
     } catch (e) {
       if (e instanceof OrderCommandError) {
@@ -827,7 +875,6 @@ export async function reviseExpectedFinishAction(
       orderId: id,
       expectedFinishAt,
       confirmed,
-      scope: workingBranchScopeId(user),
     });
   } catch (e) {
     if (e instanceof OrderScheduleCommandError) {
@@ -885,7 +932,6 @@ export async function rescheduleOrderAction(
       orderId: id,
       scheduledAt,
       confirmed,
-      scope: workingBranchScopeId(user),
     });
   } catch (e) {
     if (e instanceof OrderScheduleCommandError) {
@@ -907,7 +953,7 @@ export async function deleteOrderAction(formData: FormData): Promise<void> {
   const user = await authorize("delete");
   const id = s(formData, "id");
   if (!id) return;
-  await deleteOrderCommand({ actor: user, orderId: id, scope: workingBranchScopeId(user) });
+  await deleteOrderCommand({ actor: user, orderId: id });
   revalidatePath("/dashboard/orders");
   revalidatePath("/dashboard");
   redirect("/dashboard/orders");
@@ -932,7 +978,7 @@ export async function addOrderItemAction(orderId: string, _prev: OrderActionStat
   if (!quantity || quantity.lte(0)) return { ok: false, fieldErrors: { quantity: "Тоо хэмжээ буруу." } };
   if (unitPriceRaw && !unitPrice) return { ok: false, fieldErrors: { unitPrice: "Үнэ буруу." } };
   try {
-    const created = await addOrderItemCommand({ actor: user, orderId, kind: s(formData, "kind") as ItemKind, description: s(formData, "description"), quantity, unitPrice, serviceId, diagnosticTemplateId, scope: workingBranchScopeId(user) });
+    const created = await addOrderItemCommand({ actor: user, orderId, kind: s(formData, "kind") as ItemKind, description: s(formData, "description"), quantity, unitPrice, serviceId, diagnosticTemplateId });
     revalidatePath(`/dashboard/orders/${orderId}`);
     // Stock changes for goods/part lines; labor/diagnostic lines change the
     // service's "used" count (delete/archive gating). Narrow, non-layout paths only.
@@ -950,7 +996,7 @@ export async function cancelOrderItemAction(formData: FormData): Promise<void> {
   if (!itemId) return;
   const orderId = s(formData, "orderId") || await resolveOrderIdForItem(user, itemId);
   if (!orderId) return;
-  const cancelled = await cancelOrderItemCommand({ actor: user, orderId, itemId, scope: workingBranchScopeId(user) });
+  const cancelled = await cancelOrderItemCommand({ actor: user, orderId, itemId });
   revalidatePath(`/dashboard/orders/${orderId}`);
   if (cancelled.serviceId) {
     revalidatePath("/dashboard/services", "layout");
@@ -965,7 +1011,7 @@ export async function changeOrderItemStatusAction(formData: FormData): Promise<v
   if (!itemId || !next || next === "CANCELLED" || !(SERVICE_ITEM_STATUSES as readonly string[]).includes(next)) return;
   const orderId = s(formData, "orderId") || await resolveOrderIdForItem(user, itemId);
   if (!orderId) return;
-  await changeOrderItemStatusCommand({ actor: user, orderId, itemId, nextStatus: next as Exclude<ServiceItemStatus, "CANCELLED">, scope: workingBranchScopeId(user) });
+  await changeOrderItemStatusCommand({ actor: user, orderId, itemId, nextStatus: next as Exclude<ServiceItemStatus, "CANCELLED"> });
   revalidatePath(`/dashboard/orders/${orderId}`);
 }
 
@@ -976,6 +1022,6 @@ export async function changeOrderItemPriceAction(formData: FormData): Promise<vo
   if (!itemId || !unitPrice || unitPrice.lte(0)) return;
   const orderId = s(formData, "orderId") || await resolveOrderIdForItem(user, itemId);
   if (!orderId) return;
-  await changeOrderItemPriceCommand({ actor: user, orderId, itemId, unitPrice, scope: workingBranchScopeId(user) });
+  await changeOrderItemPriceCommand({ actor: user, orderId, itemId, unitPrice });
   revalidatePath(`/dashboard/orders/${orderId}`);
 }

@@ -14,7 +14,14 @@ import {
 } from "@/lib/appointments";
 import { appointmentSearchWhere } from "@/lib/appointments/appointment-list-query";
 import { requireUser } from "@/lib/auth";
+import { canAssignOrders } from "@/lib/auth/order-access";
 import { canCreate, canEdit, canView, workingBranchScopeId } from "@/lib/auth/roles";
+import {
+  appointmentAssigneeLabel,
+  assigneeOptionsForBranch,
+  emptyAssigneeReason,
+} from "@/lib/appointments/appointment-assignee-label";
+import { buildAssignableUserWhere } from "@/lib/orders/order-assignable-users";
 import { customerLabel } from "@/lib/customers";
 import { formatPhone } from "@/lib/phone";
 import { buildMeta, getPageInfo } from "@/lib/pagination";
@@ -44,6 +51,8 @@ const APPOINTMENT_INCLUDE = {
   account: { select: { name: true, phone: true } },
   customer: { select: { fullName: true, phone: true } },
   branch: { select: { name: true } },
+  // QA #28: хуучин оноолтыг (идэвхгүй болсон ч) харуулна.
+  assignedTo: { select: { id: true, firstName: true, lastName: true } },
   category: { select: { name: true } },
   // Booking v2: олон ангилал (categories) — хуучин ганц category нь
   // энэ migration-ийн өмнөх мөрүүдэд fallback хэвээр үлдэнэ.
@@ -155,6 +164,17 @@ export default async function AppointmentsPage({
       })
     : [];
 
+  // QA #28: мастер солих сонголтууд — зөвхөн засах эрхтэйд, orders-ийн
+  // мастер сонгогчтой ижил шүүлтүүр (orderAssignableWhere).
+  const assignCandidates = canRespond
+    ? await prisma.user.findMany({
+        where: buildAssignableUserWhere({ tenantId: user.tenantId, branchId: scopeBranchId }),
+        orderBy: { firstName: "asc" },
+        select: { id: true, firstName: true, lastName: true, branchId: true, assignableBranchIds: true },
+      })
+    : [];
+  const assignOnlyUserId = canAssignOrders(user) ? null : user.id;
+
   const bulkRows: BulkAppointmentRow[] = appointments.map((a) => {
     const orderHref = `/dashboard/orders/new?${new URLSearchParams({
       customerId: a.customerId ?? "",
@@ -197,6 +217,16 @@ export default async function AppointmentsPage({
           ? `Товлосон огноо: ${formatDateTime(a.serviceOrder.scheduledAt)}`
           : null,
       note: a.note,
+      assignedToId: a.assignedToId,
+      assigneeName: appointmentAssigneeLabel(a.assignedTo),
+      assigneeOptions:
+        canRespond && (a.status === "PENDING" || a.status === "CONFIRMED") && !a.serviceOrder
+          ? assigneeOptionsForBranch(assignCandidates, a.branchId, {
+              onlyUserId: assignOnlyUserId,
+              current: a.assignedTo,
+            })
+          : null,
+      assigneeEmptyReason: emptyAssigneeReason(assignOnlyUserId),
       status: a.status,
       bookingPaymentStatus,
       serviceOrderId: a.serviceOrder?.id ?? null,

@@ -20,6 +20,7 @@ export async function buildReportWorkbook(data: ReportData, range: Range) {
   summary.addRows([
     { label: "Хугацаа", value: range.label },
     { label: "Нийт орлого", value: data.totalRevenue },
+    { label: "Дотоод зардал", value: data.internalCost },
     { label: "Дууссан захиалга", value: data.completedCount },
     { label: "Дундаж дүн", value: Math.round(data.avgTicket) },
     { label: "Идэвхтэй захиалга", value: data.activeCount },
@@ -51,6 +52,7 @@ export async function buildReportWorkbook(data: ReportData, range: Range) {
   branch.columns = [
     { header: "Салбар", key: "name", width: 24 },
     { header: "Орлого", key: "revenue", width: 16 },
+    { header: "Дотоод зардал", key: "internalCost", width: 16 },
     { header: "Захиалга", key: "count", width: 12 },
   ];
   branch.addRows(data.branchRows);
@@ -59,6 +61,7 @@ export async function buildReportWorkbook(data: ReportData, range: Range) {
   tech.columns = [
     { header: "Мастер / Менежер", key: "name", width: 24 },
     { header: "Орлого", key: "revenue", width: 16 },
+    { header: "Дотоод зардал", key: "internalCost", width: 16 },
     { header: "Захиалга", key: "count", width: 12 },
   ];
   tech.addRows(data.techRows);

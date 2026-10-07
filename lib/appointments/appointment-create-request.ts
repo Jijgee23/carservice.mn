@@ -9,6 +9,8 @@ export type ParsedCreateAppointmentBody = {
   note: string | null;
   categoryIds: string[];
   confirmed: boolean;
+  /** Optional responsible master; null/absent = none. */
+  assignedToId: string | null;
 };
 
 export type ParseCreateAppointmentBodyResult =
@@ -40,6 +42,11 @@ export function parseCreateAppointmentBody(
     return { ok: false, status: 400, message: "vehicleId нь string эсвэл null байна." };
   }
   const vehicleId = typeof b.vehicleId === "string" ? b.vehicleId.trim() || null : null;
+
+  if (b.assignedToId !== undefined && b.assignedToId !== null && typeof b.assignedToId !== "string") {
+    return { ok: false, status: 400, message: "assignedToId нь string эсвэл null байна." };
+  }
+  const assignedToId = typeof b.assignedToId === "string" ? b.assignedToId.trim() || null : null;
 
   if (b.note !== undefined && b.note !== null && typeof b.note !== "string") {
     return { ok: false, status: 400, message: "note нь string эсвэл null байна." };
@@ -99,6 +106,7 @@ export function parseCreateAppointmentBody(
       note,
       categoryIds,
       confirmed,
+      assignedToId,
     },
   };
 }

@@ -31,7 +31,7 @@ export default async function NewDiagnosticPage() {
     prisma.customer.findMany({
       where: { tenantId: user.tenantId },
       orderBy: { fullName: "asc" },
-      select: { id: true, fullName: true, phone: true },
+      select: { id: true, fullName: true, phone: true, isOrganization: true, orgRegnum: true },
     }),
     prisma.tenantVehicle
       .findMany({

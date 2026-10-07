@@ -1,20 +1,23 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { CASH_SESSION_ENTRY_LOCKED_MESSAGE } from "@/lib/cash/locked-copy";
+import { useActionState, useEffect, useRef, useState } from "react";
 import {
   recordOrderPaymentAction,
   reverseOrderPaymentAction,
   type OrderPaymentActionState,
 } from "@/app/_actions/order-payments";
+import Link from "next/link";
+import { bankLabel } from "@/lib/banks";
 import { Btn } from "@/app/_components/landing-ops-ui";
+import { NO_OPEN_SESSION_REASON, NoOpenSessionNotice } from "../../cash/session-warning";
+import { PaymentMethodModal, type PaymentChoice } from "../../_components/payment-method-modal";
+import { QPayPanel, type PendingOrderPayment } from "./qpay-widget";
 import {
-  ORDER_PAYMENT_METHODS,
   ORDER_PAYMENT_METHOD_BADGE,
   ORDER_PAYMENT_METHOD_LABEL,
   ORDER_PAYMENT_STATUS_LABEL,
-  formatPriceInput,
   formatTugrik,
-  liveFormatPriceInput,
 } from "@/lib/orders";
 
 // Захиалгын мөрд plain string-ээр дамжина (Decimal/Date биш).
@@ -24,7 +27,42 @@ export type OrderPaymentRow = {
   method: string;
   status: string;
   createdAt: string; // ISO
+  bank: string | null;
+  settlementId?: string | null; // «Нэгдсэн тооцоо» — буцаах боломжгүй
+  locked?: boolean; // хаагдсан ээлжийн гүйлгээ — буцаах боломжгүй (CASH_SESSION_ENTRY_LOCKED)
 };
+
+const SETTLEMENT_LOCKED_HINT = "Нэгдсэн тооцооны төлбөрийг тооцоогоор нь цуцална уу.";
+const CLOSED_SESSION_LOCKED_HINT = CASH_SESSION_ENTRY_LOCKED_MESSAGE;
+
+function ReverseButton({ orderId, payment, sessionOpen }: { orderId: string; payment: OrderPaymentRow; sessionOpen: boolean }) {
+  const [state, formAction, pending] = useActionState<OrderPaymentActionState, FormData>(
+    reverseOrderPaymentAction,
+    null,
+  );
+  const sessionLocked = Boolean(payment.locked);
+  return (
+    <form action={formAction} className="shrink-0 flex flex-col items-end">
+      <input type="hidden" name="orderId" value={orderId} />
+      <input type="hidden" name="paymentId" value={payment.id} />
+      <button
+        type="submit"
+        disabled={sessionLocked || pending || !sessionOpen}
+        title={sessionLocked ? CLOSED_SESSION_LOCKED_HINT : !sessionOpen ? NO_OPEN_SESSION_REASON : "Бүртгэлийг цуцлах"}
+        className="shrink-0 text-[var(--oc-muted4)] hover:text-red-400 light:hover:text-red-600 transition-colors disabled:opacity-50 disabled:hover:text-[var(--oc-muted4)]"
+      >
+        Цуцлах
+      </button>
+      {sessionLocked ? (
+        <span className="max-w-[14rem] text-right text-[10px] text-[var(--oc-muted4)]">{CLOSED_SESSION_LOCKED_HINT}</span>
+      ) : !sessionOpen ? (
+        <NoOpenSessionNotice className="max-w-[14rem] text-right" />
+      ) : state && !state.ok && state.message ? (
+        <span className="max-w-[14rem] text-right text-red-400 light:text-red-600">{state.message}</span>
+      ) : null}
+    </form>
+  );
+}
 
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n);
@@ -38,44 +76,70 @@ function fmtDateTime(iso: string): string {
   return `${d.getFullYear()}.${pad2(d.getMonth() + 1)}.${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
-// Гараар бүртгэх сонголтоос QPay-г хасав — QPay төлбөр амжилттай болмогц
-// QPayWidget-ийн урсгал (createOrderQPayInvoiceAction/checkOrderQPayPaymentAction)
-// аль хэдийн QPAY төрөлтэй OrderPayment мөрийг автоматаар үүсгэж/PAID болгодог.
-const MANUAL_PAYMENT_METHODS = ORDER_PAYMENT_METHODS.filter((m) => m !== "QPAY");
-
 export function OrderPaymentsList({
   orderId,
   payments,
   remaining,
   canRecord,
   canReverse,
+  banks,
+  cashSessionOpen,
+  qpayAvailable,
+  qpayConfigured,
+  pendingQPay,
 }: {
   orderId: string;
   payments: OrderPaymentRow[];
   remaining: string;
   canRecord: boolean;
   canReverse: boolean;
+  /** Идэвхтэй банкууд (picker-д). */
+  banks: { code: string; label: string }[];
+  /** Whether the order's branch has an open cash session; when false, record/QPay/reverse are disabled. */
+  cashSessionOpen: boolean;
+  /** QPay сонголтыг (modal-д) гаргах эсэх — эрх + төлөгдөөгүй төлөвөөс хамаарна. */
+  qpayAvailable: boolean;
+  qpayConfigured: boolean;
+  /** Хүлээгдэж буй QPay нэхэмжлэл (байвал QR самбарт харуулна). */
+  pendingQPay: PendingOrderPayment | null;
 }) {
-  const [state, formAction, pending] = useActionState<
-    OrderPaymentActionState,
-    FormData
-  >(recordOrderPaymentAction, null);
 
   const remainingNum = Number.parseFloat(remaining);
   const hasRemaining = Number.isFinite(remainingNum) && remainingNum > 0;
 
-  // Дүнг ажлын мөрийн үнийн талбартай ижил мянгатын таслалтай ("150,000")
-  // бичүүлнэ — сервер тал (parseOrderPaymentAmount) таслалыг өөрөө цэвэрлэнэ.
-  // Амжилттай бүртгэсний дараа талбарыг хоослоно (effect биш — render үед
-  // өмнөх action state-тэй харьцуулж тохируулах React-ийн зөвлөсөн хэв маяг).
-  const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState("CASH");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalInitial, setModalInitial] = useState<PaymentChoice | undefined>(undefined);
   const [lastChange, setLastChange] = useState<string | null>(null);
-  const [seenState, setSeenState] = useState(state);
-  if (state !== seenState) {
-    setSeenState(state);
-    if (state?.ok) setAmount("");
-    setLastChange(state?.ok ? state.change ?? null : null);
+
+  // Шинэ QPay нэхэмжлэл үүсэх бүрд (QR үүсгэсний дараа) modal-ийг QPay дээр нь нээнэ.
+  const seenQPayId = useRef<string | null>(pendingQPay?.id ?? null);
+  useEffect(() => {
+    if (pendingQPay && pendingQPay.id !== seenQPayId.current) {
+      seenQPayId.current = pendingQPay.id;
+      setModalInitial({ method: "QPAY", bank: "" });
+      setModalOpen(true);
+    }
+  }, [pendingQPay]);
+
+  function openModal() {
+    setModalInitial(pendingQPay && qpayAvailable ? { method: "QPAY", bank: "" } : undefined);
+    setModalOpen(true);
+  }
+
+  // Урьдчилан хэвээр байсан recordOrderPaymentAction-ийг ижил payload-оор
+  // (orderId, method, amount, bank) дуудна; серверийн алдааг modal-д буцаана.
+  async function recordPayment(choice: PaymentChoice, amount: string) {
+    const fd = new FormData();
+    fd.set("orderId", orderId);
+    fd.set("method", choice.method);
+    fd.set("amount", amount);
+    if (choice.method === "BANK_TRANSFER" || choice.method === "CARD") fd.set("bank", choice.bank);
+    const res = await recordOrderPaymentAction(null, fd);
+    if (res?.ok) {
+      setLastChange(res.change ?? null);
+      return { ok: true };
+    }
+    return { ok: false, message: res?.message };
   }
 
   return (
@@ -105,6 +169,17 @@ export function OrderPaymentsList({
                 <span className="shrink-0 text-[var(--oc-muted4)] whitespace-nowrap">
                   {fmtDateTime(p.createdAt)}
                 </span>
+                {p.bank ? (
+                  <span className="shrink-0 text-[var(--oc-muted4)]">{bankLabel(p.bank)}</span>
+                ) : null}
+                {p.settlementId ? (
+                  <Link
+                    href={`/dashboard/cash/settlements/${p.settlementId}`}
+                    className="shrink-0 text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)] transition-colors"
+                  >
+                    Нэгдсэн тооцоо
+                  </Link>
+                ) : null}
                 {p.status === "CANCELLED" ? (
                   <span className="shrink-0 text-[var(--oc-muted4)]">
                     · {ORDER_PAYMENT_STATUS_LABEL.CANCELLED}
@@ -112,16 +187,11 @@ export function OrderPaymentsList({
                 ) : null}
               </div>
               {canReverse && p.status === "PAID" ? (
-                <form action={reverseOrderPaymentAction} className="shrink-0">
-                  <input type="hidden" name="paymentId" value={p.id} />
-                  <button
-                    type="submit"
-                    title="Бүртгэлийг цуцлах"
-                    className="shrink-0 text-[var(--oc-muted4)] hover:text-red-400 light:hover:text-red-600 transition-colors"
-                  >
-                    Цуцлах
-                  </button>
-                </form>
+                p.settlementId ? (
+                  <span className="max-w-[14rem] shrink-0 text-right text-[10px] text-[var(--oc-muted4)]">{SETTLEMENT_LOCKED_HINT}</span>
+                ) : (
+                  <ReverseButton orderId={orderId} payment={p} sessionOpen={cashSessionOpen} />
+                )
               ) : null}
             </li>
           ))}
@@ -132,55 +202,41 @@ export function OrderPaymentsList({
         <p className="text-xs text-emerald-500">Хариулт өгөх: {formatTugrik(lastChange)}</p>
       ) : null}
 
-      {canRecord && hasRemaining ? (
-        <form action={formAction} className="flex flex-col gap-2">
-          <input type="hidden" name="orderId" value={orderId} />
-          {state?.message ? (
-            <p className="text-xs text-red-400 light:text-red-600">{state.message}</p>
+      {(canRecord && hasRemaining) || qpayAvailable ? (
+        <div className="flex flex-col gap-2">
+          {pendingQPay && qpayAvailable ? (
+            <p className="text-xs text-[var(--oc-muted3)]">
+              QPay төлбөр хүлээгдэж байна: {formatTugrik(pendingQPay.amount)}
+            </p>
           ) : null}
-          <div className="flex gap-2">
-            <select
-              name="method"
-              value={method}
-              onChange={(e) => setMethod(e.target.value)}
-              className="compact-input flex-1"
-            >
-              {MANUAL_PAYMENT_METHODS.map((m) => (
-                <option key={m} value={m}>
-                  {ORDER_PAYMENT_METHOD_LABEL[m]}
-                </option>
-              ))}
-            </select>
-            <div className="relative flex-1 min-w-0">
-              <input
-                type="text"
-                inputMode="decimal"
-                name="amount"
-                required
-                value={amount}
-                onChange={(e) => setAmount(liveFormatPriceInput(e.target.value))}
-                onBlur={(e) => setAmount(formatPriceInput(e.target.value))}
-                placeholder={`Үлдэгдэл ${formatPriceInput(remaining)}`}
-                className="compact-input w-full pr-6 text-right tabular-nums"
-              />
-              <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-[var(--oc-muted3)]">
-                ₮
-              </span>
-            </div>
-          </div>
-          {(() => {
-            const tendered = Number.parseFloat(amount.replace(/,/g, ""));
-            if (method !== "CASH" || !Number.isFinite(tendered) || tendered <= remainingNum) return null;
-            return (
-              <p className="text-xs text-[var(--oc-ink2)]">
-                Хариулт: <span className="font-semibold tabular-nums">{formatTugrik(String(tendered - remainingNum))}</span>
-              </p>
-            );
-          })()}
-          <Btn type="submit" size="md" disabled={pending}>
-            {pending ? "Бүртгэж..." : "Төлбөр бүртгэх"}
+          <Btn type="button" size="md" onClick={openModal} disabled={!cashSessionOpen && !pendingQPay} title={!cashSessionOpen && !pendingQPay ? NO_OPEN_SESSION_REASON : undefined}>
+            {canRecord && hasRemaining ? "Төлбөр бүртгэх" : "QPay-ээр төлөх"}
           </Btn>
-        </form>
+          {!cashSessionOpen && !pendingQPay ? <NoOpenSessionNotice /> : null}
+          <PaymentMethodModal
+            mode="full"
+            open={modalOpen}
+            onClose={() => setModalOpen(false)}
+            title={`Төлбөр бүртгэх · Үлдэгдэл ${formatTugrik(remaining)}`}
+            banks={banks}
+            includeQpay={qpayAvailable}
+            qpayOnly={!(canRecord && hasRemaining)}
+            initial={modalInitial}
+            defaultAmount={remaining}
+            changeBase={remainingNum}
+            onRecord={recordPayment}
+            recordBlockedNotice={!cashSessionOpen ? <NoOpenSessionNotice /> : undefined}
+            qpayPanel={
+              <QPayPanel
+                orderId={orderId}
+                qpayConfigured={qpayConfigured}
+                pending={pendingQPay}
+                remaining={remaining}
+                sessionClosed={!cashSessionOpen}
+              />
+            }
+          />
+        </div>
       ) : null}
     </div>
   );

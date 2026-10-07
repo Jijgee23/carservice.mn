@@ -140,6 +140,9 @@ const APPOINTMENT_ROW_SELECT = {
   payment: { select: { status: true } },
   account: { select: { name: true, phone: true } },
   customer: { select: { fullName: true, phone: true } },
+  // QA #28: хариуцах мастер (хуучин оноолтыг ч харуулна).
+  assignedToId: true,
+  assignedTo: { select: { id: true, firstName: true, lastName: true } },
 } as const;
 
 function fetchAppointmentRows(

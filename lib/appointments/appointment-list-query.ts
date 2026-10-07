@@ -1,4 +1,5 @@
 import { Prisma } from "@/app/generated/prisma/client";
+import { customerRelationSearchClauses } from "@/lib/customers/customer-search";
 
 /**
  * PURE — parses the tenant mobile `GET /api/v1/appointments` search
@@ -38,8 +39,7 @@ export function appointmentSearchWhere(
   return [
     { account: { name: { contains: q, mode: "insensitive" } } },
     { account: { phone: { contains: q } } },
-    { customer: { fullName: { contains: q, mode: "insensitive" } } },
-    { customer: { phone: { contains: q } } },
+    ...customerRelationSearchClauses(q, (customer) => ({ customer })),
     { note: { contains: q, mode: "insensitive" } },
   ];
 }

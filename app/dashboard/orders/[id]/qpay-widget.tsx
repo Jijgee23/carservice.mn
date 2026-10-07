@@ -1,6 +1,8 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { NO_OPEN_SESSION_REASON, NoOpenSessionNotice } from "../../cash/session-warning";
+import { useRouter } from "next/navigation";
+import { useActionState, useRef, useState, type FormEvent } from "react";
 import {
   cancelOrderQPayPaymentAction,
   checkOrderQPayPaymentAction,
@@ -10,8 +12,7 @@ import {
 import { ConfirmButton } from "@/app/_components/confirm-form";
 import { Btn } from "@/app/_components/landing-ops-ui";
 import { QPayBankGrid } from "@/app/_components/qpay-bank-grid";
-import { QPayDrawer } from "@/app/_components/qpay-drawer";
-import { formatTugrik } from "@/lib/orders";
+import { formatPriceInput, formatTugrik, liveFormatPriceInput } from "@/lib/orders";
 import type { QPayBankUrl } from "@/lib/qpay-tenant";
 
 export type PendingOrderPayment = {
@@ -21,99 +22,104 @@ export type PendingOrderPayment = {
   amount: string;
 };
 
-export function QPayWidget({
+/**
+ * Төлбөрийн modal-ийн QPay самбар: тохируулаагүй / QR үүсгэх / QR + шалгах.
+ * Дүн нь үлдэгдлээр анхдагчаар бөглөгдөх ба үлдэгдлээс ихгүй байхаар засаж болно.
+ */
+export function QPayPanel({
   orderId,
   qpayConfigured,
   pending,
+  remaining,
+  sessionClosed = false,
 }: {
   orderId: string;
   qpayConfigured: boolean;
   pending: PendingOrderPayment | null;
+  remaining: string;
+  /** Branch register closed: creating a new invoice is disabled (check/cancel of a pending one stays). */
+  sessionClosed?: boolean;
 }) {
-  // Шинэ pending үүсэх бүрд drawer-ийг автоматаар нээнэ (жишээ нь "QR
-  // үүсгэх"-ийг дарсны дараа), гэхдээ хэрэглэгч хаасан бол дахин зурагтаар
-  // онгойлгож болно ("Нээх" товч).
-  const [drawerOpen, setDrawerOpen] = useState(Boolean(pending));
-  const seenPaymentId = useRef<string | null>(pending?.id ?? null);
-  useEffect(() => {
-    if (pending && pending.id !== seenPaymentId.current) {
-      seenPaymentId.current = pending.id;
-      setDrawerOpen(true);
-    }
-  }, [pending]);
-
   if (!qpayConfigured) {
     return (
-      <div className="text-xs text-[var(--oc-muted3)]">
-        QPay тохируулаагүй.{" "}
+      <div className="flex flex-col gap-2 text-xs text-[var(--oc-muted3)]">
+        <p>QPay тохируулаагүй байна. QPay-ээр төлбөр авахын тулд тохиргоог хийнэ үү.</p>
         <a
           href="/dashboard/settings/qpay"
           className="text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)] underline"
         >
-          Тохируулах →
+          QPay тохиргоо →
         </a>
       </div>
     );
   }
 
   if (!pending) {
-    return <CreateButton orderId={orderId} />;
+    return <CreateButton orderId={orderId} remaining={remaining} sessionClosed={sessionClosed} />;
   }
 
-  return (
-    <>
-      <div className="rounded-lg border border-[var(--oc-line)] bg-[var(--oc-panel2)] px-3 py-2.5 flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[11px] text-[var(--oc-muted3)]">Төлбөр хүлээгдэж байна</div>
-          <div className="font-plex-mono text-sm font-semibold text-[var(--oc-ink2)] tabular-nums">
-            {formatTugrik(pending.amount)}
-          </div>
-        </div>
-        <Btn type="button" size="sm" onClick={() => setDrawerOpen(true)}>
-          QR нээх
-        </Btn>
-      </div>
-      <QPayDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        title="QPay-ээр төлөх"
-      >
-        <QRPanel pending={pending} onPaid={() => setDrawerOpen(false)} />
-      </QPayDrawer>
-    </>
-  );
+  return <QRPanel pending={pending} />;
 }
 
-function CreateButton({ orderId }: { orderId: string }) {
+function CreateButton({ orderId, remaining, sessionClosed }: { orderId: string; remaining: string; sessionClosed: boolean }) {
   const [state, formAction, formPending] = useActionState<
     OrderPaymentActionState,
     FormData
   >(createOrderQPayInvoiceAction, null);
+  const [amount, setAmount] = useState(formatPriceInput(remaining));
+  const [amountError, setAmountError] = useState<string | null>(null);
+
+  function validate(e: FormEvent<HTMLFormElement>) {
+    const n = Number(amount.replace(/[\s,]/g, ""));
+    if (!amount.trim() || !Number.isFinite(n) || n <= 0) {
+      e.preventDefault();
+      setAmountError("Дүнгээ оруулна уу.");
+    } else if (n > Number(remaining)) {
+      e.preventDefault();
+      setAmountError("Дүн үлдэгдлээс их байж болохгүй.");
+    } else {
+      setAmountError(null);
+    }
+  }
 
   return (
-    <form action={formAction}>
+    <form action={formAction} onSubmit={validate} className="flex flex-col gap-4">
       <input type="hidden" name="orderId" value={orderId} />
-      <Btn type="submit" disabled={formPending} className="w-full">
-        {formPending ? "Үүсгэж..." : "QPay QR үүсгэх"}
-      </Btn>
+      <label className="flex flex-col gap-1 text-sm text-[var(--oc-ink2)]">
+        <span>
+          Дүн (үлдэгдэл{" "}
+          <span className="font-plex-mono tabular-nums">{formatTugrik(remaining)}</span>)
+        </span>
+        <input type="hidden" name="amount" value={amount.replace(/,/g, "")} />
+        <input
+          inputMode="decimal"
+          value={amount}
+          onChange={(e) => {
+            setAmount(liveFormatPriceInput(e.target.value));
+            setAmountError(null);
+          }}
+          onBlur={(e) => setAmount(formatPriceInput(e.target.value))}
+          className="font-plex-mono tabular-nums rounded-md border border-[var(--oc-border)] bg-transparent px-3 py-2"
+        />
+      </label>
+      {amountError ? <p className="text-xs text-red-400 light:text-red-600">{amountError}</p> : null}
       {state && !state.ok && state.message ? (
-        <p className="text-xs text-red-400 light:text-red-600 mt-2">{state.message}</p>
+        <p className="text-xs text-red-400 light:text-red-600">{state.message}</p>
       ) : null}
+      {sessionClosed ? <NoOpenSessionNotice /> : null}
+      <Btn type="submit" disabled={formPending || sessionClosed} title={sessionClosed ? NO_OPEN_SESSION_REASON : undefined}>
+        {formPending ? "Үүсгэж..." : "QR үүсгэх"}
+      </Btn>
     </form>
   );
 }
 
-function QRPanel({
-  pending,
-  onPaid,
-}: {
-  pending: PendingOrderPayment;
-  onPaid: () => void;
-}) {
+function QRPanel({ pending }: { pending: PendingOrderPayment }) {
   const [checking, setChecking] = useState(false);
   const [paid, setPaid] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const stopRef = useRef(false);
+  const router = useRouter();
 
   async function check() {
     if (stopRef.current) return;
@@ -128,7 +134,6 @@ function QRPanel({
         stopRef.current = true;
         setMsg("Төлбөр амжилттай — засварын хуудас шинэчилнэ...");
         setTimeout(() => {
-          onPaid();
           window.location.reload();
         }, 1500);
       } else if (!res.ok && res.message) {
@@ -145,8 +150,15 @@ function QRPanel({
     stopRef.current = true;
     const fd = new FormData();
     fd.set("paymentId", pending.id);
-    await cancelOrderQPayPaymentAction(fd);
-    window.location.reload();
+    const res = await cancelOrderQPayPaymentAction(fd);
+    if (res.ok || res.refresh) {
+      // Soft refresh keeps the payment modal open; the panel re-renders without the pending QR.
+      router.refresh();
+      return;
+    }
+    // Provider cancel failed: the QR is still live at QPay, so keep the panel and show the reason.
+    stopRef.current = false;
+    setMsg(res.message ?? "QPay нэхэмжлэх цуцлахад алдаа гарлаа. Дахин оролдоно уу.");
   }
 
   return (

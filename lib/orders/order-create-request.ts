@@ -1,3 +1,4 @@
+import { internalPostpaidConflict } from "@/lib/orders/order-internal";
 import { parseBusinessLocalDateTime } from "@/lib/booking-time";
 import {
   MAX_CATEGORY_DURATION_MINUTES,
@@ -13,11 +14,15 @@ export type ParsedCreateOrderBody = {
   notes: string | null;
   appointmentId: string | null;
   estimatedDurationMinutes: number | null;
+  // undefined -> derive from TenantVehicle.isPostpaid.
+  isPostpaid?: boolean;
+  // undefined -> not internal.
+  isInternal?: boolean;
 };
 
 export type ParseCreateOrderBodyResult =
   | { ok: true; value: ParsedCreateOrderBody }
-  | { ok: false; status: 400 | 422; message: string; fieldErrors?: Record<string, string> };
+  | { ok: false; status: 400 | 422; message: string; fieldErrors?: Record<string, string>; code?: string };
 
 const DURATION_BOUNDS_MESSAGE =
   `Хугацаа ${MIN_CATEGORY_DURATION_MINUTES} мин – ${MAX_CATEGORY_DURATION_MINUTES / 60} цагийн хооронд байна.`;
@@ -64,6 +69,26 @@ export function parseCreateOrderBody(body: unknown): ParseCreateOrderBodyResult 
     scheduledAt = parsed;
   } else if (b.scheduledAt !== undefined && b.scheduledAt !== null && typeof b.scheduledAt !== "string") {
     return { ok: false, status: 400, message: "scheduledAt нь business-local datetime string байна." };
+  }
+
+  if (b.isPostpaid !== undefined && typeof b.isPostpaid !== "boolean") {
+    return { ok: false, status: 400, message: "isPostpaid нь boolean байна." };
+  }
+  const isPostpaid = typeof b.isPostpaid === "boolean" ? b.isPostpaid : undefined;
+
+  if (b.isInternal !== undefined && typeof b.isInternal !== "boolean") {
+    return { ok: false, status: 400, message: "isInternal нь boolean байна." };
+  }
+  const isInternal = typeof b.isInternal === "boolean" ? b.isInternal : undefined;
+  const conflict = internalPostpaidConflict(isInternal, isPostpaid);
+  if (conflict) {
+    return {
+      ok: false,
+      status: 422,
+      message: conflict.message,
+      fieldErrors: { isInternal: conflict.message, isPostpaid: conflict.message },
+      code: conflict.code,
+    };
   }
 
   const notes = typeof b.notes === "string" ? b.notes.trim() || null : null;
@@ -119,6 +144,8 @@ export function parseCreateOrderBody(body: unknown): ParseCreateOrderBodyResult 
       notes,
       appointmentId,
       estimatedDurationMinutes,
+      ...(isPostpaid !== undefined ? { isPostpaid } : {}),
+      ...(isInternal !== undefined ? { isInternal } : {}),
     },
   };
 }

@@ -27,6 +27,7 @@ import {
 } from "@/lib/appointment-payment-status";
 import {
   AppointmentArrivedButton,
+  AppointmentAssigneePicker,
   AppointmentConfirmReject,
   AppointmentNoShowButton,
   AppointmentRescheduleButton,
@@ -42,6 +43,11 @@ export type BulkAppointmentRow = {
   requestedAtIso: string;
   orderScheduledLabel: string | null;
   note: string | null;
+  assignedToId: string | null;
+  assigneeName: string | null;
+  // null = мастер солих боломжгүй (эрхгүй / дууссан / засвартай холбогдсон).
+  assigneeOptions: { value: string; label: string }[] | null;
+  assigneeEmptyReason: string | null;
   status: AppointmentStatus;
   bookingPaymentStatus: AppointmentBookingPaymentStatus;
   serviceOrderId: string | null;
@@ -91,13 +97,13 @@ export function BulkAppointmentsTable({
       ) : null}
 
       <div className="overflow-auto flex-1 min-h-0">
-        <table className="w-full min-w-[760px]">
+        <table className="w-full min-w-[900px]">
           <thead>
             <tr className="border-b border-[var(--oc-line)]">
               {canBulkEdit ? (
                 <SelectAllCell selection={selection} />
               ) : null}
-              {["Үйлчлүүлэгч", "Салбар", "Хүссэн цаг", "Тэмдэглэл", "Төлөв", "Үйлдэл"].map(
+              {["Үйлчлүүлэгч", "Салбар", "Мастер", "Хүссэн цаг", "Тэмдэглэл", "Төлөв", "Үйлдэл"].map(
                 (h) => (
                   <th
                     key={h}
@@ -136,6 +142,17 @@ export function BulkAppointmentsTable({
                       {a.categoryNames.join(", ")}
                     </span>
                   ) : null}
+                </td>
+                <td className="px-5 py-4 text-sm text-[var(--oc-muted2)]" data-stop-row-click>
+                  {a.assigneeOptions ? (
+                    <AppointmentAssigneePicker
+                      appointmentId={a.id}
+                      value={a.assignedToId}
+                      options={a.assigneeOptions}
+                    />
+                  ) : (
+                    a.assigneeName ?? "—"
+                  )}
                 </td>
                 <td className="px-5 py-4 font-plex-mono text-sm text-[var(--oc-muted2)] whitespace-nowrap">
                   {a.requestedAtLabel}
@@ -184,6 +201,9 @@ export function BulkAppointmentsTable({
                         appointmentId={a.id}
                         canConfirm={a.canConfirm}
                         overdue={a.overdue}
+                        needsAssignee={!a.assignedToId}
+                        assigneeOptions={a.assigneeOptions}
+                        assigneeEmptyReason={a.assigneeEmptyReason}
                       />
                     ) : null}
 

@@ -11,6 +11,7 @@ import {
   reverseAllOrderPaymentsCommand,
 } from "@/lib/orders/order-payment-commands";
 import { prisma } from "@/lib/prisma";
+import { PAID_AT_SELECT, withPaidInFull } from "@/lib/orders/order-payment-totals";
 
 const ORDER_DETAIL_SELECT = {
   id: true,
@@ -28,6 +29,11 @@ const ORDER_DETAIL_SELECT = {
   notes: true,
   createdAt: true,
   updatedAt: true,
+  isPostpaid: true,
+  isInternal: true,
+  plateSnapshot: true,
+  vinSnapshot: true,
+  ...PAID_AT_SELECT,
   customer: { select: { id: true, fullName: true, phone: true, email: true } },
   vehicle: { select: { id: true, plate: true, make: true, model: true, year: true, vin: true, mileage: true } },
   branch: { select: { id: true, name: true } },
@@ -74,7 +80,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       await reverseAllOrderPaymentsCommand({ actor: auth.user, orderId: id, scope: scopeResult.branchId });
       const order = await prisma.serviceOrder.findFirst({ where: { id, tenantId: auth.user.tenantId, ...(scopeResult.branchId ? { branchId: scopeResult.branchId } : {}) }, select: ORDER_DETAIL_SELECT });
       if (!order) return jsonError(404, "Засварын хуудас олдсонгүй.");
-      return jsonOk({ order });
+      return jsonOk({ order: withPaidInFull(order) });
     } catch (error) {
       return commandError(error);
     }
@@ -89,14 +95,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (b.amount !== undefined && !amount) return jsonError(422, "Дүнг зөв оруулна уу.", { fieldErrors: { amount: "Дүнг зөв оруулна уу." } });
   if (b.paymentStatus === "PARTIAL" && !amount) return jsonError(422, "Хагас төлбөрт дүн шаардлагатай.", { fieldErrors: { amount: "Дүн оруулна уу." } });
   try {
-    const result = await createOrderPaymentCommand({ actor: auth.user, orderId: id, method, amount, scope: scopeResult.branchId });
+    const result = await createOrderPaymentCommand({ actor: auth.user, orderId: id, method, amount, bank: typeof b.bank === "string" ? b.bank : null, scope: scopeResult.branchId });
     await notifyOrderPaymentReceived({ tenantId: auth.user.tenantId, orderId: result.orderId, amount: result.payment.amount.toString(), accountId: result.accountId, appointmentId: result.appointmentId });
     const order = await prisma.serviceOrder.findFirst({
       where: { id, tenantId: auth.user.tenantId, ...(scopeResult.branchId ? { branchId: scopeResult.branchId } : {}) },
       select: ORDER_DETAIL_SELECT,
     });
     if (!order) return jsonError(404, "Засварын хуудас олдсонгүй.");
-    return jsonOk({ order, paymentId: result.payment.id });
+    return jsonOk({ order: withPaidInFull(order), paymentId: result.payment.id });
   } catch (error) {
     return commandError(error);
   }

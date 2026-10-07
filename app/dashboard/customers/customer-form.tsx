@@ -8,6 +8,7 @@ import {
 } from "@/app/_actions/customers";
 import { Field, FormError } from "@/app/_components/auth-shell";
 import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
+import { OrgCustomerFields, type OrgCustomerValue } from "./org-customer-fields";
 
 export const CUSTOMER_FORM_ID = "customer-form";
 
@@ -17,6 +18,10 @@ type Initial = {
   phone: string;
   email: string | null;
   note: string | null;
+  isOrganization?: boolean;
+  orgRegnum?: string | null;
+  orgName?: string | null;
+  orgEmail?: string | null;
 };
 
 function SectionPanel({
@@ -60,6 +65,13 @@ export function CustomerForm({ initial }: { initial?: Initial }) {
   const [phone, setPhone] = useState(initial?.phone ?? "");
   const [email, setEmail] = useState(initial?.email ?? "");
   const [note, setNote] = useState(initial?.note ?? "");
+  const [org, setOrg] = useState<OrgCustomerValue>({
+    isOrg: initial?.isOrganization ?? false,
+    orgRegnum: initial?.orgRegnum ?? "",
+    orgName: initial?.orgName ?? "",
+    orgEmail: initial?.orgEmail ?? "",
+  });
+  const isOrg = org.isOrg;
 
   const fe = state?.fieldErrors ?? {};
 
@@ -74,8 +86,14 @@ export function CustomerForm({ initial }: { initial?: Initial }) {
       <FormError message={state?.message} />
 
       <SectionPanel index={1} total={1} title="Харилцагчийн мэдээлэл">
+        <OrgCustomerFields
+          value={org}
+          onChange={(patch) => setOrg((prev) => ({ ...prev, ...patch }))}
+          errors={fe}
+          initialRegnum={initial?.orgRegnum ?? ""}
+        />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="Овог нэр" htmlFor="fullName" hint="заавал биш" error={fe.fullName}>
+          <Field label={isOrg ? "Холбогдох хүний нэр" : "Овог нэр"} htmlFor="fullName" hint="заавал биш" error={fe.fullName}>
             <input
               id="fullName"
               name="fullName"

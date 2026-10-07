@@ -72,6 +72,10 @@ const ENTITY_LABEL: Record<EntityType, string> = {
   DiagnosticReport: "Оношилгооны тайлан",
   Appointment: "Цаг захиалга",
   Notification: "Мэдэгдэл",
+  CashTransaction: "Кассын бичлэг",
+  CashTransactionType: "Кассын төрөл",
+  CashSession: "Кассын ээлж",
+  PostpaidSettlement: "Тооцоо нийлэлт",
 };
 
 const ACTION_OPTIONS = Object.entries(ACTION_LABEL).map(([value, label]) => ({

@@ -67,6 +67,8 @@ export async function GET(req: Request) {
     // хараахан идэвхтэй, /api/v1/app/appointments дээр харагдана.
     // Дууссан ч бүрэн төлөгдөөгүй ажил энд биш — /api/v1/app/appointments
     // дээр үлдэнэ; бүрэн төлөгдмөгц энд шилжинэ (веб /account/history-тэй ижил).
+    // Дотоод засвар үйлчлүүлэгчид харагдахгүй.
+    isInternal: false,
     status: { in: ["COMPLETED", "CANCELLED"] },
     NOT: { status: "COMPLETED", paymentStatus: { not: "PAID" } },
     OR: owned,
@@ -116,6 +118,7 @@ export async function GET(req: Request) {
 
   const facetOrders = await prisma.serviceOrder.findMany({
     where: {
+      isInternal: false,
       status: { in: ["COMPLETED", "CANCELLED"] },
       NOT: { status: "COMPLETED", paymentStatus: { not: "PAID" } },
       OR: owned,

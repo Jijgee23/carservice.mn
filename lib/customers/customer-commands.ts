@@ -10,6 +10,7 @@
 import { isForeignKeyViolation } from "@/lib/prisma-errors";
 import { Prisma } from "@/app/generated/prisma/client";
 import { logAudit } from "@/lib/audit";
+import { orgRegnumError } from "@/lib/customers/org-regnum";
 import { isValidPhone, normalizePhone } from "@/lib/phone";
 import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
 import { enforceCountLimit } from "@/lib/plan-limits-server";
@@ -37,6 +38,11 @@ export type CustomerCommandInput = {
   phone: string;
   email?: string | null;
   note?: string | null;
+  /** Phase 4a: Байгууллага. Унтраалттай бол org* талбарууд null хадгалагдана. */
+  isOrganization?: boolean;
+  orgRegnum?: string | null;
+  orgName?: string | null;
+  orgEmail?: string | null;
 };
 
 export type NormalizedCustomerData = {
@@ -44,6 +50,10 @@ export type NormalizedCustomerData = {
   phone: string;
   email: string | null;
   note: string | null;
+  isOrganization: boolean;
+  orgRegnum: string | null;
+  orgName: string | null;
+  orgEmail: string | null;
 };
 
 export type CustomerRecord = {
@@ -52,6 +62,10 @@ export type CustomerRecord = {
   phone: string;
   email: string | null;
   note: string | null;
+  isOrganization: boolean;
+  orgRegnum: string | null;
+  orgName: string | null;
+  orgEmail: string | null;
   createdAt: Date;
 };
 
@@ -64,6 +78,7 @@ export type CreateCustomerCommandResult = {
 };
 
 export const CUSTOMER_NAME_MAX = 100;
+export const ORG_NAME_MAX = 200;
 
 const PHONE_CONFLICT_MESSAGE =
   "Энэ утасны дугаартай үйлчлүүлэгч аль хэдийн бүртгэлтэй байна.";
@@ -103,14 +118,51 @@ export function validateCustomerInput(
     fieldErrors.fullName = `Нэр ${CUSTOMER_NAME_MAX} тэмдэгтээс хэтрэхгүй.`;
   }
 
+  const isOrganization = input.isOrganization === true;
+  let orgRegnum: string | null = null;
+  let orgName: string | null = null;
+  let orgEmail: string | null = null;
+  if (isOrganization) {
+    orgRegnum = (input.orgRegnum ?? "").trim();
+    orgName = (input.orgName ?? "").trim();
+    orgEmail = (input.orgEmail ?? "").trim();
+    const regErr = orgRegnumError(orgRegnum);
+    if (regErr) fieldErrors.orgRegnum = regErr;
+    if (!orgName) fieldErrors.orgName = "Байгууллагын нэр оруулна уу.";
+    else if (orgName.length > ORG_NAME_MAX) {
+      fieldErrors.orgName = `Байгууллагын нэр ${ORG_NAME_MAX} тэмдэгтээс хэтрэхгүй.`;
+    }
+    if (orgEmail && !isEmailFormat(orgEmail)) fieldErrors.orgEmail = "Имэйл хаяг буруу.";
+    orgRegnum = orgRegnum || null;
+    orgName = orgName || null;
+    orgEmail = orgEmail || null;
+  }
+
   return {
     data: {
       fullName,
       phone: normalizePhone(phone) ?? phone,
       email: email || null,
       note: note || null,
+      isOrganization,
+      orgRegnum,
+      orgName,
+      orgEmail,
     },
     fieldErrors,
+  };
+}
+
+/** JSON body-оос байгууллагын талбаруудыг (төрөл шалгаад) гаргана — API route-уудад. */
+export function orgInputFromBody(
+  body: Record<string, unknown>,
+): Pick<CustomerCommandInput, "isOrganization" | "orgRegnum" | "orgName" | "orgEmail"> {
+  const str = (v: unknown) => (typeof v === "string" ? v : null);
+  return {
+    isOrganization: body.isOrganization === true,
+    orgRegnum: str(body.orgRegnum),
+    orgName: str(body.orgName),
+    orgEmail: str(body.orgEmail),
   };
 }
 
@@ -120,6 +172,10 @@ const CUSTOMER_SELECT = {
   phone: true,
   email: true,
   note: true,
+  isOrganization: true,
+  orgRegnum: true,
+  orgName: true,
+  orgEmail: true,
   createdAt: true,
 } as const;
 
@@ -197,6 +253,10 @@ export async function createCustomerCommand(input: {
           fullName: data.fullName || undefined,
           email: data.email,
           note: data.note,
+          isOrganization: data.isOrganization,
+          orgRegnum: data.orgRegnum,
+          orgName: data.orgName,
+          orgEmail: data.orgEmail,
           accountId: account!.id,
         },
         select: CUSTOMER_SELECT,
@@ -208,6 +268,10 @@ export async function createCustomerCommand(input: {
           phone: data.phone,
           email: data.email,
           note: data.note,
+          isOrganization: data.isOrganization,
+          orgRegnum: data.orgRegnum,
+          orgName: data.orgName,
+          orgEmail: data.orgEmail,
           tenantId: actor.tenantId,
           accountId: account?.id ?? null,
         },
@@ -232,7 +296,16 @@ export async function createCustomerCommand(input: {
     summary: input.auditSummarySuffix
       ? `${created.fullName || created.phone} ${input.auditSummarySuffix}`
       : created.fullName || created.phone,
-    after: { fullName: created.fullName, phone: created.phone, email: created.email, note: created.note },
+    after: {
+      fullName: created.fullName,
+      phone: created.phone,
+      email: created.email,
+      note: created.note,
+      isOrganization: created.isOrganization,
+      orgRegnum: created.orgRegnum,
+      orgName: created.orgName,
+      orgEmail: created.orgEmail,
+    },
   });
 
   return { customer: created, outcome };

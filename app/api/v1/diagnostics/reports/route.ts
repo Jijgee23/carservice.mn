@@ -325,7 +325,7 @@ export async function POST(req: Request) {
             id: itemId,
             orderId: order.id,
             kind: "DIAGNOSTIC",
-            status: { not: "CANCELLED" },
+            status: { in: ["PENDING", "IN_PROGRESS"] }, // COMPLETED мөр түгжигдсэн
             diagnosticReportId: null,
           },
           select: { id: true, diagnosticTemplateId: true, startedAt: true },

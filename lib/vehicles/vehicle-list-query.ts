@@ -34,12 +34,14 @@ import {
   rejectUnknownParams,
   type ListQueryParseError,
 } from "@/lib/list-query-params";
+import { customerRelationSearchClauses } from "@/lib/customers/customer-search";
 
 const ALLOWED_PARAMS = [
   "q",
   "customerId",
   "assigned",
   "postpaid",
+  "ownerKind",
   "page",
   "pageSize",
   "limit",
@@ -50,6 +52,8 @@ export type VehicleListQuery = {
   customerId?: string;
   assigned?: "yes" | "no";
   postpaid?: "yes" | "no";
+  /** Phase 4a: эзэмшигч байгууллага / хувь хүн (derived, vehicle-owner-kind). */
+  ownerKind?: "org" | "person";
   page: number;
   pageSize: number;
   skip: number;
@@ -72,6 +76,12 @@ export function parseVehicleListQuery(
   const postpaid = parseYesNo(searchParams, "postpaid");
   if (typeof postpaid === "object") return postpaid;
 
+  const ownerKindRaw = searchParams.get("ownerKind")?.trim();
+  if (ownerKindRaw && ownerKindRaw !== "org" && ownerKindRaw !== "person") {
+    return { ok: false, field: "ownerKind", message: "ownerKind нь org эсвэл person байх ёстой." };
+  }
+  const ownerKind = ownerKindRaw ? (ownerKindRaw as "org" | "person") : undefined;
+
   const pagination = parsePagination(searchParams);
   if ("ok" in pagination) return pagination;
 
@@ -82,6 +92,7 @@ export function parseVehicleListQuery(
       customerId: optionalText(searchParams, "customerId"),
       assigned,
       postpaid,
+      ...(ownerKind ? { ownerKind } : {}),
       ...pagination,
     },
   };
@@ -93,9 +104,42 @@ function searchWhere(q: string): Prisma.TenantVehicleWhereInput["OR"] {
     { vehicle: { make: { contains: q, mode: "insensitive" } } },
     { vehicle: { model: { contains: q, mode: "insensitive" } } },
     { vehicle: { vin: { contains: q, mode: "insensitive" } } },
-    { customer: { fullName: { contains: q, mode: "insensitive" } } },
-    { customer: { phone: { contains: q } } },
+    ...customerRelationSearchClauses(q, (customer) => ({ customer })),
   ];
+}
+
+// Prisma-д regex байхгүй тул `ownerKindFromRegnum`-ийн "7 оронтой цэвэр тоо"
+// дүрмийг "ownerRegnum цифрээр эхэлнэ" гэж ойролцоолно: хүний регистр үсгээр
+// (2 кирилл үсэг + 8 цифр) эхэлдэг, байгууллагын 7 орон цэвэр цифр. Урт шалгахгүй
+// тул үсгээр эхлээгүй, цифрээр эхэлсэн өөр хэлбэр (HUR-д байхгүй) байгууллага
+// гэж тоологдож болно - хүлээн зөвшөөрсөн ойролцоолол.
+const DIGITS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"] as const;
+
+function ownerRegnumLooksOrg(): Prisma.TenantVehicleWhereInput {
+  return {
+    vehicle: { OR: DIGITS.map((d) => ({ ownerRegnum: { startsWith: d } })) },
+  };
+}
+
+/** isOrganization (customer холбоотой бол) эсвэл customer-гүй үед регистрийн ойролцоолол. */
+export function ownerKindWhere(kind: "org" | "person"): Prisma.TenantVehicleWhereInput {
+  if (kind === "org") {
+    return {
+      OR: [
+        { customer: { isOrganization: true } },
+        { customerId: null, ...ownerRegnumLooksOrg() },
+      ],
+    };
+  }
+  return {
+    OR: [
+      { customer: { isOrganization: false } },
+      {
+        customerId: null,
+        OR: [{ vehicle: { ownerRegnum: null } }, { NOT: ownerRegnumLooksOrg() }],
+      },
+    ],
+  };
 }
 
 export type BuildVehicleListWhereOptions = {
@@ -116,6 +160,7 @@ export function buildVehicleListWhere(
   } else if (query.assigned === "no") {
     where.customerId = null;
   }
+  if (query.ownerKind) where.AND = [ownerKindWhere(query.ownerKind)];
   if (query.postpaid === "yes") where.isPostpaid = true;
   else if (query.postpaid === "no") where.isPostpaid = false;
   return where;

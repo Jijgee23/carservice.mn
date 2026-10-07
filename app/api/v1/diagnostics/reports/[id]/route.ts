@@ -79,8 +79,12 @@ export async function DELETE(
   // нь бөглөх хүлээгдэж буй болгож буцаана — mirrors deleteReportAction.
   const linkedItem = await prisma.serviceItem.findUnique({
     where: { diagnosticReportId: report.id },
-    select: { id: true },
+    select: { id: true, status: true },
   });
+  // Дууссан оношилгооны мөр түгжигдсэн — тайланг устгаж мөрийг буцаах боломжгүй.
+  if (linkedItem?.status === "COMPLETED") {
+    return jsonError(422, "Дууссан ажлыг засах боломжгүй.", { code: "ITEM_COMPLETED_LOCKED" });
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.diagnosticReport.delete({ where: { id: report.id } });

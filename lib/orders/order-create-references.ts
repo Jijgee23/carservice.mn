@@ -74,3 +74,11 @@ export function validateOrderReferences(
   }
   return fieldErrors;
 }
+
+/** Explicit isPostpaid wins; otherwise the vehicle's default (false when unknown). */
+export function resolveOrderIsPostpaid(
+  explicit: boolean | undefined | null,
+  vehicleDefault: boolean | undefined | null,
+): boolean {
+  return explicit ?? vehicleDefault ?? false;
+}

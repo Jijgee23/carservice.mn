@@ -16,7 +16,7 @@ import { DatePicker, todayStr } from "@/app/_components/date-picker";
 import { Btn, BtnLink, SquareAddButton } from "@/app/_components/landing-ops-ui";
 import { Select } from "@/app/_components/select";
 import { SchedulePreviewGrid } from "@/app/_components/schedule-preview-grid";
-import { customerLabel } from "@/lib/customers";
+import { customerDisplay, customerPickerHint } from "@/lib/customers";
 import { plateLabel } from "@/lib/vehicle-plate";
 import { DurationHmInput } from "@/app/dashboard/services/duration-input";
 import {
@@ -28,6 +28,16 @@ import {
   type CreatedVehicle,
 } from "@/app/dashboard/vehicles/create-vehicle-modal";
 
+import {
+  INTERNAL_BLOCKED_BY_PAYMENTS_HINT,
+  PAYMENT_MODES,
+  defaultModeForVehicle,
+  flagsFromMode,
+  modeAfterVehicleChange,
+  modeFromFlags,
+  type PaymentMode,
+} from "@/lib/orders/payment-mode";
+
 type Initial = {
   id?: string;
   branchId: string;
@@ -36,10 +46,19 @@ type Initial = {
   assignedToId: string | null;
   scheduledAt: Date | null;
   notes: string | null;
+  isPostpaid?: boolean;
+  isInternal?: boolean;
 };
 
 type Branch = { id: string; name: string; slotMinutes?: number | null };
-type Customer = { id: string; fullName: string; phone: string };
+type Customer = {
+  id: string;
+  fullName: string;
+  phone: string;
+  isOrganization?: boolean;
+  orgName?: string | null;
+  orgRegnum?: string | null;
+};
 type Vehicle = {
   id: string;
   plate: string;
@@ -49,6 +68,7 @@ type Vehicle = {
   customerId: string | null;
   isPostpaid?: boolean;
   isAccountVehicle?: boolean;
+  ownerIsOrganization?: boolean;
 };
 type Tech = {
   id: string;
@@ -79,6 +99,8 @@ export function OrderForm({
   appointmentId,
   next,
   defaultAssignedToId,
+  assigneeHint,
+  hasPaidPayment = false,
 }: {
   initial?: Initial;
   branches: Branch[];
@@ -95,6 +117,10 @@ export function OrderForm({
   next?: string;
   // Шинэ хуудасны анхны мастер (оноох эрхгүй ажилтанд — өөрөө).
   defaultAssignedToId?: string;
+  // QA #28: цагийн мастер сонгогдох боломжгүй үед товч тайлбар.
+  assigneeHint?: string;
+  // Засварт: төлөгдсөн төлбөртэй бол "Дотоод засвар" сонгох боломжгүй.
+  hasPaidPayment?: boolean;
 }) {
   const isEdit = Boolean(initial?.id);
   const action = isEdit
@@ -115,6 +141,14 @@ export function OrderForm({
   );
   const [customerId, setCustomerId] = useState(initial?.customerId ?? "");
   const [vehicleId, setVehicleId] = useState(initial?.vehicleId ?? "");
+  // "Төлбөрийн нөхцөл": машины тохиргооноос урьдчилан бөглөгдөж, хэрэглэгч өөрчилж болно.
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>(
+    initial?.isPostpaid !== undefined || initial?.isInternal !== undefined
+      ? modeFromFlags(initial)
+      : defaultModeForVehicle(initialVehicles.find((x) => x.id === initial?.vehicleId)),
+  );
+  const { isPostpaid, isInternal } = flagsFromMode(paymentMode);
+  const internalBlocked = isEdit && hasPaidPayment && paymentMode !== "internal";
 
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [showVehicleForm, setShowVehicleForm] = useState(false);
@@ -276,8 +310,13 @@ export function OrderForm({
   }
 
   // Машин сонгоход эзэмшигчийг нь автоматаар үйлчлүүлэгч болгож тавина.
+  function pickVehicle(id: string) {
+    setVehicleId(id);
+    if (id) setPaymentMode((cur) => modeAfterVehicleChange(cur, vehicles.find((x) => x.id === id)));
+  }
+
   function onVehicleChange(v: string) {
-    setVehicleId(v);
+    pickVehicle(v);
     // Цэвэрлэвэл: эзэмшигч ганц машинтай бол сонгох өөр машин байхгүй тул
     // үйлчлүүлэгчийг ч цэвэрлэж бүх машиныг дахин харуулна; олон машинтай
     // бол үйлчлүүлэгч хэвээр — тэр эзэмшигчийн өөр машиныг сонгоно.
@@ -309,8 +348,17 @@ export function OrderForm({
     const veh = vehicles.find((x) => x.id === vehicleId);
     if (veh && veh.customerId === v) return;
     const owned = vehicles.filter((x) => x.customerId === v);
-    setVehicleId(owned.length === 1 ? owned[0].id : "");
+    pickVehicle(owned.length === 1 ? owned[0].id : "");
   }
+
+  // Байгууллага эсэх: машин дээр derived утга, эс бөгөөс эзэмшигч үйлчлүүлэгчийнх.
+  function vehicleIsOrg(v: Vehicle): boolean {
+    if (v.ownerIsOrganization !== undefined) return v.ownerIsOrganization;
+    return v.customerId ? customerById.get(v.customerId)?.isOrganization === true : false;
+  }
+  const selectedCustomerIsOrg = customerById.get(customerId)?.isOrganization === true;
+  const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
+  const selectedVehicleIsOrg = selectedVehicle ? vehicleIsOrg(selectedVehicle) : false;
 
   function onCustomerCreated(c: CreatedCustomer) {
     setCustomers((prev) => [c, ...prev]);
@@ -323,6 +371,7 @@ export function OrderForm({
   function onVehicleCreated(v: CreatedVehicle) {
     setVehicles((prev) => [v, ...prev]);
     setVehicleId(v.id);
+    setPaymentMode((cur) => modeAfterVehicleChange(cur, v));
     clearFieldError("vehicleId");
     setShowVehicleForm(false);
   }
@@ -397,6 +446,7 @@ export function OrderForm({
           label="Хариуцах мастер"
           required
           htmlFor="assignedToId"
+          hint={assigneeHint}
           error={fe.assignedToId}
           className={FIELD_MW}
         >
@@ -421,7 +471,14 @@ export function OrderForm({
           />
         </Field>
 
-        <Field label="Үйлчлүүлэгч" required htmlFor="customerId" error={fe.customerId} className={FIELD_MW}>
+        <Field
+          label="Үйлчлүүлэгч"
+          required
+          htmlFor="customerId"
+          hint={selectedCustomerIsOrg ? "Байгууллага" : undefined}
+          error={fe.customerId}
+          className={FIELD_MW}
+        >
           <div className="flex gap-2">
             <div className="flex-1 min-w-0">
               <Select
@@ -434,15 +491,18 @@ export function OrderForm({
                 clearable
                 clearLabel="Үйлчлүүлэгчийг цэвэрлэх"
                 searchable
-                searchPlaceholder="Нэр, утсаар хайх…"
+                searchPlaceholder="Нэр, утас, регистрээр хайх…"
                 placeholder={
                   customers.length === 0 ? "— Бүртгэгдээгүй —" : "— Сонгох —"
                 }
-                options={customers.map((c) => ({
-                  value: c.id,
-                  label: customerLabel(c),
-                  hint: c.phone,
-                }))}
+                options={customers.map((c) => {
+                  const d = customerDisplay(c);
+                  return {
+                    value: c.id,
+                    label: d.primary,
+                    hint: customerPickerHint(c, d.isOrganization ? d.secondary : null),
+                  };
+                })}
               />
             </div>
             <SquareAddButton
@@ -459,7 +519,9 @@ export function OrderForm({
           required
           htmlFor="vehicleId"
           hint={
-            !customerId
+            selectedVehicleIsOrg
+              ? "Эзэмшигч: байгууллага"
+              : !customerId
               ? "Сонгоход эзэмшигч автоматаар бичигдэнэ"
               : filteredVehicles.length === 0
                 ? "Машин бүртгэгдээгүй"
@@ -487,13 +549,14 @@ export function OrderForm({
                     : null;
                   const base =
                     !customerId && owner
-                      ? `${v.make} ${v.model} · ${customerLabel(owner)}`
+                      ? `${v.make} ${v.model} · ${customerDisplay(owner).primary}`
                       : `${v.make} ${v.model}`;
+                  const org = vehicleIsOrg(v) ? `${base} · Байгууллага` : base;
                   const hint = v.isAccountVehicle
-                    ? `${base} · Хэрэглэгчийн бүртгэлээс — энэ хуудастай холбоно`
+                    ? `${org} · Хэрэглэгчийн бүртгэлээс — энэ хуудастай холбоно`
                     : v.isPostpaid
-                      ? `${base} · Дараа төлбөрт`
-                      : base;
+                      ? `${org} · Дараа төлбөрт`
+                      : org;
                   return {
                     value: v.id,
                     // Дугааргүй машиныг VIN-ээр нь ялгаж харуулна/хайна.
@@ -581,12 +644,47 @@ export function OrderForm({
         ) : null}
       </div>
 
-      {vehicles.find((v) => v.id === vehicleId)?.isPostpaid ? (
-        <div className="rounded-lg border border-sky-500/25 bg-sky-500/[0.08] px-4 py-2.5 text-xs text-sky-300 light:text-sky-700 max-w-2xl">
-          Энэ машин <strong>дараа төлбөрт</strong> нөхцөлтэй — засварын хуудас «Дараа
-          төлбөрт» түүхэнд бүртгэгдэж, төлбөрийг нэгтгэн төлнө.
+      <fieldset className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel2)] p-3 max-w-2xl">
+        <legend className="px-1 text-xs font-medium text-[var(--oc-ink2)]">Төлбөрийн нөхцөл</legend>
+        <input type="hidden" name="isPostpaidField" value="1" />
+        <input type="hidden" name="isInternalField" value="1" />
+        {isPostpaid ? <input type="hidden" name="isPostpaid" value="on" /> : null}
+        {isInternal ? <input type="hidden" name="isInternal" value="on" /> : null}
+        <div className="mt-1 flex flex-wrap gap-2">
+          {PAYMENT_MODES.map((m) => {
+            const checked = paymentMode === m.value;
+            const disabled = m.value === "internal" && internalBlocked;
+            return (
+              <label
+                key={m.value}
+                className={`rounded-md border px-2.5 py-1.5 text-xs ${
+                  disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+                } ${
+                  checked
+                    ? "border-[var(--oc-accent)] bg-[var(--oc-accent)]/[0.08] text-[var(--oc-accent)]"
+                    : "border-[var(--oc-line)] text-[var(--oc-muted2)]"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="paymentMode"
+                  checked={checked}
+                  disabled={disabled}
+                  onChange={() => setPaymentMode(m.value)}
+                  className="sr-only"
+                />
+                {m.label}
+              </label>
+            );
+          })}
         </div>
-      ) : null}
+        <p className="mt-2 text-xs text-[var(--oc-muted3)]">
+          {PAYMENT_MODES.find((m) => m.value === paymentMode)?.hint}
+        </p>
+        {internalBlocked ? (
+          <p className="mt-1 text-xs text-[var(--oc-muted3)]">{INTERNAL_BLOCKED_BY_PAYMENTS_HINT}</p>
+        ) : null}
+      </fieldset>
 
       <CreateCustomerModal
         open={showCustomerForm}

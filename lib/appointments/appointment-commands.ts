@@ -17,6 +17,17 @@ import { resolveEffectiveSchedule } from "@/lib/branch-effective-schedule";
 import { branchScheduleForDateSelect } from "@/lib/branch-effective-schedule-server";
 import { timeToMinutes } from "@/lib/branches";
 import { DEFAULT_SLOT_MINUTES } from "@/lib/appointment-slots";
+import {
+  assertCanSetAppointmentAssignee,
+  throwAssigneeRejection,
+  validateAppointmentAssignee,
+} from "@/lib/appointments/appointment-assignee";
+import { checkAssigneeChange, resolveConfirmAssignee } from "@/lib/appointments/appointment-assignee-rule";
+import { canAssignOrders } from "@/lib/auth/order-access";
+import {
+  CARRIED_ASSIGNEE_INELIGIBLE_MESSAGE,
+  isCarriedAssigneeIneligible,
+} from "@/lib/appointments/appointment-assignee-label";
 
 /**
  * Shared actor shape for appointment commands — structurally compatible with
@@ -85,6 +96,7 @@ async function loadAppointmentForStaffAction(id: string) {
       accountId: true,
       arrivedAt: true,
       requestedAt: true,
+      assignedToId: true,
       account: { select: { id: true, phone: true, name: true, email: true } },
       accountVehicle: { select: { vehicleId: true } },
       feeAmount: true,
@@ -119,6 +131,8 @@ export type ConfirmAppointmentResult = {
 export async function confirmAppointmentCommand(input: {
   actor: AppointmentCommandActor;
   appointmentId: string;
+  /** QA #28: a master is required to confirm. Missing and none stored -> actor (no orders.assign) or ASSIGNEE_REQUIRED; null never clears a stored master. */
+  assignedToId?: string | null;
 }): Promise<ConfirmAppointmentResult> {
   const { actor, appointmentId } = input;
   const appt = await loadAppointmentForStaffAction(appointmentId);
@@ -143,8 +157,44 @@ export async function confirmAppointmentCommand(input: {
   }
   const account = appt.account;
   const accountVehicle = appt.accountVehicle;
+  const resolved = resolveConfirmAssignee({
+    canAssign: canAssignOrders(actor),
+    actorId: actor.id,
+    requested: input.assignedToId,
+    current: appt.assignedToId,
+  });
+  if (!resolved.ok) throwAssigneeRejection(resolved);
+  const assignedToId = resolved.assigneeId;
+  assertCanSetAppointmentAssignee(actor, assignedToId, appt.assignedToId);
+  const assigneeChanged = assignedToId !== undefined && assignedToId !== appt.assignedToId;
 
   await prisma.$transaction(async (tx) => {
+    if (assigneeChanged && assignedToId) {
+      await validateAppointmentAssignee(tx, {
+        tenantId: appt.tenantId,
+        assigneeId: assignedToId,
+        branchId: appt.branchId,
+      });
+    } else if (!assigneeChanged && appt.assignedToId) {
+      // Kept master: re-check eligibility like the order convert does.
+      try {
+        await validateAppointmentAssignee(tx, {
+          tenantId: appt.tenantId,
+          assigneeId: appt.assignedToId,
+          branchId: appt.branchId,
+        });
+      } catch (error) {
+        if (isCarriedAssigneeIneligible(error, true)) {
+          throw new AppointmentCommandError(
+            CARRIED_ASSIGNEE_INELIGIBLE_MESSAGE,
+            422,
+            "ASSIGNEE_REQUIRED",
+            { assignedToId: CARRIED_ASSIGNEE_INELIGIBLE_MESSAGE },
+          );
+        }
+        throw error;
+      }
+    }
     const customerId = await resolveCustomerForAccount(tx, appt.tenantId, account);
     // Link энэ tenant-д ӨӨР эзэнтэй байсан бол (хуучин олон эзэнтэй мөр)
     // эзнийг дарж бичихгүй, машиныг ч цагт холбохгүй — ажилтан захиалга
@@ -171,6 +221,7 @@ export async function confirmAppointmentCommand(input: {
         vehicleId,
         respondedAt: new Date(),
         respondedById: actor.id,
+        ...(assigneeChanged ? { assignedToId } : {}),
       },
     });
     if (updated.count !== 1) {
@@ -189,7 +240,12 @@ export async function confirmAppointmentCommand(input: {
         entityId: appt.id,
         action: "STATUS_CHANGE",
         summary: "Цаг баталгаажуулсан",
-        after: { status: "CONFIRMED", customerId, vehicleId },
+        after: {
+          status: "CONFIRMED",
+          customerId,
+          vehicleId,
+          ...(assigneeChanged ? { assignedToId } : {}),
+        },
       },
       tx,
     );
@@ -206,6 +262,68 @@ export async function confirmAppointmentCommand(input: {
   }
 
   return { appointmentId: appt.id, accountId: account.id };
+}
+
+export type SetAppointmentAssigneeResult = { appointmentId: string; assignedToId: string | null };
+
+/**
+ * QA #28: change the responsible master (never clear: ASSIGNEE_REQUIRED) of a PENDING/CONFIRMED
+ * appointment. Eligibility uses the order assignee rules inside one
+ * transaction; an unchanged value is a no-op so a previously assigned master
+ * who later became ineligible never blocks unrelated edits.
+ */
+export async function setAppointmentAssigneeCommand(input: {
+  actor: AppointmentCommandActor;
+  appointmentId: string;
+  assignedToId: string | null;
+}): Promise<SetAppointmentAssigneeResult> {
+  const { actor, appointmentId, assignedToId } = input;
+  const appt = await prisma.appointment.findUnique({
+    where: { id: appointmentId },
+    select: { id: true, tenantId: true, branchId: true, status: true, assignedToId: true, serviceOrderId: true },
+  });
+  if (!appt) throw new AppointmentCommandError("Цаг захиалга олдсонгүй.", 404, "APPOINTMENT_NOT_FOUND");
+  await assertStaffTenantScope(actor, appt);
+  if (appt.status !== "PENDING" && appt.status !== "CONFIRMED") {
+    throw new AppointmentCommandError("Энэ цагийн хариуцагчийг өөрчлөх боломжгүй.", 422, "APPOINTMENT_NOT_EDITABLE");
+  }
+  const change = checkAssigneeChange({ requested: assignedToId, current: appt.assignedToId });
+  if (!change.ok) throwAssigneeRejection(change);
+  assertCanSetAppointmentAssignee(actor, assignedToId, appt.assignedToId);
+  if (assignedToId === appt.assignedToId) return { appointmentId: appt.id, assignedToId };
+
+  await prisma.$transaction(async (tx) => {
+    if (assignedToId) {
+      await validateAppointmentAssignee(tx, {
+        tenantId: appt.tenantId,
+        assigneeId: assignedToId,
+        branchId: appt.branchId,
+      });
+    }
+    const updated = await tx.appointment.updateMany({
+      where: { id: appt.id, tenantId: appt.tenantId, status: { in: ["PENDING", "CONFIRMED"] } },
+      data: { assignedToId },
+    });
+    if (updated.count !== 1) {
+      throw new AppointmentCommandError("Энэ цагийн хариуцагчийг өөрчлөх боломжгүй.", 409, "APPOINTMENT_NOT_EDITABLE");
+    }
+    await logAudit(
+      {
+        tenantId: appt.tenantId,
+        userId: actor.id,
+        branchId: appt.branchId,
+        entity: "Appointment",
+        entityId: appt.id,
+        action: "UPDATE",
+        summary: "Цагийн хариуцах мастер өөрчлөв",
+        before: { assignedToId: appt.assignedToId },
+        after: { assignedToId },
+      },
+      tx,
+    );
+  });
+
+  return { appointmentId: appt.id, assignedToId };
 }
 
 export type RejectAppointmentResult = { appointmentId: string; accountId: string | null };

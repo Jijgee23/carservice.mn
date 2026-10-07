@@ -61,7 +61,7 @@ test("QPay command and actions preserve provider/control-flow safety guards", as
   assert.match(commands, /payment\.method !== "QPAY"/);
   assert.match(commands, /fresh\.method !== "QPAY"/);
   assert.match(commands, /getInvoiceUrls/);
-  assert.match(commands, /amount: decimalToQPayAmount\(remaining\)/);
+  assert.match(commands, /amount: decimalToQPayAmount\(invoiceAmount\)/);
   assert.match(commands, /checkPaymentExact\(input\.actor\.tenantId, preflight\.payment\.qpayInvoiceId, preflight\.payment\.amount\.toString\(\)\)/);
   assert.match(commands, /newlyPaid: false/);
   assert.match(commands, /newlyPaid: !result\.already/);
@@ -84,4 +84,21 @@ test("cash tender above the balance is applied up to the balance with change", a
   const exact = commands.applyTender("CARD", new D("100"), new D("230000"), false);
   assert.equal(exact?.applied.toString(), "100");
   assert.equal(exact?.change.toString(), "0");
+});
+
+test("QPay invoice amount: missing = remaining, invalid/exceeding rejected, equal-amount-only reuse", async () => {
+  const commands = await import("../lib/orders/order-payment-commands");
+  const { Prisma } = await import("../app/generated/prisma/client");
+  const remaining = new Prisma.Decimal("50000");
+  assert.equal(commands.resolveQPayInvoiceAmount(undefined, remaining).toString(), "50000");
+  assert.equal(commands.resolveQPayInvoiceAmount(null, remaining).toString(), "50000");
+  assert.equal(commands.resolveQPayInvoiceAmount("  ", remaining).toString(), "50000");
+  assert.equal(commands.resolveQPayInvoiceAmount("20,000.50", remaining).toString(), "20000.5");
+  assert.equal(commands.resolveQPayInvoiceAmount("50000", remaining).toString(), "50000");
+  for (const bad of ["0", "-5", "abc", "1.234", 100]) {
+    assert.throws(() => commands.resolveQPayInvoiceAmount(bad, remaining), (e: { code?: string; status?: number }) => e.code === "QPAY_AMOUNT_INVALID" && e.status === 422);
+  }
+  assert.throws(() => commands.resolveQPayInvoiceAmount("50000.01", remaining), (e: { code?: string; status?: number; message?: string }) => e.code === "QPAY_AMOUNT_EXCEEDS" && e.status === 422 && e.message === "Дүн үлдэгдлээс их байж болохгүй.");
+  const src = await readFile(new URL("../lib/orders/order-payment-commands.ts", import.meta.url), "utf8");
+  assert.match(src, /pending\.amount\.equals\(invoiceAmount\) && pending\.qpayInvoiceId/);
 });

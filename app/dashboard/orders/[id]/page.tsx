@@ -1,3 +1,4 @@
+import { formerPlate } from "@/lib/vehicle-plate";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Prisma } from "@/app/generated/prisma/client";
@@ -25,13 +26,19 @@ import {
   ORDER_STATUS_TRANSITIONS,
   PAYMENT_STATUS_BADGE,
   PAYMENT_STATUS_LABEL,
+  INTERNAL_BADGE,
+  INTERNAL_LABEL,
+  INTERNAL_PAYMENT_NOTE,
   POSTPAID_BADGE,
+  POSTPAID_CLOSE_FORBIDDEN_MESSAGE,
   POSTPAID_LABEL,
+  POSTPAID_SETTLEMENT_NOTE,
   type OrderStatus,
   type PaymentStatus,
   canFillDiagnostics,
   formatTugrik,
 } from "@/lib/orders";
+import { canSettlePostpaidOrder } from "@/lib/orders/order-commands";
 import { prisma } from "@/lib/prisma";
 import { calculateServiceItemDurationMinutes } from "@/lib/service-duration";
 import type { QPayBankUrl } from "@/lib/qpay-tenant";
@@ -39,9 +46,14 @@ import { AddItemForm } from "./add-item-form";
 import { IntakeRecord } from "./intake-record";
 import { OrderItems } from "./order-items";
 import { OrderPaymentsList } from "./order-payments-list";
-import { QPayWidget } from "./qpay-widget";
+import { openSessionBranchIds } from "../../cash/open-sessions";
+import { PAYMENT_LEDGER_SELECT } from "@/lib/orders/order-payment-commands";
+import { PAID_PAYMENT_LOCKED_CANCEL_REASON } from "@/lib/cash/locked-copy";
+import { findLockedPaymentIds } from "@/lib/cash/session-attach";
+import { getTenantBanks } from "@/lib/tenant-banks";
 import { StatusControls } from "./status-controls";
 import { OrderForm } from "../order-form";
+import { vehicleOwnerIsOrganization } from "@/lib/vehicles/owner-kind";
 
 export const metadata = {
   title: "Засварын хуудасны дэлгэрэнгүй",
@@ -118,7 +130,7 @@ export default async function OrderDetailPage({
     prisma.customer.findMany({
       where: { tenantId: user.tenantId },
       orderBy: { fullName: "asc" },
-      select: { id: true, fullName: true, phone: true },
+      select: { id: true, fullName: true, phone: true, isOrganization: true, orgName: true, orgRegnum: true },
     }),
     prisma.tenantVehicle
       .findMany({
@@ -127,16 +139,18 @@ export default async function OrderDetailPage({
         select: {
           customerId: true,
           isPostpaid: true,
+          customer: { select: { isOrganization: true } },
           vehicle: {
-            select: { id: true, plate: true, vin: true, make: true, model: true },
+            select: { id: true, plate: true, vin: true, make: true, model: true, ownerRegnum: true },
           },
         },
       })
       .then((rows) =>
-        rows.map((r) => ({
-          ...r.vehicle,
+        rows.map(({ vehicle: { ownerRegnum, ...vehicle }, customer, ...r }) => ({
+          ...vehicle,
           customerId: r.customerId,
           isPostpaid: r.isPostpaid,
+          ownerIsOrganization: vehicleOwnerIsOrganization(customer, ownerRegnum),
         })),
       ),
     prisma.user.findMany({
@@ -193,7 +207,7 @@ export default async function OrderDetailPage({
 
   // QPay тохиргоо + одоо хүлээгдэж байгаа QPay invoice + бүртгэгдсэн
   // төлбөрүүдийн жагсаалт (арга бүрээр — жишээ нь 20,000₮ QPay, 50,000₮ бэлнээр).
-  const [qpayConfig, pendingOrderPayment, orderPayments] = await Promise.all([
+  const [qpayConfig, pendingOrderPayment, orderPayments, tenantBanks] = await Promise.all([
     prisma.tenantQPaySettings.findUnique({
       where: { tenantId: user.tenantId },
       select: { enabled: true },
@@ -205,17 +219,12 @@ export default async function OrderDetailPage({
     prisma.orderPayment.findMany({
       where: { orderId: id, status: { not: "PENDING" } },
       orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        amount: true,
-        method: true,
-        status: true,
-        paidAt: true,
-        createdAt: true,
-      },
+      select: PAYMENT_LEDGER_SELECT,
     }),
+    getTenantBanks(user.tenantId),
   ]);
   const qpayReady = Boolean(qpayConfig?.enabled);
+  const lockedPaymentIds = await findLockedPaymentIds(prisma, user.tenantId, orderPayments.map((p) => p.id));
 
   if (!order) notFound();
   if (!canViewOrder(user, order)) redirect("/dashboard/orders");
@@ -256,6 +265,14 @@ export default async function OrderDetailPage({
 
   // Төлөгдсөн төлбөртэй бол мөрийн мөнгөн дүнг өөрчлөхгүй (сервер ч хориглоно).
   const hasPaidPayment = orderPayments.some((p) => p.status === "PAID");
+  // Дууссан дараа тооцоот захиалгын төлбөрийг зөвхөн orders.closeUnpaidPostpaid эрхтэй хүн бүртгэнэ.
+  const canSettle = canSettlePostpaidOrder(user, { isPostpaid: order.isPostpaid, status: order.status });
+  // Every user-initiated money write (record / QPay start / reverse) needs the order's branch register open.
+  const cashSessionOpen =
+    (canRecordPayments || canReversePayments || canEditPayments) && canSettle
+      ? (await openSessionBranchIds(user.tenantId, [order.branchId])).length > 0
+      : true;
+  const settlementLocked = !canSettle;
   // «Дуусгах»-ын урьдчилсан нөхцөл — applyOrderPatchCommand-ийн шалгалттай ижил.
   const unfinishedItemsCount = activeItems.length - completedItemsCount;
   const remainingDecimal = (order.totalAmount ?? new Prisma.Decimal(0)).minus(
@@ -266,9 +283,13 @@ export default async function OrderDetailPage({
       ? "Бөглөгдөөгүй оношилгоо байна."
       : unfinishedItemsCount > 0
         ? `Дуусаагүй ${unfinishedItemsCount} ажил байна.`
-        : !order.isPostpaid && remainingDecimal.gt(0)
+        : order.isInternal
+          ? null
+          : remainingDecimal.gt(0) && !order.isPostpaid
           ? `Төлбөр бүрэн төлөгдөөгүй (үлдэгдэл ${formatTugrik(remainingDecimal.toString())}).`
-          : null;
+          : remainingDecimal.gt(0) && !hasPermission(user, "orders.closeUnpaidPostpaid")
+            ? POSTPAID_CLOSE_FORBIDDEN_MESSAGE
+            : null;
   // Ижил оношилгоо нэг засварын хуудсанд давхардаж болохгүй тул аль хэдийн
   // нэмэгдсэн загваруудыг "+ Мөр нэмэх" сонголтоос хасна.
   const usedDiagnosticTemplateIds = new Set(
@@ -294,9 +315,22 @@ export default async function OrderDetailPage({
           </h1>
           <p className="text-sm text-[var(--oc-muted3)] mt-1">
             {customerLabel(order.customer)} · {order.vehicle.plate}
+            {formerPlate(order.plateSnapshot, order.vehicle.plate) ? (
+              <span className="text-[var(--oc-muted3)]">
+                {" "}
+                (хуучин: {formerPlate(order.plateSnapshot, order.vehicle.plate)})
+              </span>
+            ) : null}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {order.isInternal ? (
+            <span
+              className={`font-plex-mono text-[11px] px-3 py-1.5 rounded-full ${INTERNAL_BADGE}`}
+            >
+              {INTERNAL_LABEL}
+            </span>
+          ) : null}
           {order.isPostpaid ? (
             <span
               className={`font-plex-mono text-[11px] px-3 py-1.5 rounded-full ${POSTPAID_BADGE}`}
@@ -304,11 +338,13 @@ export default async function OrderDetailPage({
               {POSTPAID_LABEL}
             </span>
           ) : null}
-          <span
-            className={`font-plex-mono text-[11px] px-3 py-1.5 rounded-full ${PAYMENT_STATUS_BADGE[paymentStatus]}`}
-          >
-            {PAYMENT_STATUS_LABEL[paymentStatus]}
-          </span>
+          {order.isInternal ? null : (
+            <span
+              className={`font-plex-mono text-[11px] px-3 py-1.5 rounded-full ${PAYMENT_STATUS_BADGE[paymentStatus]}`}
+            >
+              {PAYMENT_STATUS_LABEL[paymentStatus]}
+            </span>
+          )}
           <span
             className={`font-plex-mono text-[11px] px-3 py-1.5 rounded-full ${ORDER_STATUS_BADGE[status]}`}
           >
@@ -439,12 +475,15 @@ export default async function OrderDetailPage({
                   assignedToId: order.assignedToId,
                   scheduledAt: order.scheduledAt,
                   notes: order.notes,
+                  isPostpaid: order.isPostpaid,
+                  isInternal: order.isInternal,
                 }}
                 branches={branches}
                 customers={customers}
                 vehicles={vehicles}
                 technicians={technicians}
                 backHref="/dashboard/orders"
+                hasPaidPayment={hasPaidPayment}
               />
             </section>
           ) : null}
@@ -464,10 +503,23 @@ export default async function OrderDetailPage({
                 estimatedDurationMinutes={order.estimatedDurationMinutes}
                 serviceItemDurationMinutes={serviceItemDurationMinutes}
                 completeBlockedReason={completeBlockedReason}
+                cancelBlockedReason={orderPayments.some((p) => p.status === "PAID" && lockedPaymentIds.has(p.id)) ? PAID_PAYMENT_LOCKED_CANCEL_REASON : null}
               />
             </div>
           ) : null}
 
+          {order.isInternal ? (
+            <div className="rounded-[10px] border border-slate-500/25 bg-slate-500/[0.08] p-5 text-sm">
+              <h2 className="font-semibold text-[var(--oc-ink)] mb-2 text-sm">Төлбөр</h2>
+              <p className="text-xs text-slate-300 light:text-slate-700">{INTERNAL_PAYMENT_NOTE}</p>
+              <div className="mt-3 flex items-center justify-between">
+                <span className="text-[var(--oc-muted3)] text-xs">Нийт дүн</span>
+                <span className="font-plex-mono text-[var(--oc-ink2)]">
+                  {formatTugrik(order.totalAmount?.toString() ?? "0")}
+                </span>
+              </div>
+            </div>
+          ) : (
           <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-5">
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold text-[var(--oc-ink)] text-sm">Төлбөр</h2>
@@ -500,13 +552,25 @@ export default async function OrderDetailPage({
                   </dd>
                 </div>
               ) : null}
+              <div className="flex items-center justify-between pt-2 mt-1 border-t border-[var(--oc-line)]">
+                <dt className="text-[var(--oc-ink2)] text-xs font-semibold">Үлдэгдэл</dt>
+                {new Prisma.Decimal(remainingAmount).gt(0) ? (
+                  <dd className="font-plex-mono text-lg font-semibold text-[var(--oc-warn)]">
+                    {formatTugrik(remainingAmount)}
+                  </dd>
+                ) : (
+                  <dd className="font-plex-mono text-lg font-semibold text-emerald-300 light:text-emerald-700">
+                    ✓ {formatTugrik("0")}
+                  </dd>
+                )}
+              </div>
             </dl>
             {order.isPostpaid ? (
               <p className="text-xs text-sky-400/90 light:text-sky-700 mb-4 -mt-1">
                 Дараа төлбөрт засварын хуудас — төлбөрийг гэрээгээр нэгтгэн төлнө.
               </p>
             ) : null}
-            {(orderPayments.length > 0 || canRecordPayments) ? (
+            {(orderPayments.length > 0 || canRecordPayments || (canEditPayments && canSettle && paymentStatus !== "PAID")) ? (
               <div className="mt-4 pt-4 border-t border-[var(--oc-line)]">
                 <div className="font-plex-mono text-[10.5px] text-[var(--oc-muted3)] uppercase tracking-[0.1em] mb-2">
                   Төлбөрүүд
@@ -519,22 +583,18 @@ export default async function OrderDetailPage({
                     method: p.method,
                     status: p.status,
                     createdAt: p.createdAt.toISOString(),
+                    bank: p.bank,
+                    settlementId: p.settlementId,
+                    locked: lockedPaymentIds.has(p.id),
                   }))}
+                  banks={tenantBanks.banks.filter((b) => tenantBanks.enabledBanks.includes(b.code))}
+                  cashSessionOpen={cashSessionOpen}
                   remaining={remainingAmount}
-                  canRecord={canRecordPayments}
-                  canReverse={canReversePayments}
-                />
-              </div>
-            ) : null}
-            {canEditPayments && paymentStatus !== "PAID" ? (
-              <div className="mt-4 pt-4 border-t border-[var(--oc-line)]">
-                <div className="font-plex-mono text-[10.5px] text-[var(--oc-muted3)] uppercase tracking-[0.1em] mb-2">
-                  QPay
-                </div>
-                <QPayWidget
-                  orderId={order.id}
+                  canRecord={canRecordPayments && canSettle}
+                  canReverse={canReversePayments && canSettle}
+                  qpayAvailable={canEditPayments && canSettle && paymentStatus !== "PAID"}
                   qpayConfigured={qpayReady}
-                  pending={
+                  pendingQPay={
                     pendingOrderPayment
                       ? {
                           id: pendingOrderPayment.id,
@@ -547,9 +607,13 @@ export default async function OrderDetailPage({
                       : null
                   }
                 />
+                {settlementLocked ? (
+                  <p className="mt-2 text-xs text-[var(--oc-muted3)]">{POSTPAID_SETTLEMENT_NOTE}</p>
+                ) : null}
               </div>
             ) : null}
           </div>
+          )}
 
           <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-5 text-sm">
             <h2 className="font-semibold text-[var(--oc-ink)] mb-4 text-sm">Дэлгэрэнгүй</h2>

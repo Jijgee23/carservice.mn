@@ -10,9 +10,13 @@ import {
 import { EmptyState, PageHeader } from "@/app/_components/page-header";
 import { Pagination } from "@/app/_components/pagination";
 import { buildMeta, getPageInfo } from "@/lib/pagination";
-import { customerLabel } from "@/lib/customers";
+import { customerDisplay, customerLabel, orgRegnumLabel } from "@/lib/customers";
 import { requireUser } from "@/lib/auth";
-import { canView, workingBranchScopeId } from "@/lib/auth/roles";
+import { canView, hasPermission, workingBranchScopeId } from "@/lib/auth/roles";
+import { bookingDateKey } from "@/lib/booking-time";
+import { getTenantBanks } from "@/lib/tenant-banks";
+import { openSessionBranchIds } from "../../cash/open-sessions";
+import { SettleButton } from "./settle-dialog";
 import { orderReadWhere } from "@/lib/auth/order-access";
 import {
   ORDER_STATUS_BADGE,
@@ -24,6 +28,7 @@ import {
   formatTugrik,
 } from "@/lib/orders";
 import { prisma } from "@/lib/prisma";
+import { PAID_AT_SELECT, withPaidInFull } from "@/lib/orders/order-payment-totals";
 
 export const metadata = {
   title: "Дараа төлбөрт",
@@ -70,7 +75,9 @@ export default async function PostpaidOrdersPage({
       orderBy: { createdAt: "desc" },
       select: {
         vehicle: { select: { id: true, plate: true, make: true, model: true } },
-        customer: { select: { id: true, fullName: true, phone: true } },
+        customer: {
+          select: { id: true, fullName: true, phone: true, isOrganization: true, orgName: true, orgRegnum: true },
+        },
       },
     }),
     prisma.serviceOrder.groupBy({
@@ -114,7 +121,7 @@ export default async function PostpaidOrdersPage({
   if (scheduledAt.gte || scheduledAt.lte) where.scheduledAt = scheduledAt;
 
   const { page, pageSize, skip, take } = getPageInfo(pageParam);
-  const [orders, filteredTotal] = await Promise.all([
+  const [rawOrders, filteredTotal] = await Promise.all([
     prisma.serviceOrder.findMany({
       where,
       orderBy: [{ scheduledAt: "desc" }, { createdAt: "desc" }],
@@ -130,6 +137,7 @@ export default async function PostpaidOrdersPage({
         createdAt: true,
         totalAmount: true,
         paidAmount: true,
+        ...PAID_AT_SELECT,
         customer: { select: { fullName: true, phone: true } },
         vehicle: { select: { plate: true, make: true, model: true } },
         branch: { select: { name: true } },
@@ -137,7 +145,72 @@ export default async function PostpaidOrdersPage({
     }),
     prisma.serviceOrder.count({ where }),
   ]);
+  const orders = rawOrders.map(withPaidInFull);
   const meta = buildMeta(filteredTotal, page, pageSize);
+
+  // «Тооцоо нийлэх» — зөвхөн хоёр эрхтэй хүнд. Салбар/үйлчлүүлэгч/банк зөвхөн үед нь ачаална.
+  const canSettle =
+    hasPermission(user, "orders.closeUnpaidPostpaid") && hasPermission(user, "cash.manage");
+  let settle: {
+    branches: { id: string; name: string }[];
+    customers: { id: string; name: string }[];
+    banks: { code: string; label: string }[];
+    openBranchIds: string[];
+  } | null = null;
+  if (canSettle) {
+    const [branches, tenantBanks] = await Promise.all([
+      prisma.branch.findMany({
+        where: { tenantId: user.tenantId, ...(scopeBranchId ? { id: scopeBranchId } : {}) },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      }),
+      getTenantBanks(user.tenantId),
+    ]);
+    // Eligibility is the ORDER snapshot (postpaid, COMPLETED, non-internal, outstanding > 0), not the
+    // current vehicle link, so source the picker from orders.
+    const owing = await prisma.serviceOrder.findMany({
+      where: {
+        tenantId: user.tenantId,
+        isPostpaid: true,
+        isInternal: false,
+        status: "COMPLETED",
+        paymentStatus: { not: "PAID" },
+        ...(scopeBranchId ? { branchId: scopeBranchId } : {}),
+      },
+      take: 5000,
+      select: {
+        customerId: true,
+        totalAmount: true,
+        payments: { where: { status: "PAID" }, select: { amount: true } },
+      },
+    });
+    const owingIds = new Set<string>();
+    for (const o of owing) {
+      const paid = o.payments.reduce((sum, p) => sum.plus(p.amount), ZERO);
+      if ((o.totalAmount ?? ZERO).minus(paid).gt(0)) owingIds.add(o.customerId);
+    }
+    const owingCustomers = owingIds.size
+      ? await prisma.customer.findMany({
+          where: { tenantId: user.tenantId, id: { in: [...owingIds] } },
+          select: { id: true, fullName: true, phone: true, isOrganization: true, orgName: true, orgRegnum: true },
+        })
+      : [];
+    const byCustomer = new Map<string, { id: string; name: string }>();
+    for (const c of owingCustomers) {
+      const d = customerDisplay(c);
+      byCustomer.set(c.id, {
+        id: c.id,
+        name: [d.primary, d.secondary, orgRegnumLabel(c)].filter(Boolean).join(" · "),
+      });
+    }
+    const labelByCode = new Map(tenantBanks.banks.map((b) => [b.code, b.label] as const));
+    settle = {
+      branches,
+      customers: [...byCustomer.values()].sort((a, b) => a.name.localeCompare(b.name, "mn")),
+      banks: tenantBanks.enabledBanks.map((code) => ({ code, label: labelByCode.get(code) ?? code })),
+      openBranchIds: await openSessionBranchIds(user.tenantId, branches.map((b) => b.id)),
+    };
+  }
 
   const selectedVehicle = vehicleId
     ? vehicleRows.find((v) => v.id === vehicleId)
@@ -148,6 +221,18 @@ export default async function PostpaidOrdersPage({
       <PageHeader
         title="Дараа төлбөрт"
         description="Гэрээт (дараа төлбөрт) машинуудын засварын хуудасны түүх, тооцоо"
+        actions={
+          settle ? (
+            <SettleButton
+              branches={settle.branches}
+              defaultBranchId={scopeBranchId ?? settle.branches[0]?.id ?? ""}
+              customers={settle.customers}
+              banks={settle.banks}
+              openBranchIds={settle.openBranchIds}
+              today={bookingDateKey(new Date())}
+            />
+          ) : undefined
+        }
       />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">

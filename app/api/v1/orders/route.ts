@@ -1,4 +1,5 @@
 import { Prisma } from "@/app/generated/prisma/client";
+import { findOrderIdsWithLockedPayment } from "@/lib/cash/session-attach";
 import { jsonError, jsonOk, requireApiUser, requirePermission } from "@/lib/api";
 import { resolveWorkingBranch } from "@/lib/auth/api-branch";
 import { canAssignOrders, orderReadWhere } from "@/lib/auth/order-access";
@@ -11,6 +12,7 @@ import { readIntakeBody, validateIntakeFields, type IntakeInput } from "@/lib/or
 import { parseCreateOrderBody } from "@/lib/orders/order-create-request";
 import { buildOrderListWhere, parseOrderListQuery } from "@/lib/orders/order-list-query";
 import { summarizeOrderProgress } from "@/lib/orders/order-progress";
+import { PAID_AT_SELECT, withPaidInFull } from "@/lib/orders/order-payment-totals";
 
 const ORDER_SELECT = {
   id: true,
@@ -26,6 +28,10 @@ const ORDER_SELECT = {
   paidAmount: true,
   notes: true,
   createdAt: true,
+  isPostpaid: true,
+  isInternal: true,
+  plateSnapshot: true,
+  vinSnapshot: true,
   customer: { select: { id: true, fullName: true, phone: true } },
   vehicle: { select: { id: true, plate: true, make: true, model: true, year: true } },
   branch: { select: { id: true, name: true } },
@@ -60,13 +66,15 @@ export async function GET(req: Request) {
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: parsed.value.skip,
       take: parsed.value.take,
-      select: ORDER_LIST_SELECT,
+      select: { ...ORDER_LIST_SELECT, ...PAID_AT_SELECT },
     }),
     prisma.serviceOrder.count({ where }),
   ]);
+  const lockedOrderIds = await findOrderIdsWithLockedPayment(prisma, auth.user.tenantId, orders.map((o) => o.id));
   return jsonOk({
-    orders: orders.map(({ items, ...order }) => ({
-      ...order,
+    orders: orders.map(({ items, ...rawOrder }) => ({
+      ...withPaidInFull(rawOrder),
+      hasLockedPayment: lockedOrderIds.has(rawOrder.id),
       progress: summarizeOrderProgress(items),
       servicePreview: items.filter((item) => item.status !== "CANCELLED" && item.kind !== "PART").slice(0, 2).map((item) => item.description),
     })),
@@ -91,9 +99,12 @@ export async function POST(req: Request) {
 
   const parsed = parseCreateOrderBody(body);
   if (!parsed.ok) {
-    return jsonError(parsed.status, parsed.message, parsed.fieldErrors ? { fieldErrors: parsed.fieldErrors } : undefined);
+    return jsonError(parsed.status, parsed.message, {
+      ...(parsed.code ? { code: parsed.code } : {}),
+      ...(parsed.fieldErrors ? { fieldErrors: parsed.fieldErrors } : {}),
+    });
   }
-  const { branchId, customerId, vehicleId, scheduledAt, notes, appointmentId, estimatedDurationMinutes } =
+  const { branchId, customerId, vehicleId, scheduledAt, notes, appointmentId, estimatedDurationMinutes, isPostpaid, isInternal } =
     parsed.value;
   let { assignedToId } = parsed.value;
 
@@ -134,15 +145,17 @@ export async function POST(req: Request) {
       notes,
       appointmentId,
       estimatedDurationMinutes,
+      isPostpaid,
+      isInternal,
       workingBranchId: scopeResult.branchId,
       intake,
     });
     const order = await prisma.serviceOrder.findFirst({
       where: { id: created.id, tenantId: auth.user.tenantId },
-      select: ORDER_SELECT,
+      select: { ...ORDER_SELECT, ...PAID_AT_SELECT },
     });
     if (!order) return jsonError(500, "Захиалга үүссэн боловч буцааж уншиж чадсангүй.");
-    return jsonOk({ order }, { status: 201 });
+    return jsonOk({ order: withPaidInFull(order) }, { status: 201 });
   } catch (error) {
     if (error instanceof OrderCommandError) {
       return jsonError(error.status, error.message, {

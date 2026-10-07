@@ -54,7 +54,7 @@ function ConfirmationDialog({
         aria-label="Хаах"
         data-confirm-dialog
         onClick={onCancel}
-        className="fixed inset-0 z-[100] cursor-default bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-[200] cursor-default bg-black/60 backdrop-blur-sm"
       />
       <div
         role="alertdialog"
@@ -62,7 +62,7 @@ function ConfirmationDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={messageId}
-        className="fixed left-1/2 top-1/2 z-[110] w-[min(92vw,26rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-[var(--surface)] p-5 shadow-2xl backdrop-blur-xl"
+        className="fixed left-1/2 top-1/2 z-[210] w-[min(92vw,26rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-[var(--surface)] p-5 shadow-2xl backdrop-blur-xl"
       >
         <div className="flex items-start gap-3">
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--oc-warn)]/15 text-[var(--oc-warn)]">

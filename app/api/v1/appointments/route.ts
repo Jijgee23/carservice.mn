@@ -42,6 +42,9 @@ const APPT_SELECT = {
   },
   vehicle: { select: { id: true, plate: true, make: true, model: true } },
   serviceOrder: { select: { id: true, number: true } },
+  // QA #28: хариуцах мастер (идэвхгүй болсон ч хуучин оноолтыг харуулна).
+  assignedToId: true,
+  assignedTo: { select: { id: true, firstName: true, lastName: true } },
   // `paymentStatus`-г тооцоход (харах: shapeAppointment) — түүхий fee
   // талбарууд хариунд гарахгүй.
   feeAmount: true,
@@ -224,7 +227,7 @@ export async function POST(req: Request) {
   if (!parsed.ok) {
     return jsonError(parsed.status, parsed.message, parsed.fieldErrors ? { fieldErrors: parsed.fieldErrors } : undefined);
   }
-  const { branchId, customerId, vehicleId, requestedAt, note, categoryIds, confirmed } = parsed.value;
+  const { branchId, customerId, vehicleId, requestedAt, note, categoryIds, confirmed, assignedToId } = parsed.value;
 
   const scopeResult = await resolveWorkingBranch(req, auth.user);
   if (scopeResult.response) return scopeResult.response;
@@ -250,6 +253,7 @@ export async function POST(req: Request) {
       note,
       categoryIds,
       confirmed,
+      assignedToId,
     });
     const appointment = await prisma.appointment.findFirst({
       where: { id: created.appointmentId, tenantId: auth.user.tenantId },

@@ -12,7 +12,7 @@ import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
 import { Select } from "@/app/_components/select";
 import { useToast } from "@/app/_components/toast";
 import { quickCreateCustomerFromPlateAction } from "@/app/_actions/quick-create";
-import { customerLabel } from "@/lib/customers";
+import { customerLabel, customerPickerHint } from "@/lib/customers";
 import { NO_PLATE, isNoPlate } from "@/lib/vehicle-plate";
 import {
   normalizeWheelPosition,
@@ -44,7 +44,13 @@ type Initial = {
   isPostpaid?: boolean;
 };
 
-type Customer = { id: string; fullName: string; phone: string };
+type Customer = {
+  id: string;
+  fullName: string;
+  phone: string;
+  isOrganization?: boolean;
+  orgRegnum?: string | null;
+};
 
 export const VEHICLE_FORM_ID = "vehicle-form";
 
@@ -298,7 +304,7 @@ export function VehicleForm({
             options={customersList.map((c) => ({
               value: c.id,
               label: customerLabel(c),
-              hint: c.phone,
+              hint: customerPickerHint(c),
             }))}
           />
         </Field>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { Fragment, useActionState, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   type OrderActionState,
@@ -36,6 +36,7 @@ export function StatusControls({
   estimatedDurationMinutes,
   serviceItemDurationMinutes = null,
   completeBlockedReason = null,
+  cancelBlockedReason = null,
 }: {
   orderId: string;
   transitions: OrderStatus[];
@@ -45,6 +46,8 @@ export function StatusControls({
   serviceItemDurationMinutes?: number | null;
   /** «Дуусгах» боломжгүй шалтгаан (дуусаагүй ажил, дутуу төлбөр) — сервер ч шалгана. */
   completeBlockedReason?: string | null;
+  /** Set when a paid payment sits in a closed cash session (PAID_PAYMENT_LOCKED): cancel is disabled with this reason. */
+  cancelBlockedReason?: string | null;
 }) {
   const toast = useToast();
   const [state, formAction, pending] = useActionState<
@@ -122,15 +125,18 @@ export function StatusControls({
             {transitions.map((next) =>
               // Цуцлах нь буцаах боломжгүй тул эхлээд диалогоор баталгаажуулна.
               next === "CANCELLED" ? (
+          <Fragment key={next}>
           <button
-            key={next}
             type="button"
-            disabled={disabled || pending}
+            disabled={disabled || pending || Boolean(cancelBlockedReason)}
+            title={cancelBlockedReason ?? undefined}
             onClick={() => setConfirmCancel(true)}
             className={`w-full text-sm font-medium px-4 py-2 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${STATUS_BTN_STYLE[next]}`}
           >
             {STATUS_BTN_LABEL[next]}
           </button>
+          {cancelBlockedReason ? <p className="mt-1 px-1 text-xs text-[var(--oc-muted3)]">{cancelBlockedReason}</p> : null}
+          </Fragment>
         ) : next === "IN_PROGRESS" &&
           estimatedDurationMinutes == null &&
           serviceItemDurationMinutes == null ? (

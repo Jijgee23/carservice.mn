@@ -26,6 +26,8 @@ import {
   ORDER_STATUS_LABEL,
   PAYMENT_STATUS_BADGE,
   PAYMENT_STATUS_LABEL,
+  INTERNAL_BADGE,
+  INTERNAL_LABEL,
   POSTPAID_BADGE,
   POSTPAID_LABEL,
   type ItemKind,
@@ -42,6 +44,7 @@ export type BulkOrderRow = {
   customerLabel: string;
   vehicleMakeModel: string;
   vehiclePlate: string;
+  formerPlate: string | null;
   items: { id: string; description: string; kind: ItemKind }[];
   itemCount: number;
   branchName: string;
@@ -50,6 +53,7 @@ export type BulkOrderRow = {
   totalLabel: string;
   paymentStatus: PaymentStatus;
   isPostpaid: boolean;
+  isInternal: boolean;
   status: OrderStatus;
 };
 
@@ -152,6 +156,11 @@ export function BulkOrdersTable({
                   <div className="text-xs text-[var(--oc-muted3)] font-mono">
                     {o.vehiclePlate}
                   </div>
+                  {o.formerPlate ? (
+                    <div className="text-[11px] text-[var(--oc-muted3)]">
+                      хуучин: {o.formerPlate}
+                    </div>
+                  ) : null}
                 </td>
                 <td className="px-5 py-4 text-xs">
                   {o.itemCount === 0 ? (
@@ -189,13 +198,21 @@ export function BulkOrdersTable({
                 </td>
                 <td className="px-5 py-4 text-sm">
                   <div className="text-[var(--oc-ink2)]">{o.totalLabel}</div>
-                  <span
-                    className={`mt-1 inline-block whitespace-nowrap text-[10px] px-1.5 py-0.5 rounded-full ${
-                      PAYMENT_STATUS_BADGE[o.paymentStatus]
-                    }`}
-                  >
-                    {PAYMENT_STATUS_LABEL[o.paymentStatus]}
-                  </span>
+                  {o.isInternal ? (
+                    <span
+                      className={`mt-1 inline-block whitespace-nowrap text-[10px] px-1.5 py-0.5 rounded-full ${INTERNAL_BADGE}`}
+                    >
+                      {INTERNAL_LABEL}
+                    </span>
+                  ) : (
+                    <span
+                      className={`mt-1 inline-block whitespace-nowrap text-[10px] px-1.5 py-0.5 rounded-full ${
+                        PAYMENT_STATUS_BADGE[o.paymentStatus]
+                      }`}
+                    >
+                      {PAYMENT_STATUS_LABEL[o.paymentStatus]}
+                    </span>
+                  )}
                   {o.isPostpaid ? (
                     <span
                       className={`mt-1 ml-1 inline-block whitespace-nowrap text-[10px] px-1.5 py-0.5 rounded-full ${POSTPAID_BADGE}`}

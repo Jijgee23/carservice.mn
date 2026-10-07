@@ -1,4 +1,6 @@
 import { Prisma } from "@/app/generated/prisma/client";
+import { PAID_PAYMENT_LOCKED_ITEM_MESSAGE } from "@/lib/cash/locked-copy";
+import { findLockedPaymentIds } from "@/lib/cash/session-attach";
 import { logAudit } from "@/lib/audit";
 import {
   canChangeOrderItemPrice,
@@ -81,11 +83,41 @@ async function assertNoPaidPayments(tx: PrismaTransactionClient, tenantId: strin
     select: { id: true },
   });
   if (paid) {
+    const paidIds = await tx.orderPayment.findMany({ where: { orderId, tenantId, status: "PAID" }, select: { id: true } });
+    if ((await findLockedPaymentIds(tx, tenantId, paidIds.map((r) => r.id))).size > 0) {
+      throw new OrderCommandError(PAID_PAYMENT_LOCKED_ITEM_MESSAGE, 422, "PAID_PAYMENT_LOCKED");
+    }
     throw new OrderCommandError(
       "Төлбөр төлөгдсөн тул мөрийн үнэ, тоо хэмжээг өөрчлөх эсвэл мөр цуцлах боломжгүй. Эхлээд төлбөрийг буцаана уу.",
       422,
       "PAID_PAYMENT_EXISTS",
     );
+  }
+}
+
+export const ITEM_COMPLETED_LOCKED_MESSAGE = "Дууссан ажлыг засах боломжгүй.";
+
+/**
+ * COMPLETED үйлчилгээний мөр (ажил/оношилгоо/хураамж) түгжигдэнэ: засах, үнэ
+ * өөрчлөх, цуцлах боломжгүй — алдааг засах бол шинэ засварлах мөр нэмнэ.
+ * Явцыг буцаах нь assertCompletedItemStatusChange-д тусдаа шийдэгдэнэ.
+ * Сэлбэг (PART) мөрөнд явц байхгүй тул нөлөөлөхгүй.
+ */
+export function assertItemNotCompleted(status: ServiceItemStatus): void {
+  if (status === "COMPLETED") throw new OrderCommandError(ITEM_COMPLETED_LOCKED_MESSAGE, 422, "ITEM_COMPLETED_LOCKED");
+}
+
+export const DIAGNOSTIC_REPORT_LINKED_MESSAGE = "Оношилгоо бөглөгдсөн тул явцыг буцаах боломжгүй.";
+
+/**
+ * Захиалга ажиллаж байх үед (assertOrderInProgressForItemStatus) COMPLETED мөрийн
+ * явцыг буцааж болно. Тайлантай оношилгооны мөрийг буцаавал тайлан холбоотой
+ * хэрнээ "Хүлээгдэж буй" мөр үүсдэг тул түгжээтэй хэвээр.
+ */
+export function assertCompletedItemStatusChange(item: { status: ServiceItemStatus; kind: string; diagnosticReportId: string | null }): void {
+  if (item.status !== "COMPLETED") return;
+  if (item.kind === "DIAGNOSTIC" && item.diagnosticReportId) {
+    throw new OrderCommandError(DIAGNOSTIC_REPORT_LINKED_MESSAGE, 422, "DIAGNOSTIC_REPORT_LINKED");
   }
 }
 
@@ -332,6 +364,7 @@ export async function updateOrderItemCommand(input: {
     const existing = await tx.serviceItem.findFirst({ where: { id: itemId, orderId }, select: { ...orderItemSelect(), service: { select: { type: true } } } });
     if (!existing) throw new OrderCommandError("Мөр олдсонгүй.", 404, "ITEM_NOT_FOUND");
     if (existing.status === "CANCELLED") throw new OrderCommandError("Цуцлагдсан мөрийг засах боломжгүй.", 422, "ITEM_CANCELLED");
+    assertItemNotCompleted(existing.status);
     const next = {
       kind: input.kind ?? existing.kind,
       description: input.description ?? existing.description,
@@ -400,6 +433,11 @@ export async function patchOrderItemCommand(input: {
     if (existing.status === "CANCELLED") throw new OrderCommandError("Цуцлагдсан мөрийг өөрчлөх боломжгүй.", 422, "ITEM_CANCELLED");
     const priceChanged = hasPrice && !input.unitPrice!.equals(existing.unitPrice);
     if (!hasDetails && !priceChanged && !hasStatus) return existing;
+    if (hasDetails || priceChanged) assertItemNotCompleted(existing.status);
+    if (hasStatus) {
+      if (!hasDetails && !priceChanged && input.nextStatus === existing.status) return existing;
+      assertCompletedItemStatusChange(existing);
+    }
 
     const next = {
       kind: input.kind ?? existing.kind,
@@ -459,6 +497,7 @@ export async function cancelOrderItemCommand(input: { actor: OrderCommandActor; 
     assertOrderItemAccess(actor, order, scope);
     const item = await tx.serviceItem.findFirst({ where: { id: itemId, orderId }, select: { ...orderItemSelect(), service: { select: { type: true } } } });
     if (!item) throw new OrderCommandError("Мөр олдсонгүй.", 404, "ITEM_NOT_FOUND");
+    assertItemNotCompleted(item.status);
     if (!isServiceItemCancellable(item.status)) throw new OrderCommandError("Энэ мөрийг цуцлах боломжгүй.", 422, "ITEM_NOT_CANCELLABLE");
     if (!item.total.isZero()) await assertNoPaidPayments(tx, actor.tenantId, orderId);
     const now = new Date();
@@ -485,6 +524,8 @@ export async function changeOrderItemStatusCommand(input: { actor: OrderCommandA
     const item = await tx.serviceItem.findFirst({ where: { id: itemId, orderId }, select: { id: true, kind: true, status: true, startedAt: true, diagnosticReportId: true } });
     if (!item) throw new OrderCommandError("Мөр олдсонгүй.", 404, "ITEM_NOT_FOUND");
     if (!canChangeServiceItemStatus(item.status)) throw new OrderCommandError("Цуцлагдсан мөрийн явцыг өөрчлөх боломжгүй.", 422, "ITEM_CANCELLED");
+    if (nextStatus === item.status && item.status === "COMPLETED") return tx.serviceItem.findFirstOrThrow({ where: { id: itemId }, select: orderItemSelect() });
+    assertCompletedItemStatusChange(item);
     if (item.kind === "PART") throw new OrderCommandError("Сэлбэг мөрийн явц байхгүй.", 422, "PART_STATUS_UNSUPPORTED");
     if (nextStatus === "COMPLETED" && item.kind === "DIAGNOSTIC" && !item.diagnosticReportId) throw new OrderCommandError("Оношилгоог эхлээд бөглөнө үү.", 422, "DIAGNOSTIC_REPORT_REQUIRED");
     const updated = await tx.serviceItem.update({ where: { id: itemId }, data: { status: nextStatus, ...serviceItemTimingPatch(nextStatus, item.startedAt) }, select: orderItemSelect() });
@@ -515,6 +556,7 @@ export async function changeOrderItemPriceCommand(input: { actor: OrderCommandAc
     if (!item) throw new OrderCommandError("Мөр олдсонгүй.", 404, "ITEM_NOT_FOUND");
     if (item.status === "CANCELLED") throw new OrderCommandError("Цуцлагдсан мөрийн үнийг өөрчлөх боломжгүй.", 422, "ITEM_CANCELLED");
     if (unitPrice.equals(item.unitPrice)) return item;
+    assertItemNotCompleted(item.status);
     assertItemValues({ kind: item.kind, description: item.description, quantity: item.quantity, unitPrice });
     await assertNoPaidPayments(tx, actor.tenantId, orderId);
     const total = roundItemTotal(item.quantity, unitPrice);

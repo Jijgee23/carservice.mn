@@ -5,6 +5,7 @@ export type AssignableUserEligibilityInput = {
   isActive: boolean;
   deactivatedAt?: Date | null;
   activeUntil?: Date | null;
+  verified?: boolean;
   tenantId: string;
   isOwner: boolean;
   branchId: string | null;
@@ -41,6 +42,7 @@ export function isAssignableUserEligible(
 ): boolean {
   if (!user.isActive || user.deactivatedAt || user.tenantId !== tenantId) return false;
   if (user.activeUntil && user.activeUntil.getTime() <= now.getTime()) return false;
+  if (user.verified === false) return false;
   if (user.role?.isActive === false) return false;
 
   const isAssignable =

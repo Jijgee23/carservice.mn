@@ -6,6 +6,7 @@ import {
   type PaymentStatus,
 } from "@/lib/orders";
 import { bookingDayBounds } from "@/lib/booking-time";
+import { customerRelationSearchClauses } from "@/lib/customers/customer-search";
 
 const MAX_PAGE_SIZE = 100;
 
@@ -15,6 +16,8 @@ export type OrderListQuery = {
   assignedToId?: string;
   paymentStatus?: PaymentStatus;
   postpaid?: boolean;
+  /** `internal=yes|no` — only / without internal repairs. Omitted = both. */
+  internal?: boolean;
   dateFrom?: string;
   dateTo?: string;
   q?: string;
@@ -64,6 +67,18 @@ function parseBoolean(
   return { ok: false, field: name, message: `${name} утга буруу байна.` };
 }
 
+function parseYesNo(
+  searchParams: URLSearchParams,
+  name: string,
+): boolean | undefined | OrderListQueryParseResult {
+  const raw = searchParams.get(name);
+  if (raw == null) return undefined;
+  const value = raw.trim().toLowerCase();
+  if (value === "yes" || value === "true") return true;
+  if (value === "no" || value === "false") return false;
+  return { ok: false, field: name, message: `${name} утга буруу байна (yes эсвэл no).` };
+}
+
 function parseDate(
   searchParams: URLSearchParams,
   name: "dateFrom" | "dateTo",
@@ -110,6 +125,8 @@ export function parseOrderListQuery(
   if (typeof paymentStatus === "object") return paymentStatus;
   const postpaid = parseBoolean(searchParams, "postpaid");
   if (typeof postpaid === "object") return postpaid;
+  const internal = parseYesNo(searchParams, "internal");
+  if (typeof internal === "object") return internal;
   const dateFrom = parseDate(searchParams, "dateFrom");
   if (typeof dateFrom === "object") return dateFrom;
   const dateTo = parseDate(searchParams, "dateTo");
@@ -158,6 +175,7 @@ export function parseOrderListQuery(
       assignedToId: optionalText(searchParams, "assignedToId"),
       paymentStatus,
       postpaid,
+      internal,
       dateFrom: typeof dateFrom === "string" ? dateFrom : undefined,
       dateTo: typeof dateTo === "string" ? dateTo : undefined,
       q: optionalText(searchParams, "q"),
@@ -172,15 +190,27 @@ export function parseOrderListQuery(
   };
 }
 
+/** Арлын дугаар (VIN)-аар хайх нөхцөл: захиалгын snapshot болон машины одоогийн VIN.
+ * 4-өөс богино текст бүх VIN-тэй тааралдахаас сэргийлж хоосон буцаана. */
+export function orderVinSearchClauses(q: string): Prisma.ServiceOrderWhereInput[] {
+  const vin = q.replace(/\s+/g, "").toUpperCase();
+  if (vin.length < 4) return [];
+  return [
+    { vinSnapshot: { contains: vin, mode: "insensitive" } },
+    { vehicle: { vin: { contains: vin, mode: "insensitive" } } },
+  ];
+}
+
 function searchWhere(q: string): Prisma.ServiceOrderWhereInput {
   return {
     OR: [
       { number: { contains: q, mode: "insensitive" } },
-      { customer: { fullName: { contains: q, mode: "insensitive" } } },
-      { customer: { phone: { contains: q, mode: "insensitive" } } },
+      ...customerRelationSearchClauses(q, (customer) => ({ customer })),
+      { plateSnapshot: { contains: q, mode: "insensitive" } },
       { vehicle: { plate: { contains: q, mode: "insensitive" } } },
       { vehicle: { make: { contains: q, mode: "insensitive" } } },
       { vehicle: { model: { contains: q, mode: "insensitive" } } },
+      ...orderVinSearchClauses(q),
     ],
   };
 }
@@ -203,7 +233,10 @@ export function buildOrderListWhere(
   if (query.q) accessPredicates.push(searchWhere(query.q));
   if (query.plate) {
     accessPredicates.push({
-      vehicle: { plate: { contains: query.plate, mode: "insensitive" } },
+      OR: [
+        { plateSnapshot: { contains: query.plate, mode: "insensitive" } },
+        { vehicle: { plate: { contains: query.plate, mode: "insensitive" } } },
+      ],
     });
   }
 
@@ -221,6 +254,7 @@ export function buildOrderListWhere(
     ...(query.assignedToId ? { assignedToId: query.assignedToId } : {}),
     ...(query.paymentStatus ? { paymentStatus: query.paymentStatus } : {}),
     ...(query.postpaid !== undefined ? { isPostpaid: query.postpaid } : {}),
+    ...(query.internal !== undefined ? { isInternal: query.internal } : {}),
     ...(query.vehicleId ? { vehicleId: query.vehicleId } : {}),
     ...(query.customerId ? { customerId: query.customerId } : {}),
     ...(query.dateFrom || query.dateTo ? { scheduledAt } : {}),

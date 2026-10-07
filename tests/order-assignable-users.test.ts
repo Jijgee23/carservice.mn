@@ -96,6 +96,7 @@ test("Prisma predicate keeps tenant, active, assignable role and branch lock con
   assert.deepEqual(where.AND, [
     {
       deactivatedAt: null,
+      verified: true,
       AND: [{ OR: [{ activeUntil: null }, { activeUntil: { gt: now } }] }],
       OR: [
         { isOwner: true },
@@ -134,4 +135,11 @@ test("DTO exposes only minimal identity/display fields", () => {
   });
   assert.deepEqual(dto, { id: "user-1", firstName: "Ada", lastName: "Lovelace" });
   assert.deepEqual(Object.keys(dto).sort(), ["firstName", "id", "lastName"]);
+});
+
+test("unverified (invited, not activated) staff are not assignable", () => {
+  assert.equal(isAssignableUserEligible(user({ verified: false }), TENANT, BRANCH), false);
+  assert.equal(isAssignableUserEligible(user({ verified: true }), TENANT, BRANCH), true);
+  const where = buildAssignableUserWhere({ tenantId: TENANT });
+  assert.equal((where.AND as Array<Record<string, unknown>>)[0].verified, true);
 });

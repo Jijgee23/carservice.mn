@@ -16,7 +16,8 @@ import {
   RowMenuFormItem,
 } from "@/app/_components/row-actions";
 import { buildMeta, getPageInfo } from "@/lib/pagination";
-import { customerLabel } from "@/lib/customers";
+import { customerDisplay } from "@/lib/customers";
+import { vehicleOwnerIsOrganization } from "@/lib/vehicles/owner-kind";
 import { buildVehicleListWhere } from "@/lib/vehicles/vehicle-list-query";
 import { POSTPAID_BADGE, POSTPAID_LABEL } from "@/lib/orders";
 import { requireUser } from "@/lib/auth";
@@ -37,6 +38,7 @@ export default async function VehiclesPage({
     q?: string;
     assigned?: string;
     postpaid?: string;
+    ownerKind?: string;
     page?: string;
     sort?: string;
     dir?: string;
@@ -51,6 +53,7 @@ export default async function VehiclesPage({
     q = "",
     assigned = "",
     postpaid = "",
+    ownerKind = "",
     page: pageParam,
     sort: sortParam,
     dir: dirParam,
@@ -76,6 +79,7 @@ export default async function VehiclesPage({
       q: q || undefined,
       assigned: assigned === "yes" || assigned === "no" ? assigned : undefined,
       postpaid: postpaid === "yes" || postpaid === "no" ? postpaid : undefined,
+      ownerKind: ownerKind === "org" || ownerKind === "person" ? ownerKind : undefined,
       page,
       pageSize,
       skip,
@@ -92,7 +96,9 @@ export default async function VehiclesPage({
         take,
         select: {
           isPostpaid: true,
-          customer: { select: { id: true, fullName: true, phone: true } },
+          customer: {
+            select: { id: true, fullName: true, phone: true, isOrganization: true, orgName: true },
+          },
           vehicle: {
             select: {
               id: true,
@@ -101,6 +107,7 @@ export default async function VehiclesPage({
               model: true,
               year: true,
               mileage: true,
+              ownerRegnum: true,
             },
           },
         },
@@ -116,7 +123,7 @@ export default async function VehiclesPage({
       prisma.customer.findMany({
         where: { tenantId: user.tenantId },
         orderBy: { fullName: "asc" },
-        select: { id: true, fullName: true, phone: true },
+        select: { id: true, fullName: true, phone: true, isOrganization: true, orgRegnum: true },
       }),
     ]);
   const meta = buildMeta(total, page, pageSize);
@@ -144,6 +151,7 @@ export default async function VehiclesPage({
     mileage: l.vehicle.mileage,
     isPostpaid: l.isPostpaid,
     customer: l.customer,
+    ownerIsOrganization: vehicleOwnerIsOrganization(l.customer, l.vehicle.ownerRegnum),
     _count: { serviceOrders: orderCountMap.get(l.vehicle.id) ?? 0 },
   }));
 
@@ -185,7 +193,15 @@ export default async function VehiclesPage({
             { value: "no", label: "Энгийн" },
           ]}
         />
-        <ResetFilters paramNames={["q", "assigned", "postpaid"]} />
+        <FilterSelect
+          paramName="ownerKind"
+          placeholder="Эзэмшигчийн төрөл"
+          options={[
+            { value: "org", label: "Байгууллага" },
+            { value: "person", label: "Хувь хүн" },
+          ]}
+        />
+        <ResetFilters paramNames={["q", "assigned", "postpaid", "ownerKind"]} />
       </div>
 
       {vehicles.length === 0 ? (
@@ -255,7 +271,12 @@ export default async function VehiclesPage({
                           href={`/dashboard/customers/${v.customer.id}`}
                           className="text-[var(--oc-muted2)] hover:text-[var(--oc-accent)] transition-colors"
                         >
-                          {customerLabel(v.customer)}
+                          {customerDisplay(v.customer).primary}
+                          {v.ownerIsOrganization ? (
+                            <span className="ml-2 inline-block align-middle rounded-full border border-[var(--oc-line)] px-1.5 py-0.5 text-[10px] text-[var(--oc-muted)]">
+                          Байгууллага
+                        </span>
+                          ) : null}
                           <span className="text-[var(--oc-muted3)] text-xs ml-1">
                             · {v.customer.phone}
                           </span>
@@ -304,6 +325,7 @@ export default async function VehiclesPage({
               q,
               assigned,
               postpaid,
+              ownerKind,
               sort: sortParam ?? "",
               dir: dirParam ?? "",
             }}

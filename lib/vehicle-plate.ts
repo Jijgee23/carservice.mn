@@ -35,3 +35,18 @@ export function normalizePlate(p: string): string {
     .replace(/[^0-9A-ZА-ЯЁӨҮ]/g, "")
     .replace(/[ABCEHKMOPTXY]/g, (ch) => PLATE_LATIN_TO_CYRILLIC[ch] ?? ch);
 }
+
+/**
+ * Захиалга үүсэх үеийн дугаар (`plateSnapshot`) одоогийн дугаараас өөр бол
+ * "хуучин" дугаарыг буцаана, үгүй бол null. Хоёуланг normalizePlate-ээр
+ * жишнэ (зураас/үсгийн хэлбэр ялгаа тооцохгүй).
+ */
+export function formerPlate(
+  snapshot: string | null | undefined,
+  current: string | null | undefined,
+): string | null {
+  const s = (snapshot ?? "").trim();
+  if (!s) return null;
+  if (normalizePlate(s) === normalizePlate(current ?? "")) return null;
+  return s;
+}

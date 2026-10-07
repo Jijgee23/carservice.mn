@@ -80,15 +80,23 @@ export type SavedFile = {
 };
 
 /** Validate an upload without creating a directory or writing a file. */
+/** Safe, user-facing file-validation failure (type/size/empty/content); server actions may show its message. */
+export class UploadValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UploadValidationError";
+  }
+}
+
 export function validateUpload(file: File): void {
   if (!ALLOWED_MIME.has(file.type)) {
-    throw new Error("Зөвхөн PNG, JPG, WEBP зураг зөвшөөрөгдөнө.");
+    throw new UploadValidationError("Зөвхөн PNG, JPG, WEBP зураг зөвшөөрөгдөнө.");
   }
   if (file.size > MAX_BYTES) {
-    throw new Error("Файлын хэмжээ 2MB-аас хэтэрсэн байна.");
+    throw new UploadValidationError("Файлын хэмжээ 2MB-аас хэтэрсэн байна.");
   }
   if (file.size === 0) {
-    throw new Error("Хоосон файл оруулсан байна.");
+    throw new UploadValidationError("Хоосон файл оруулсан байна.");
   }
 }
 
@@ -127,7 +135,7 @@ export async function saveUpload(
   const buf = Buffer.from(await file.arrayBuffer());
   const mime = sniffImageMime(buf);
   if (!mime) {
-    throw new Error("Зөвхөн PNG, JPG, WEBP зураг зөвшөөрөгдөнө.");
+    throw new UploadValidationError("Зөвхөн PNG, JPG, WEBP зураг зөвшөөрөгдөнө.");
   }
   // Өргөтгөлийг агуулгаас тогтооно (зарласан MIME-ээс биш).
   const name = `${randomBytes(12).toString("hex")}.${EXT_BY_MIME[mime]}`;

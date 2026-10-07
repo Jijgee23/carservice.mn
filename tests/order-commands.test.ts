@@ -83,7 +83,7 @@ test("assignment audits keep the committed assignee display name inside the comm
   assert.match(source, /firstName:\s*true,\s*lastName:\s*true/);
   assert.match(source, /assigneeDisplayName = \[assignee\.lastName, assignee\.firstName\]/);
   assert.match(source, /summary: input\.assignedToId \? `Хариуцагч: \$\{assigneeDisplayName/);
-  assert.match(source, /SELECT id, "roleId" FROM "User"[\s\S]*FOR UPDATE/);
+  assert.match(source, /SELECT id, "roleId", verified FROM "User"[\s\S]*FOR UPDATE/);
 });
 
 test("effective working branch scope is enforced", () => {
@@ -115,6 +115,8 @@ test("assignee must be active, same tenant, assignable and branch eligible", () 
   );
   // Ажлаас гарсан (өөрөө хаасан) болон хугацаа дууссан түр ажилтан мастер болохгүй.
   const now = new Date("2026-10-01T00:00:00Z");
+  assert.equal(commands.isAssigneeEligible({ ...base, verified: false }, "tenant-a", "branch-a"), false);
+  assert.equal(commands.isAssigneeEligible({ ...base, verified: true }, "tenant-a", "branch-a"), true);
   assert.equal(commands.isAssigneeEligible({ ...base, deactivatedAt: now }, "tenant-a", "branch-a", now), false);
   assert.equal(
     commands.isAssigneeEligible({ ...base, activeUntil: new Date("2026-09-30T00:00:00Z") }, "tenant-a", "branch-a", now),
@@ -225,16 +227,92 @@ test("completing an order requires finished work and full payment unless postpai
   const block = source.slice(start, end);
   assert.match(block, /item\.kind !== "PART" && item\.status !== "COMPLETED"/);
   assert.match(block, /"ITEMS_NOT_COMPLETED"/);
-  assert.match(block, /if \(!order\.isPostpaid\)/);
   assert.match(block, /paidLedger\(tx, actor\.tenantId, orderId\)/);
-  assert.match(block, /"PAYMENT_INCOMPLETE"/);
+  assert.match(block, /assertCompletionPaymentAllowed\(/);
+  assert.match(block, /const completingPostpaid = input\.isPostpaid \?\? order\.isPostpaid/);
+  assert.match(block, /isPostpaid: completingPostpaid/);
+  const guard = source.slice(source.indexOf("export function assertCompletionPaymentAllowed"));
+  assert.match(guard, /"PAYMENT_INCOMPLETE"/);
+  assert.match(guard, /"POSTPAID_CLOSE_FORBIDDEN"/);
+});
+
+async function dec(value: string) {
+  const { Prisma } = await import("../app/generated/prisma/client");
+  return new Prisma.Decimal(value);
+}
+
+const accountant = {
+  isOwner: false,
+  role: { permissions: ["orders.edit", "orders.closeUnpaidPostpaid"] },
+};
+
+test("postpaid unpaid completion without orders.closeUnpaidPostpaid -> POSTPAID_CLOSE_FORBIDDEN (403)", async () => {
+  await assert.rejects(
+    async () =>
+      commands.assertCompletionPaymentAllowed({
+        actor: actor,
+        isPostpaid: true,
+        totalAmount: await dec("1000"),
+        paid: await dec("400"),
+      }),
+    (error: unknown) => {
+      const e = error as { code: string; status: number; message: string };
+      assert.equal(e.code, "POSTPAID_CLOSE_FORBIDDEN");
+      assert.equal(e.status, 403);
+      assert.match(e.message, /нягтлан/);
+      return true;
+    },
+  );
+});
+
+test("postpaid unpaid completion is allowed for the permission holder and the owner", async () => {
+  const total = await dec("1000");
+  const paid = await dec("0");
+  assert.doesNotThrow(() =>
+    commands.assertCompletionPaymentAllowed({ actor: accountant, isPostpaid: true, totalAmount: total, paid }),
+  );
+  assert.doesNotThrow(() =>
+    commands.assertCompletionPaymentAllowed({
+      actor: { isOwner: true, role: null },
+      isPostpaid: true,
+      totalAmount: total,
+      paid,
+    }),
+  );
+});
+
+test("fully paid postpaid order completes for anyone", async () => {
+  const total = await dec("1000");
+  const paid = await dec("1000");
+  assert.doesNotThrow(() =>
+    commands.assertCompletionPaymentAllowed({ actor, isPostpaid: true, totalAmount: total, paid }),
+  );
+});
+
+test("non-postpaid unpaid completion keeps PAYMENT_INCOMPLETE (even for the permission holder)", async () => {
+  const total = await dec("500");
+  const paid = await dec("100");
+  for (const who of [actor, accountant]) {
+    assert.throws(
+      () =>
+        commands.assertCompletionPaymentAllowed({
+          actor: who,
+          isPostpaid: false,
+          totalAmount: total,
+          paid,
+        }),
+      (error: unknown) => (error as { code: string }).code === "PAYMENT_INCOMPLETE",
+    );
+  }
 });
 
 test("assigned master is required on create and cannot be removed afterwards", () => {
   const here = dirname(fileURLToPath(import.meta.url));
   const read = (f: string) => readFileSync(resolve(here, f), "utf8");
   const create = read("../lib/orders/order-create-command.ts");
-  assert.match(create, /if \(!input\.assignedToId\) \{[\s\S]{0,200}"ASSIGNEE_REQUIRED"/);
+  assert.match(create, /if \(!input\.assignedToId(?: && !input\.appointmentId)?\) \{[\s\S]{0,200}"ASSIGNEE_REQUIRED"/);
+  // QA #28: from an appointment the master may be carried over, but one must still resolve.
+  assert.match(create, /if \(!assignedToId\) \{[\s\S]{0,200}"ASSIGNEE_REQUIRED"/);
   const patch = read("../lib/orders/order-commands.ts");
   assert.match(patch, /input\.assignedToId === null && order\.assignedToId[\s\S]{0,200}"ASSIGNEE_REQUIRED"/);
   // Оноох эрхгүй mobile хэрэглэгч өөрөө (web-тэй ижил).

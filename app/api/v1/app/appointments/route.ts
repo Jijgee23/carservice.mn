@@ -53,6 +53,7 @@ export async function GET(req: Request) {
       // fields; progress is read-only and scoped by the appointment account.
       serviceOrder: {
         select: {
+          isInternal: true,
           id: true,
           number: true,
           status: true,
@@ -113,6 +114,7 @@ export async function GET(req: Request) {
   const walkInOrders = await prisma.serviceOrder.findMany({
     where: {
       customer: { accountId: account.id },
+      isInternal: false,
       appointment: null,
       // D-083: a cancelled walk-in order has no appointment to be excluded
       // via, and (like a cancelled appointment) never reaches
@@ -178,7 +180,8 @@ export async function GET(req: Request) {
     accountVehicle: a.accountVehicle
       ? { plate: a.accountVehicle.vehicle.plate }
       : null,
-    serviceOrder: a.serviceOrder
+    // Дотоод засвар үйлчлүүлэгчид харагдахгүй.
+    serviceOrder: a.serviceOrder && !a.serviceOrder.isInternal
       ? {
           id: a.serviceOrder.id,
           number: a.serviceOrder.number,

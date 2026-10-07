@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import {
   type AppointmentActionState,
   confirmAppointment,
@@ -8,10 +8,12 @@ import {
   markAppointmentNoShow,
   rejectAppointment,
   rescheduleAppointmentAction,
+  setAppointmentAssigneeAction,
 } from "@/app/_actions/appointments";
 import { DatePicker, todayStr } from "@/app/_components/date-picker";
 import { ConfirmForm } from "@/app/_components/confirm-form";
 import { Btn } from "@/app/_components/landing-ops-ui";
+import { Select } from "@/app/_components/select";
 import { useToast } from "@/app/_components/toast";
 
 // Жагсаалтын мөр дэх "Батлах/Татгалзах/Ирээгүй" товчнууд. Урьд нь эдгээр
@@ -25,12 +27,25 @@ export function AppointmentConfirmReject({
   appointmentId,
   canConfirm = true,
   overdue = false,
+  needsAssignee = false,
+  assigneeOptions = null,
+  assigneeEmptyReason = null,
 }: {
   appointmentId: string;
   canConfirm?: boolean;
   overdue?: boolean;
+  /** Appointment has no master yet: confirming requires picking one (QA #28). */
+  needsAssignee?: boolean;
+  assigneeOptions?: { value: string; label: string }[] | null;
+  /** Shown instead of a silently disabled button when no master can be picked. */
+  assigneeEmptyReason?: string | null;
 }) {
   const toast = useToast();
+  // A single option (users without orders.assign only see themselves) is preselected.
+  const [confirmAssignee, setConfirmAssignee] = useState(
+    assigneeOptions?.length === 1 ? assigneeOptions[0].value : "",
+  );
+  const assigneeMissing = needsAssignee && !!assigneeOptions && !confirmAssignee;
   const [confirmState, confirmAction, confirmPending] = useActionState<
     AppointmentActionState,
     FormData
@@ -62,9 +77,23 @@ export function AppointmentConfirmReject({
     <>
       <form action={confirmAction}>
         <input type="hidden" name="id" value={appointmentId} />
+        {needsAssignee && assigneeOptions && assigneeOptions.length === 0 && assigneeEmptyReason ? (
+          <p className="text-xs text-[var(--oc-warn)] max-w-[260px] mb-1.5">{assigneeEmptyReason}</p>
+        ) : null}
+        {needsAssignee && assigneeOptions && assigneeOptions.length > 0 ? (
+          <div className="min-w-[150px] inline-block align-middle mr-2">
+            <Select
+              name="assignedToId"
+              value={confirmAssignee}
+              onChange={setConfirmAssignee}
+              options={assigneeOptions}
+              placeholder="Мастер сонгох *"
+            />
+          </div>
+        ) : null}
         <button
           type="submit"
-          disabled={pending || !canConfirm}
+          disabled={pending || !canConfirm || assigneeMissing}
           title={
             overdue
               ? "Цагийн хугацаа өнгөрсөн."
@@ -264,5 +293,60 @@ export function AppointmentRescheduleButton({
         Болих
       </button>
     </ConfirmForm>
+  );
+}
+
+/**
+ * QA #28: inline "Хариуцах мастер" picker for a list row. Saves on change via
+ * `setAppointmentAssigneeAction`; the server re-validates eligibility. A stored
+ * master who is no longer eligible still appears (options include them).
+ */
+export function AppointmentAssigneePicker({
+  appointmentId,
+  value,
+  options,
+}: {
+  appointmentId: string;
+  value: string | null;
+  options: { value: string; label: string }[];
+}) {
+  const toast = useToast();
+  const [current, setCurrent] = useState(value ?? "");
+  const [pending, startTransition] = useTransition();
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
+    setCurrent(value ?? "");
+  }
+
+  function change(next: string) {
+    // No clearing: a master can only be replaced by another one.
+    if (!next || next === current) return;
+    const previous = current;
+    setCurrent(next);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("id", appointmentId);
+      fd.set("assignedToId", next);
+      const res = await setAppointmentAssigneeAction(null, fd);
+      if (res?.ok) {
+        toast.success(res.message ?? "Амжилттай.");
+      } else {
+        setCurrent(previous);
+        toast.error(res?.message ?? "Алдаа гарлаа.");
+      }
+    });
+  }
+
+  return (
+    <div className={pending ? "opacity-60 pointer-events-none min-w-[150px]" : "min-w-[150px]"}>
+      <Select
+        name={`assignedToId-${appointmentId}`}
+        value={current}
+        onChange={change}
+        options={options}
+        placeholder="— Сонгох —"
+      />
+    </div>
   );
 }

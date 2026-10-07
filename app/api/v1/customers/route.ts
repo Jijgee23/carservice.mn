@@ -2,7 +2,11 @@ import { jsonError, jsonOk, requireApiUser, requirePermission } from "@/lib/api"
 import { requireActiveSubscriptionApi } from "@/lib/subscription-server";
 import { buildMeta } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
-import { CustomerCommandError, createCustomerCommand } from "@/lib/customers/customer-commands";
+import {
+  CustomerCommandError,
+  createCustomerCommand,
+  orgInputFromBody,
+} from "@/lib/customers/customer-commands";
 import {
   buildCustomerListWhere,
   parseCustomerListQuery,
@@ -37,6 +41,10 @@ export async function GET(req: Request) {
         phone: true,
         email: true,
         note: true,
+        isOrganization: true,
+        orgRegnum: true,
+        orgName: true,
+        orgEmail: true,
         createdAt: true,
       },
     }),
@@ -82,6 +90,7 @@ export async function POST(req: Request) {
         phone: typeof phone === "string" ? phone : "",
         email: typeof email === "string" ? email : null,
         note: typeof note === "string" ? note : null,
+        ...orgInputFromBody(body as Record<string, unknown>),
       },
     });
   } catch (e) {

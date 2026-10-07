@@ -51,6 +51,11 @@ export type ReservationInput = {
   staffUserId?: string;
   // Only honored when staffUserId is set — see ReservationConflictError.
   confirmed?: boolean;
+  // QA #28: staff-chosen master. The caller validates eligibility inside this
+  // same transaction through `validateAssignee` (the row locks it takes must
+  // share the booking transaction); it is ignored for customer bookings.
+  assignedToId?: string | null;
+  validateAssignee?: (tx: Prisma.TransactionClient, branchId: string) => Promise<void>;
 };
 
 /** Caller authenticates first. All DB operations here use the SAME transaction. */
@@ -121,8 +126,15 @@ export async function reserveAppointmentInTransaction(
       );
     }
   }
+  const assignedToId = input.staffUserId ? input.assignedToId ?? null : null;
+  if (assignedToId) {
+    // Never persist an assignee that was not validated in this transaction.
+    if (!input.validateAssignee) throw new ReservationError(400, "Хариуцах мастер шалгагдаагүй байна.");
+    await input.validateAssignee(tx, branch.id);
+  }
   return tx.appointment.create({
     data: {
+      assignedToId,
       tenantId: input.tenantId, branchId: branch.id, requestedAt: input.requestedAt,
       estimatedDurationMinutes: duration, originalEstimatedDurationMinutes: duration,
       accountId: input.accountId ?? null,

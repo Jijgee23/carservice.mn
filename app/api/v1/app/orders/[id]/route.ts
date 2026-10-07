@@ -21,6 +21,7 @@ export async function GET(
   const order = await prisma.serviceOrder.findFirst({
     where: {
       id,
+      isInternal: false,
       OR: customerOwnershipFilters(account.id, account.phone),
     },
     select: {

@@ -16,7 +16,7 @@ import {
 import { Field, FormError } from "@/app/_components/auth-shell";
 import { EmptyState } from "@/app/_components/empty-state";
 import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
-import { customerLabel } from "@/lib/customers";
+import { customerLabel, orgRegnumLabel } from "@/lib/customers";
 import {
   CHECK_TONE_ACCENT,
   CHECK_TONE_CHIP,
@@ -30,7 +30,13 @@ import {
 } from "@/lib/diagnostics";
 
 type BranchLite = { id: string; name: string };
-type CustomerLite = { id: string; fullName: string; phone: string };
+type CustomerLite = {
+  id: string;
+  fullName: string;
+  phone: string;
+  isOrganization?: boolean;
+  orgRegnum?: string | null;
+};
 type VehicleLite = {
   id: string;
   plate: string;
@@ -150,7 +156,7 @@ export function StandaloneDiagnosticForm({
             <option value="">— Үйлчлүүлэгч сонгох —</option>
             {customers.map((c) => (
               <option key={c.id} value={c.id} className="bg-[var(--surface)]">
-                {customerLabel(c)} · {c.phone}
+                {[customerLabel(c), orgRegnumLabel(c), c.phone].filter(Boolean).join(" · ")}
               </option>
             ))}
           </select>

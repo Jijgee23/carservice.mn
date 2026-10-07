@@ -10,6 +10,7 @@ import {
   confirmAppointmentCommand,
   rejectAppointmentCommand,
   markAppointmentNoShowCommand,
+  setAppointmentAssigneeCommand,
 } from "@/lib/appointments/appointment-commands";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
@@ -64,6 +65,9 @@ const APPT_SELECT = {
   },
   vehicle: { select: { id: true, plate: true, make: true, model: true } },
   serviceOrder: { select: { id: true, number: true } },
+  // QA #28: хариуцах мастер (идэвхгүй болсон ч хуучин оноолтыг харуулна).
+  assignedToId: true,
+  assignedTo: { select: { id: true, firstName: true, lastName: true } },
   // `paymentStatus`-г тооцоход (харах: shapeAppointment) — түүхий fee
   // талбарууд хариунд гарахгүй.
   feeAmount: true,
@@ -127,8 +131,12 @@ export async function GET(
 }
 
 // PATCH /api/v1/appointments/[id]
-// Body: { status: AppointmentStatus }
-// Permission: appointments.edit
+// Body: { status?: AppointmentStatus, assignedToId?: string | null }
+//   status       — шилжилт (өмнөх адил). assignedToId-тэй хамт зөвхөн CONFIRMED-д зөвшөөрнө.
+//   assignedToId — QA #28: хариуцах мастер солих (status-гүй бол зөвхөн мастер солино).
+//                  null (арилгах) боломжгүй: мастертай цагт 422 ASSIGNEE_REQUIRED.
+//                  Мастергүй цагийг CONFIRMED болгоход мастер заавал (orders.assign-гүй бол өөрөө).
+// Permission: appointments.edit (өөр хүнийг оноох бол orders.assign мөн)
 // CONFIRMED шилжилт нь Account → Customer resolve + Vehicle snapshot хийнэ.
 export async function PATCH(
   req: Request,
@@ -151,7 +159,38 @@ export async function PATCH(
     typeof (body as { status?: unknown }).status === "string"
       ? ((body as { status: string }).status as AppointmentStatus)
       : null;
-  if (!newStatus) return jsonError(400, "status шаардлагатай.");
+  const rawAssignee = (body as { assignedToId?: unknown }).assignedToId;
+  if (rawAssignee !== undefined && rawAssignee !== null && typeof rawAssignee !== "string") {
+    return jsonError(400, "assignedToId нь string эсвэл null байна.");
+  }
+  const assignedToId: string | null | undefined =
+    typeof rawAssignee === "string" ? rawAssignee.trim() || null : rawAssignee;
+  if (!newStatus && assignedToId === undefined) return jsonError(400, "status шаардлагатай.");
+  if (newStatus && assignedToId !== undefined && newStatus !== "CONFIRMED") {
+    return jsonError(400, "assignedToId-г зөвхөн CONFIRMED шилжилттэй эсвэл тусад нь илгээнэ.");
+  }
+
+  if (!newStatus) {
+    // Assignee-only update. The command re-checks scope, subscription and
+    // eligibility; the working-branch header is threaded through as elsewhere.
+    const scopeResult = await resolveWorkingBranch(req, auth.user);
+    if (scopeResult.response) return scopeResult.response;
+    try {
+      await setAppointmentAssigneeCommand({
+        actor: { ...auth.user, workingBranchId: scopeResult.branchId ?? undefined },
+        appointmentId: id,
+        assignedToId: assignedToId as string | null,
+      });
+    } catch (error) {
+      return commandErrorResponse(error);
+    }
+    const updatedAssignee = await prisma.appointment.findFirst({
+      where: { id, tenantId: auth.user.tenantId },
+      select: APPT_SELECT,
+    });
+    if (!updatedAssignee) return jsonError(404, "Цаг захиалга олдсонгүй.");
+    return jsonOk({ appointment: shapeAppointment(updatedAssignee) });
+  }
 
   // PATCH still owns the legacy CONFIRMED -> CANCELLED adapter. Keep its
   // subscription gate aligned with the named mutation commands; otherwise a
@@ -196,6 +235,7 @@ export async function PATCH(
       await confirmAppointmentCommand({
         actor: { ...auth.user, workingBranchId: scope ?? undefined },
         appointmentId: appt.id,
+        ...(assignedToId !== undefined ? { assignedToId } : {}),
       });
     } catch (error) {
       return commandErrorResponse(error);

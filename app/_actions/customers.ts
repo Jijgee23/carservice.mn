@@ -6,6 +6,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { canCreate, canDelete, canEdit, hasPermission } from "@/lib/auth/roles";
+import { isValidOrgRegnum } from "@/lib/customers/org-regnum";
+import { lookupOrgByRegno } from "@/lib/ebarimt";
+import { mapOrgLookupResult } from "@/lib/ebarimt-org-response";
+import { consumeRateLimit } from "@/lib/rate-limit";
 import { assertActiveSubscription } from "@/lib/subscription-server";
 import {
   CustomerCommandError,
@@ -42,7 +46,39 @@ function formInput(fd: FormData): CustomerCommandInput {
     phone: s(fd, "phone"),
     email: s(fd, "email") || null,
     note: s(fd, "note") || null,
+    isOrganization: s(fd, "isOrganization") === "on",
+    orgRegnum: s(fd, "orgRegnum") || null,
+    orgName: s(fd, "orgName") || null,
+    orgEmail: s(fd, "orgEmail") || null,
   };
+}
+
+export type OrgLookupActionResult =
+  | { ok: true; name: string }
+  | { ok: false; code: "ORG_REGNO_INVALID" | "ORG_NOT_FOUND" | "ORG_LOOKUP_FAILED" | "FORBIDDEN" | "RATE_LIMITED" };
+
+/**
+ * Phase 4a: форм дээр 7 оронтой регистр оруулахад eBarimt-аас байгууллагын нэрийг
+ * татна. `GET /api/v1/ebarimt/org`-той ижил эрх (create эсвэл edit) + хэрэглэгч
+ * тутамд 20/мин. Алдаа хадгалахыг блоклохгүй - форм нэрийг гараар бичихийг зөвшөөрнө.
+ */
+export async function lookupOrgNameAction(regno: string): Promise<OrgLookupActionResult> {
+  const user = await requireUser();
+  if (!canCreate(user, "customers") && !canEdit(user, "customers")) {
+    return { ok: false, code: "FORBIDDEN" };
+  }
+  if (!isValidOrgRegnum(regno)) return { ok: false, code: "ORG_REGNO_INVALID" };
+  if (!consumeRateLimit(`ebarimt-org:${user.id}`, { limit: 20, windowMs: 60_000 }).ok) {
+    return { ok: false, code: "RATE_LIMITED" };
+  }
+  try {
+    const mapped = mapOrgLookupResult(regno.trim(), await lookupOrgByRegno(regno.trim()));
+    if (mapped.status === 200) return { ok: true, name: mapped.body.name };
+    return { ok: false, code: "ORG_NOT_FOUND" };
+  } catch (e) {
+    console.error("[ebarimt-org-action]", e);
+    return { ok: false, code: "ORG_LOOKUP_FAILED" };
+  }
 }
 
 async function authorize(action: "create" | "edit" | "delete") {

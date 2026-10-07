@@ -8,6 +8,7 @@ import {
   APPOINTMENT_STATUS_LABEL,
 } from "@/lib/appointments";
 import { requireAccount } from "@/lib/auth/account";
+import { formerPlate } from "@/lib/vehicle-plate";
 import { customerOwnershipFilters, normalizePlate } from "@/lib/vehicles";
 import {
   ORDER_STATUS_BADGE,
@@ -103,6 +104,8 @@ export default async function AccountHistoryPage({
   // badge-тэй үлдэнэ; бүрэн төлөгдмөгц энд шилжинэ (2026-09-24 шийдвэр).
   // Эзэмшлийн нөхцөл — дор дахин ашиглагдана (боломжит онуудыг тооцоход).
   const ownershipWhere: Prisma.ServiceOrderWhereInput = {
+    // Дотоод засвар үйлчлүүлэгчид харагдахгүй.
+    isInternal: false,
     status: { in: ["COMPLETED", "CANCELLED"] },
     NOT: { status: "COMPLETED", paymentStatus: { not: "PAID" } },
     OR: customerOwnershipFilters(account.id, account.phone),
@@ -112,12 +115,18 @@ export default async function AccountHistoryPage({
   // улсын дугаар) + захиалгын дугаар. Он нь ЖАГСААЛТАД ХАРАГДАХ огноотой
   // (completedAt ?? scheduledAt ?? createdAt) яг ижил урьтамжаар шүүгдэнэ.
   const filters: Prisma.ServiceOrderWhereInput[] = [];
-  if (plate) filters.push({ vehicle: { plate: normalizePlate(plate) } });
+  if (plate) {
+    const normalized = normalizePlate(plate);
+    filters.push({
+      OR: [{ plateSnapshot: normalized }, { vehicle: { plate: normalized } }],
+    });
+  }
   if (query) {
     filters.push({
       OR: [
         { tenant: { name: { contains: query, mode: "insensitive" } } },
         { branch: { name: { contains: query, mode: "insensitive" } } },
+        { plateSnapshot: { contains: query, mode: "insensitive" } },
         { vehicle: { plate: { contains: query, mode: "insensitive" } } },
         { number: { contains: query, mode: "insensitive" } },
       ],
@@ -153,6 +162,7 @@ export default async function AccountHistoryPage({
         completedAt: true,
         createdAt: true,
         totalAmount: true,
+        plateSnapshot: true,
         tenant: { select: { name: true } },
         branch: { select: { name: true } },
         vehicle: { select: { plate: true, make: true, model: true } },
@@ -303,6 +313,7 @@ export default async function AccountHistoryPage({
                     </div>
                     <div className="text-sm text-[var(--oc-muted)] mt-1">
                       {o.vehicle.plate} · {o.vehicle.make} {o.vehicle.model}
+                      {formerPlate(o.plateSnapshot, o.vehicle.plate) ? ` (хуучин: ${formerPlate(o.plateSnapshot, o.vehicle.plate)})` : ""}
                     </div>
                     <div className="text-xs text-[var(--oc-muted3)] mt-0.5 tabular-nums">
                       {formatDate(when)} · {o.branch.name} · {o._count.items} мөр

@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import { Chip, TagChip } from "@/app/_components/landing-ops-ui";
 
-export type Method = "GET" | "POST" | "PATCH" | "DELETE";
+export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export type Auth = "public" | "bearer";
 
 export const METHOD_TONE: Record<Method, "ok" | "accent" | "danger" | "warn"> = {
   GET: "ok",
   POST: "accent",
+  PUT: "warn",
   PATCH: "warn",
   DELETE: "danger",
 };

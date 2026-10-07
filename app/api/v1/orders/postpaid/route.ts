@@ -1,9 +1,11 @@
 import { Prisma } from "@/app/generated/prisma/client";
+import { findOrderIdsWithLockedPayment } from "@/lib/cash/session-attach";
 import { jsonError, jsonOk, requireApiUser } from "@/lib/api";
 import { resolveWorkingBranch } from "@/lib/auth/api-branch";
 import { orderReadWhere } from "@/lib/auth/order-access";
 import { buildMeta } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
+import { PAID_AT_SELECT, withPaidInFull } from "@/lib/orders/order-payment-totals";
 import {
   buildPostpaidAggregateWhere,
   buildPostpaidHistoryWhere,
@@ -22,6 +24,9 @@ const HISTORY_SELECT = {
   createdAt: true,
   totalAmount: true,
   paidAmount: true,
+  plateSnapshot: true,
+  vinSnapshot: true,
+  ...PAID_AT_SELECT,
   customer: { select: { id: true, fullName: true, phone: true } },
   vehicle: { select: { id: true, plate: true, make: true, model: true } },
   branch: { select: { id: true, name: true } },
@@ -90,8 +95,10 @@ export async function GET(req: Request) {
   ]);
 
   const vehicles = serializePostpaidVehicleAggregates(links, sums);
-  const orders = historyOrders.map((order) => ({
+  const lockedOrderIds = await findOrderIdsWithLockedPayment(prisma, auth.user.tenantId, historyOrders.map((o) => o.id));
+  const orders = historyOrders.map(withPaidInFull).map((order) => ({
     id: order.id,
+    hasLockedPayment: lockedOrderIds.has(order.id),
     number: order.number,
     status: order.status,
     paymentStatus: order.paymentStatus,
@@ -100,6 +107,9 @@ export async function GET(req: Request) {
     createdAt: order.createdAt.toISOString(),
     totalAmount: decimalOrNull(order.totalAmount),
     paidAmount: decimalOrNull(order.paidAmount),
+    paidInFullBeforeCompletion: order.paidInFullBeforeCompletion,
+    plateSnapshot: order.plateSnapshot,
+    vinSnapshot: order.vinSnapshot,
     customer: order.customer,
     vehicle: order.vehicle,
     branch: order.branch,

@@ -94,7 +94,9 @@ export type IncomeSeries = {
   changePct: number | null;
 };
 
-type OrderRow = { completedAt: Date | null; totalAmount: unknown };
+// `isInternal` rows (дотоод засвар) are never revenue; callers also filter in
+// the query, this is a defensive second guard.
+type OrderRow = { completedAt: Date | null; totalAmount: unknown; isInternal?: boolean };
 
 function labelFor(start: Date, range: ResolvedIncomeRange): string {
   if (range.bucket === "week") return `${start.getMonth() + 1}/${start.getDate()}`;
@@ -123,7 +125,7 @@ export function buildIncomeSeries(
   let prevTotal = 0;
   const fromMs = range.from.getTime();
   for (const o of orders) {
-    if (!o.completedAt) continue;
+    if (!o.completedAt || o.isInternal) continue;
     const amount = Number.parseFloat(String(o.totalAmount ?? "0")) || 0;
     if (o.completedAt.getTime() < fromMs) {
       prevTotal += amount; // belongs to the comparison window

@@ -32,6 +32,8 @@ model Tenant {
   // (жиш. 1 хоног 6 цаг = 1800). Минутаар хадгалснаар 24ц-аас хязгаарлагдахгүй
   // (харах: app/api/cron/appointment-reminders/route.ts).
   appointmentReminderLeadMinutes Int      @default(1440)
+  // Идэвхтэй банкны кодууд (lib/banks.ts). Хоосон = бүх банк идэвхтэй.
+  enabledBanks                   String[] @default([])
   createdAt                      DateTime @default(now())
   updatedAt                      DateTime @updatedAt
 
@@ -54,7 +56,11 @@ model Tenant {
   auditLogs                AuditLog[]
   qpaySettings             TenantQPaySettings?
   orderPayments            OrderPayment[]
-  appointments             Appointment[]
+  cashTransactionTypes     CashTransactionType[]
+  cashTransactions         CashTransaction[]
+  postpaidSettlements      PostpaidSettlement[]
+  cashSessions             CashSession[]
+  appointments            Appointment[]
   appointmentPayments      AppointmentPayment[]
   notifications            Notification[]
   feedback                 Feedback[]
@@ -130,12 +136,19 @@ model User {
   diagnosticTemplates      DiagnosticTemplate[]        @relation("DiagnosticTemplateCreatedBy")
   diagnosticReports        DiagnosticReport[]          @relation("DiagnosticReportFilledBy")
   cancelledServiceItems    ServiceItem[]               @relation("ServiceItemCancelledBy")
+  cashEntriesCreated       CashTransaction[]           @relation("CashTransactionCreatedBy")
+  cashEntriesVoided        CashTransaction[]           @relation("CashTransactionVoidedBy")
+  postpaidSettlementsCreated PostpaidSettlement[]      @relation("PostpaidSettlementCreatedBy")
+  postpaidSettlementsVoided PostpaidSettlement[]       @relation("PostpaidSettlementVoidedBy")
+  cashSessionsOpened       CashSession[]               @relation("CashSessionOpenedBy")
+  cashSessionsClosed       CashSession[]               @relation("CashSessionClosedBy")
   refreshTokens            RefreshToken[]
   sessions                 UserSession[]
   devices                  Device[]
   notifications            Notification[]
   auditLogs                AuditLog[]                  @relation("AuditLogActor")
   appointmentsResponded    Appointment[]               @relation("AppointmentRespondedBy")
+  appointmentsAssigned     Appointment[]               @relation("AppointmentAssignedTo")
   feedback                 Feedback[]
   createdOrderTimeBookings OrderTimeBooking[]          @relation("OrderTimeBookingCreatedBy")
   workSchedule             EmployeeWorkSchedule[]
@@ -213,8 +226,11 @@ model Branch {
 
   users                             User[]
   serviceOrders                     ServiceOrder[]
+  cashTransactions                  CashTransaction[]
+  postpaidSettlements               PostpaidSettlement[]
+  cashSessions                      CashSession[]
   diagnosticReports                 DiagnosticReport[]
-  schedules                         BranchSchedule[]
+  schedules                       BranchSchedule[]
   scheduleExceptions                BranchScheduleException[]
   scheduleSeasons                   BranchScheduleSeason[]
   auditLogs                         AuditLog[]
@@ -401,6 +417,12 @@ model Customer {
   email    String?
   note     String?
 
+  // Байгууллага (НӨАТ-ын баримтад) — Phase 2+.
+  isOrganization Boolean @default(false)
+  orgRegnum      String?
+  orgName        String?
+  orgEmail       String?
+
   tenantId String
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -414,6 +436,8 @@ model Customer {
 
   tenantVehicles    TenantVehicle[]
   serviceOrders     ServiceOrder[]
+  cashTransactions  CashTransaction[]
+  postpaidSettlements PostpaidSettlement[]
   diagnosticReports DiagnosticReport[]
   appointments      Appointment[]
 
@@ -424,6 +448,7 @@ model Customer {
   // accountId-тэй мөрүүд үүнд ороогүй — өөр өөр Account ижил утас ашиглах хууль ёсны.
   @@unique([tenantId, accountId])
   @@index([tenantId, phone])
+  @@index([tenantId, orgRegnum])
 }
 
 // --- Vehicle --------------------------------------------------------------
@@ -513,6 +538,12 @@ model ServiceOrder {
   // Үүсгэх үеийн TenantVehicle.isPostpaid snapshot — дараа төлбөрт түүх
   // тогтвортой үлдэнэ (машины тохиргоо хожим өөрчлөгдсөн ч).
   isPostpaid               Boolean       @default(false)
+  // Дотоод (өөрийн) захиалга — Phase 2-т UI гарна. isPostpaid-тэй хамт үнэн байж болохгүй
+  // (migration-ийн CHECK constraint "ServiceOrder_internal_not_postpaid").
+  isInternal               Boolean       @default(false)
+  // Захиалга үүсэх үеийн машины улсын дугаар / арлын дугаарын snapshot.
+  plateSnapshot            String?
+  vinSnapshot              String?
   scheduledAt              DateTime?
   startedAt                DateTime?
   completedAt              DateTime?
@@ -566,6 +597,8 @@ model ServiceOrder {
   @@unique([tenantId, number])
   @@index([tenantId, status])
   @@index([tenantId, isPostpaid])
+  @@index([tenantId, isInternal])
+  @@index([tenantId, plateSnapshot])
   @@index([branchId, scheduledAt])
   // FK-ууд — харилцагч/машины түүх, техникчийн ажил, Restrict cascade шалгалт.
   @@index([customerId])
@@ -1161,12 +1194,169 @@ model OrderPayment {
   qpayUrls      Json? // bank app deep links array
   paidAt        DateTime?
 
+  // Хүлээн авсан банк (BANK_TRANSFER/CARD үед заавал; CARD-д POS-ийн банк).
+  // Код нь lib/banks.ts-д — DB enum биш (жагсаалт кодоор өөрчлөгдөнө).
+  bank String?
+
+  // Дараа тооцооны нэг мөнгөн гүйлгээгээр (PostpaidSettlement) хаагдсан төлбөр
+  // (Phase C2). Тэр үед кассын орлогыг settlement нэг дор бичнэ.
+  settlementId String?
+  settlement   PostpaidSettlement? @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([tenantId, status])
+  @@index([tenantId, bank])
   @@index([orderId])
   @@index([qpayInvoiceId])
+  @@index([settlementId])
+}
+
+// --- Cash ledger (Phase C1) -----------------------------------------------
+
+enum CashDirection {
+  INCOME
+  EXPENSE
+}
+
+// Орлого/зарлагын төрөл. systemKey != null бол систем төрөл — нэр, идэвх, устгал түгжигдсэн.
+model CashTransactionType {
+  id        String        @id @default(cuid())
+  tenantId  String
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  direction CashDirection
+  name      String
+  systemKey String?
+  isActive  Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  transactions CashTransaction[]
+
+  @@unique([tenantId, direction, name])
+  @@unique([tenantId, systemKey])
+}
+
+// Кассын бичлэг — зөвхөн нэмэгдэнэ; засах/устгах байхгүй, зөвхөн хүчингүй болгоно (void).
+// orderPaymentId/orderId нь FK биш (захиалга/төлбөр устахад санхүүгийн бичлэг үлдэнэ).
+model CashTransaction {
+  id             String              @id @default(cuid())
+  tenantId       String
+  tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId       String
+  branch         Branch              @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  direction      CashDirection
+  typeId         String
+  type           CashTransactionType @relation(fields: [typeId], references: [id], onDelete: Restrict)
+  amount         Decimal             @db.Decimal(12, 2)
+  method         OrderPaymentMethod
+  bank           String?
+  occurredAt     DateTime
+  note           String?
+  attachmentPath String?
+  // Татвар (туршилт) — зөвхөн зарлагад; ямар ч нийлбэрт орохгүй.
+  taxIncluded    Decimal?            @db.Decimal(12, 2)
+  customerId     String?
+  customer       Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  counterparty   String?
+  orderPaymentId String?             @unique
+  orderId        String?
+  settlementId   String?
+  settlement     PostpaidSettlement? @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+  sessionId      String?
+  session        CashSession?        @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  createdById    String
+  createdBy      User                @relation("CashTransactionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  voidedAt       DateTime?
+  voidedById     String?
+  voidedBy       User?               @relation("CashTransactionVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
+  voidReason     String?
+  createdAt      DateTime            @default(now())
+
+  @@index([tenantId, branchId, occurredAt])
+  @@index([tenantId, direction, typeId])
+  @@index([sessionId])
+  @@index([orderId])
+  @@index([settlementId])
+}
+
+// Дараа тооцооны нэгтгэсэн төлөлт (Phase C2).
+model PostpaidSettlement {
+  id          String             @id @default(cuid())
+  tenantId    String
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId    String
+  branch      Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  customerId  String
+  customer    Customer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  amount      Decimal            @db.Decimal(12, 2)
+  method      OrderPaymentMethod
+  bank        String?
+  createdById String
+  createdBy   User               @relation("PostpaidSettlementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime           @default(now())
+  voidedAt    DateTime?
+  voidedById  String?
+  voidedBy    User?              @relation("PostpaidSettlementVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
+  voidReason  String?
+
+  payments     OrderPayment[]
+  transactions CashTransaction[]
+
+  @@index([tenantId, branchId, createdAt])
+  @@index([tenantId, customerId])
+}
+
+// Кассын ээлж (Phase C3).
+// !! WARNING: this model has a PARTIAL UNIQUE INDEX that Prisma cannot model (no preview flag enabled):
+// !!   "CashSession_one_open_per_branch_key" ON ("branchId") WHERE "closedAt" IS NULL
+// !! It exists ONLY in SQL (migration 20261006180000_cash_indexes_one_open_session). A generated
+// !! `prisma migrate dev` migration may propose DROP INDEX for it: NEVER accept that drop; remove the
+// !! DROP INDEX line from any generated migration. It is the DB backstop for "one OPEN session per branch".
+model CashSession {
+  id           String    @id @default(cuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId     String
+  branch       Branch    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  openedById   String
+  openedBy     User      @relation("CashSessionOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
+  openedAt     DateTime
+  openingCash  Decimal   @db.Decimal(12, 2)
+  closedById   String?
+  closedBy     User?     @relation("CashSessionClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  closedAt     DateTime?
+  countedCash  Decimal?  @db.Decimal(12, 2)
+  expectedCash Decimal?  @db.Decimal(12, 2)
+  difference   Decimal?  @db.Decimal(12, 2)
+  note         String?
+
+  transactions CashTransaction[]
+  methodCounts CashSessionMethodCount[]
+
+  @@index([tenantId, branchId, closedAt])
+  @@index([tenantId, branchId, openedAt])
+  // NOT expressible in Prisma: partial unique index "CashSession_one_open_per_branch_key" ON ("branchId") WHERE "closedAt" IS NULL
+  // (one OPEN session per branch). Lives only in migration 20261006180000_cash_indexes_one_open_session.
+}
+
+// Per-(method, bank) close figures of a session (Odoo-style register close). Frozen at close.
+// bank is NOT nullable: "" means "no bank" (CASH/QPAY/OTHER), so the composite unique below really is
+// unique (Postgres treats NULLs as distinct in a unique index).
+model CashSessionMethodCount {
+  id         String             @id @default(cuid())
+  tenantId   String
+  sessionId  String
+  session    CashSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  method     OrderPaymentMethod
+  bank       String             @default("")
+  expected   Decimal            @db.Decimal(12, 2)
+  counted    Decimal?           @db.Decimal(12, 2)
+  difference Decimal?           @db.Decimal(12, 2)
+
+  @@unique([sessionId, method, bank])
+  @@index([tenantId])
 }
 
 // --- SubscriptionPayment (тенант төлбөр + QPay invoice) -----------------
@@ -1498,6 +1688,11 @@ model Appointment {
   respondedById String?
   respondedBy   User?     @relation("AppointmentRespondedBy", fields: [respondedById], references: [id], onDelete: SetNull)
 
+  // QA #28: цагт хариуцах мастер (заавал биш). Засварын хуудас үүсэхэд
+  // ServiceOrder.assignedToId руу урьдчилан бөглөгдөнө.
+  assignedToId String?
+  assignedTo   User?   @relation("AppointmentAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+
   // Сануулга SMS илгээсэн эсэх (cron давхар илгээхгүйн тулд).
   reminderSentAt DateTime?
 
@@ -1531,6 +1726,7 @@ model Appointment {
   @@index([accountId])
   @@index([categoryId])
   @@index([respondedById])
+  @@index([assignedToId])
   @@index([status, requestedAt, reminderSentAt])
 }
 

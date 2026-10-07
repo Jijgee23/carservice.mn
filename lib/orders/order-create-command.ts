@@ -10,7 +10,12 @@ import { INTAKE_PATH_CLAIMED_MESSAGE, type IntakeInput } from "@/lib/orders/orde
 import { prisma, withBookingTransaction, type PrismaTransactionClient } from "@/lib/prisma";
 import { ensureTenantVehicle } from "@/lib/vehicles";
 import { validateOrderAssignee, OrderCommandError } from "@/lib/orders/order-commands";
-import { validateOrderReferences } from "@/lib/orders/order-create-references";
+import {
+  CARRIED_ASSIGNEE_INELIGIBLE_MESSAGE,
+  isCarriedAssigneeIneligible,
+} from "@/lib/appointments/appointment-assignee-label";
+import { internalPostpaidConflict } from "@/lib/orders/order-internal";
+import { resolveOrderIsPostpaid, validateOrderReferences } from "@/lib/orders/order-create-references";
 
 export type CreateOrderCommandInput = {
   tenantId: string;
@@ -26,6 +31,10 @@ export type CreateOrderCommandInput = {
   appointmentId?: string | null;
   estimatedDurationMinutes?: number | null;
   workingBranchId?: string | null;
+  // Omitted -> TenantVehicle.isPostpaid.
+  isPostpaid?: boolean;
+  // Дотоод засвар: төлбөргүй, isPostpaid-тэй зэрэг байж болохгүй.
+  isInternal?: boolean;
 };
 
 export type CreateOrderCommandResult = {
@@ -70,8 +79,10 @@ async function enforceCreateLimits(tenantId: string): Promise<void> {
 export async function createOrderCommand(
   input: CreateOrderCommandInput,
 ): Promise<CreateOrderCommandResult> {
-  // Хариуцах мастер заавал — web, mobile бүх замд.
-  if (!input.assignedToId) {
+  // Хариуцах мастер заавал — web, mobile бүх замд. QA #28: цаг захиалгаас
+  // үүсгэж байгаа бол мастер нь цагийн хариуцагчаас (доор) дамжиж болох тул
+  // тэр тохиолдолд шалгалтыг цагийг уншсаны дараа хийнэ.
+  if (!input.assignedToId && !input.appointmentId) {
     throw new OrderCommandError(
       "Хариуцах мастер сонгоно уу.",
       422,
@@ -86,6 +97,14 @@ export async function createOrderCommand(
       "ORDER_OUT_OF_SCOPE",
       { branchId: "Зөвхөн өөрийн салбарт засварын хуудас үүсгэх боломжтой." },
     );
+  }
+
+  const conflict = internalPostpaidConflict(input.isInternal, input.isPostpaid);
+  if (conflict) {
+    throw new OrderCommandError(conflict.message, conflict.status, conflict.code, {
+      isInternal: conflict.message,
+      isPostpaid: conflict.message,
+    });
   }
 
   await enforceCreateLimits(input.tenantId);
@@ -106,7 +125,7 @@ export async function createOrderCommand(
             where: {
               tenantId_vehicleId: { tenantId: input.tenantId, vehicleId: input.vehicleId },
             },
-            select: { vehicleId: true, customerId: true, isPostpaid: true },
+            select: { vehicleId: true, customerId: true, isPostpaid: true, vehicle: { select: { plate: true, vin: true } } },
           }),
           input.appointmentId
             ? tx.appointment.findFirst({
@@ -120,6 +139,7 @@ export async function createOrderCommand(
                   branchId: true,
                   estimatedDurationMinutes: true,
                   arrivedAt: true,
+                  assignedToId: true,
                   categoryId: true,
                   category: { select: { name: true } },
                   categories: {
@@ -131,9 +151,19 @@ export async function createOrderCommand(
             : Promise.resolve(null),
         ]);
 
-        if (input.assignedToId && branch) {
-          // This runs after the order-number lock below; the authoritative
-          // assignee and role rows are then locked before the order write.
+        // QA #28 carry-over: an explicit master wins; otherwise the
+        // appointment's master is carried into the order. It goes through the
+        // same validateOrderAssignee below, so a no-longer-eligible stored
+        // master is rejected with the standard assignee error, never silently
+        // written.
+        const assignedToId = input.assignedToId ?? appointment?.assignedToId ?? null;
+        if (!assignedToId) {
+          throw new OrderCommandError(
+            "Хариуцах мастер сонгоно уу.",
+            422,
+            "ASSIGNEE_REQUIRED",
+            { assignedToId: "Хариуцах мастер сонгоно уу." },
+          );
         }
 
         let accountVehicleToLink = false;
@@ -179,13 +209,23 @@ export async function createOrderCommand(
         }
 
         const number = await nextOrderNumber(tx, input.tenantId);
-        if (input.assignedToId) {
-          await validateOrderAssignee(scopedTx, {
-            tenantId: input.tenantId,
-            assigneeId: input.assignedToId,
-            orderBranchId: input.branchId,
-          });
-        }
+        await validateOrderAssignee(scopedTx, {
+          tenantId: input.tenantId,
+          assigneeId: assignedToId,
+          orderBranchId: input.branchId,
+        }).catch((assigneeError: unknown) => {
+          // The master came only from the appointment and is no longer
+          // eligible: ask for another one (no self fallback, no master-less order).
+          if (isCarriedAssigneeIneligible(assigneeError, !input.assignedToId)) {
+            throw new OrderCommandError(
+              CARRIED_ASSIGNEE_INELIGIBLE_MESSAGE,
+              422,
+              "ASSIGNEE_REQUIRED",
+              { assignedToId: CARRIED_ASSIGNEE_INELIGIBLE_MESSAGE },
+            );
+          }
+          throw assigneeError;
+        });
         if (accountVehicleToLink) {
           await ensureTenantVehicle(scopedTx, {
             tenantId: input.tenantId,
@@ -194,6 +234,10 @@ export async function createOrderCommand(
           });
         }
 
+        // Vehicle not yet linked to the tenant (appointment account vehicle path)
+        // has no TenantVehicle row to read the snapshot from.
+        const snapshotVehicle = vehicle?.vehicle
+          ?? await tx.vehicle.findUnique({ where: { id: input.vehicleId }, select: { plate: true, vin: true } });
         const bookingStartAt = input.scheduledAt ?? new Date();
         const created = await tx.serviceOrder.create({
           data: {
@@ -203,7 +247,7 @@ export async function createOrderCommand(
             branchId: input.branchId,
             customerId: input.customerId,
             vehicleId: input.vehicleId,
-            assignedToId: input.assignedToId,
+            assignedToId,
             scheduledAt: input.scheduledAt,
             notes: input.notes,
             ...(input.intake
@@ -218,7 +262,11 @@ export async function createOrderCommand(
                     : undefined,
                 }
               : {}),
-            isPostpaid: vehicle?.isPostpaid ?? false,
+            isInternal: input.isInternal === true,
+            // Дотоод захиалга хэзээ ч дараа тооцоотой биш (DB CHECK).
+            isPostpaid: resolveOrderIsPostpaid(input.isPostpaid, vehicle?.isPostpaid) && input.isInternal !== true,
+            plateSnapshot: snapshotVehicle?.plate ?? null,
+            vinSnapshot: snapshotVehicle?.vin ?? null,
             estimatedDurationMinutes: durationMinutes,
             categories: appointment && (appointment.categories.length > 0 || (appointment.categoryId && appointment.category))
               ? {
@@ -287,8 +335,9 @@ export async function createOrderCommand(
             branchId: input.branchId,
             customerId: input.customerId,
             vehicleId: input.vehicleId,
-            assignedToId: input.assignedToId,
+            assignedToId,
             scheduledAt: input.scheduledAt?.toISOString() ?? null,
+            ...(input.isInternal ? { isInternal: true } : {}),
           },
         }, scopedTx);
 

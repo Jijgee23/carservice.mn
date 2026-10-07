@@ -35,3 +35,41 @@ export async function recomputeOrderPaymentTotals(
   });
   return { paid, status, paidAt, total, remaining: total.minus(paid) };
 }
+
+/**
+ * Shared "Шууд төлсөн" rule: the order is COMPLETED, fully PAID, and the latest
+ * PAID payment was made no later than completion. `payments` only needs the
+ * PAID rows' `paidAt` (select that alone to avoid heavy list queries).
+ */
+export function computePaidInFullBeforeCompletion(order: {
+  status: string;
+  paymentStatus: string;
+  completedAt: Date | null;
+  payments?: ReadonlyArray<{ paidAt: Date | null }> | null;
+}): boolean {
+  if (order.status !== "COMPLETED" || order.paymentStatus !== "PAID" || !order.completedAt) return false;
+  let latest: Date | null = null;
+  for (const row of order.payments ?? []) {
+    if (row.paidAt && (!latest || row.paidAt > latest)) latest = row.paidAt;
+  }
+  return latest != null && latest.getTime() <= order.completedAt.getTime();
+}
+
+/** Select fragment: PAID payments' paidAt only (no N+1 in list/detail payloads). */
+export const PAID_AT_SELECT = {
+  payments: { where: { status: "PAID" as const }, select: { paidAt: true } },
+} satisfies Prisma.ServiceOrderSelect;
+
+/** Replace the selected `payments` rows with the API's `paidInFullBeforeCompletion` flag. */
+export function withPaidInFull<
+  T extends {
+    status: string;
+    paymentStatus: string;
+    completedAt: Date | null;
+    payments: ReadonlyArray<{ paidAt: Date | null }>;
+  },
+>(order: T): Omit<T, "payments"> & { paidInFullBeforeCompletion: boolean } {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { payments, ...rest } = order;
+  return { ...rest, paidInFullBeforeCompletion: computePaidInFullBeforeCompletion(order) };
+}

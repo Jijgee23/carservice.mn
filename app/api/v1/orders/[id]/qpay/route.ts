@@ -55,8 +55,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const scopeResult = await resolveWorkingBranch(req, auth.user);
   if (scopeResult.response) return scopeResult.response;
+  // Optional body { amount }; empty/missing body = remaining balance.
+  let amount: string | undefined;
+  const rawBody = await req.text();
+  if (rawBody.trim()) {
+    let body: unknown;
+    try { body = JSON.parse(rawBody); } catch { return jsonError(400, "JSON body буруу байна."); }
+    if (body == null || typeof body !== "object" || Array.isArray(body)) return jsonError(400, "JSON object шаардлагатай.");
+    const raw = (body as Record<string, unknown>).amount;
+    if (raw !== undefined && raw !== null) {
+      if (typeof raw !== "string") return jsonError(422, "Дүн буруу байна.", { code: "QPAY_AMOUNT_INVALID" });
+      amount = raw;
+    }
+  }
   try {
-    const payment = await createOrderQPayInvoiceCommand({ actor: auth.user, orderId: id, scope: scopeResult.branchId });
+    const payment = await createOrderQPayInvoiceCommand({ actor: auth.user, orderId: id, amount, scope: scopeResult.branchId });
     return jsonOk({ payment: { id: payment.id, amount: payment.amount, qrImage: payment.qrImage, qrText: payment.qrText, urls: payment.urls } });
   } catch (error) {
     return commandError(error);

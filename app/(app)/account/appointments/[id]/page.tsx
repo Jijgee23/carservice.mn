@@ -65,7 +65,7 @@ export default async function AccountAppointmentDetailPage({
   const account = await requireAccount();
   const { id } = await params;
 
-  const appt = await prisma.appointment.findFirst({
+  const apptRaw = await prisma.appointment.findFirst({
     where: { id, accountId: account.id },
     include: {
       tenant: { select: { name: true, slug: true } },
@@ -87,6 +87,7 @@ export default async function AccountAppointmentDetailPage({
       },
       serviceOrder: {
         select: {
+          isInternal: true,
           id: true,
           number: true,
           status: true,
@@ -126,7 +127,9 @@ export default async function AccountAppointmentDetailPage({
       },
     },
   });
-  if (!appt) notFound();
+  if (!apptRaw) notFound();
+  // Дотоод засвар үйлчлүүлэгчид харагдахгүй.
+  const appt = apptRaw.serviceOrder?.isInternal ? { ...apptRaw, serviceOrder: null } : apptRaw;
 
   // Засварын хуудас холбогдсон бол цуцлахгүй (апп-тай ижил, server ч шалгана).
   const canCancel = (appt.status === "PENDING" || appt.status === "CONFIRMED") && !appt.serviceOrderId;

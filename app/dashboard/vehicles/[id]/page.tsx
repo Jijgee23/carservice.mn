@@ -17,6 +17,8 @@ import {
   type PaymentStatus,
 } from "@/lib/orders";
 import { prisma } from "@/lib/prisma";
+import { vehicleOwnerIsOrganization } from "@/lib/vehicles/owner-kind";
+import { getVinHistory } from "@/lib/vehicles/vin-history";
 import { getVehicleHistory, isOwnerLocked } from "@/lib/vehicles/vehicle-history";
 import { VEHICLE_FORM_ID, VehicleForm } from "../vehicle-form";
 
@@ -45,22 +47,28 @@ export default async function VehicleDetailPage({
   const { id } = await params;
 
   // id = global vehicleId. Тенантын link-ээр дамжуулж ачаална (харьяалал link дээр).
-  const [link, customers, history] = await Promise.all([
+  const [link, customers, history, vinHistory] = await Promise.all([
     prisma.tenantVehicle.findUnique({
       where: {
         tenantId_vehicleId: { tenantId: user.tenantId, vehicleId: id },
       },
-      select: { customerId: true, isPostpaid: true, vehicle: true },
+      select: {
+        customerId: true,
+        isPostpaid: true,
+        customer: { select: { isOrganization: true } },
+        vehicle: true,
+      },
     }),
     prisma.customer.findMany({
       where: { tenantId: user.tenantId },
       orderBy: { fullName: "asc" },
-      select: { id: true, fullName: true, phone: true },
+      select: { id: true, fullName: true, phone: true, isOrganization: true, orgRegnum: true },
     }),
     // Захиалга, цаг захиалгын түүх, оношилгооны тайлангийн тоо — DM-05-ийн
     // дагуу нэг л газар (lib/vehicles/vehicle-history.ts), энэ хуудас болон
     // /api/v1/vehicles/[id]/history route хоёулаа ижилхэн дуудна.
     getVehicleHistory(user.tenantId, id),
+    getVinHistory(user.tenantId, id),
   ]);
 
   if (!link) notFound();
@@ -84,6 +92,11 @@ export default async function VehicleDetailPage({
         <div>
           <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">
             {vehicle.make} {vehicle.model}
+            {vehicleOwnerIsOrganization(link.customer, vehicle.ownerRegnum) ? (
+              <span className="ml-3 align-middle rounded-full border border-[var(--oc-line)] px-2 py-0.5 text-xs font-medium text-[var(--oc-muted)]">
+                Байгууллага
+              </span>
+            ) : null}
           </h1>
           <p className="font-plex-mono text-sm text-[var(--oc-muted3)] mt-1">{vehicle.plate}</p>
         </div>
@@ -123,6 +136,42 @@ export default async function VehicleDetailPage({
             ownerLocked={ownerLocked}
           />
         </div>
+
+        {vinHistory &&
+        vinHistory.vin &&
+        (vinHistory.records.length > 0 || vinHistory.otherTenantRecords > 0) ? (
+          <section className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[var(--oc-line)]">
+              <h2 className="font-semibold text-[var(--oc-ink)] text-sm">
+                Ижил арлын дугаартай бүртгэл
+              </h2>
+              <p className="font-plex-mono text-xs text-[var(--oc-muted3)] mt-1">
+                {vinHistory.vin}
+              </p>
+            </div>
+            <ul className="divide-y divide-[var(--oc-line)]">
+              {vinHistory.records.map((r) => (
+                <li key={r.vehicleId} className="px-5 py-3 text-sm">
+                  <Link
+                    href={`/dashboard/vehicles/${r.vehicleId}`}
+                    className="text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)] transition-colors"
+                  >
+                    <span className="font-plex-mono">{r.plate}</span> · {r.make} {r.model}
+                    {r.year ? ` · ${r.year}` : ""}
+                  </Link>
+                  <div className="text-xs text-[var(--oc-muted3)] mt-0.5">
+                    {r.ownerName ?? "Эзэнгүй"} · {r.orderCount} засвар
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {vinHistory.otherTenantRecords > 0 ? (
+              <p className="px-5 py-3 text-xs text-[var(--oc-muted3)]">
+                Бусад байгууллагад {vinHistory.otherTenantRecords} бүртгэл байна.
+              </p>
+            ) : null}
+          </section>
+        ) : null}
 
         {/* items-start: карт бүр өөрийн контентын өндөртэй — сунаж хоосон
             орон зай үүсгэхгүй */}

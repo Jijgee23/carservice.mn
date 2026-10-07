@@ -169,6 +169,8 @@ export function orderAssignableWhere(now: Date = new Date()) {
     // Өөрөө хаасан ажилтан isActive=true хэвээр (админ блокоос тусдаа) тул
     // тусад нь хасна — эс бөгөөс нэвтэрч чадахгүй хүнд захиалга оноогдоно.
     deactivatedAt: null,
+    // Идэвхжүүлээгүй (урилга хүлээж буй) ажилтан мастераар сонгогдохгүй.
+    verified: true,
     // Түр ажилтны хугацаа дууссан бол нэвтэрч чадахгүй (lib/auth/active.ts).
     AND: [{ OR: [{ activeUntil: null }, { activeUntil: { gt: now } }] }],
     OR: [

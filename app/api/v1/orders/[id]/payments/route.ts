@@ -8,6 +8,7 @@ import {
   notifyOrderPaymentReceived,
   OrderPaymentCommandError,
   parseOrderPaymentAmount,
+  serializeLedgerPayment,
 } from "@/lib/orders/order-payment-commands";
 
 function commandError(error: unknown) {
@@ -26,7 +27,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   if (scopeResult.response) return scopeResult.response;
   try {
     const payments = await listOrderPaymentsCommand({ actor: auth.user, orderId: id, scope: scopeResult.branchId });
-    return jsonOk({ payments: payments.map((payment) => ({ id: payment.id, amount: payment.amount.toString(), method: payment.method, status: payment.status, paidAt: payment.paidAt?.toISOString() ?? null, createdAt: payment.createdAt.toISOString() })) });
+    return jsonOk({ payments: payments.map((p) => serializeLedgerPayment(p, p.locked)) });
   } catch (error) {
     return commandError(error);
   }
@@ -50,9 +51,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const scopeResult = await resolveWorkingBranch(req, auth.user);
   if (scopeResult.response) return scopeResult.response;
   try {
-    const result = await createOrderPaymentCommand({ actor: auth.user, orderId: id, method: b.method, amount, scope: scopeResult.branchId });
+    const result = await createOrderPaymentCommand({ actor: auth.user, orderId: id, method: b.method, amount, bank: typeof b.bank === "string" ? b.bank : null, scope: scopeResult.branchId });
     await notifyOrderPaymentReceived({ tenantId: auth.user.tenantId, orderId: result.orderId, amount: amount.toString(), accountId: result.accountId, appointmentId: result.appointmentId });
-    return jsonOk({ payment: { id: result.payment.id, amount: result.payment.amount.toString(), method: result.payment.method, status: result.payment.status, paidAt: result.payment.paidAt?.toISOString() ?? null, createdAt: result.payment.createdAt.toISOString() }, order: { paidAmount: result.totals.paid.toString(), paymentStatus: result.totals.status, totalAmount: result.totals.total.toString(), remainingAmount: result.totals.remaining.toString() } }, { status: 201 });
+    return jsonOk({ payment: serializeLedgerPayment(result.payment), order: { paidAmount: result.totals.paid.toString(), paymentStatus: result.totals.status, totalAmount: result.totals.total.toString(), remainingAmount: result.totals.remaining.toString() } }, { status: 201 });
   } catch (error) {
     return commandError(error);
   }

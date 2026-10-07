@@ -6,8 +6,16 @@ import { quickCreateCustomerAction } from "@/app/_actions/quick-create";
 import { Field, FormError } from "@/app/_components/auth-shell";
 import { Btn, PlusIcon } from "@/app/_components/landing-ops-ui";
 import { Modal } from "@/app/_components/modal";
+import { OrgCustomerFields, type OrgCustomerValue } from "./org-customer-fields";
 
-export type CreatedCustomer = { id: string; fullName: string; phone: string };
+export type CreatedCustomer = {
+  id: string;
+  fullName: string;
+  phone: string;
+  isOrganization?: boolean;
+  orgName?: string | null;
+  orgRegnum?: string | null;
+};
 
 /**
  * Жагсаалтын хуудсанд шинэ хуудас руу шилжихгүйгээр үйлчлүүлэгч үүсгэх —
@@ -68,6 +76,7 @@ export function CreateCustomerForm({
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [note, setNote] = useState("");
+  const [org, setOrg] = useState<OrgCustomerValue>({ isOrg: false, orgRegnum: "", orgName: "", orgEmail: "" });
   const [pending, setPending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
@@ -88,6 +97,10 @@ export function CreateCustomerForm({
         phone,
         email: email || null,
         note: note || null,
+        isOrganization: org.isOrg,
+        orgRegnum: org.isOrg ? org.orgRegnum : null,
+        orgName: org.isOrg ? org.orgName : null,
+        orgEmail: org.isOrg && org.orgEmail ? org.orgEmail : null,
       });
       if (res.ok && res.customer) {
         onCreated(res.customer);
@@ -106,8 +119,18 @@ export function CreateCustomerForm({
     <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
       <FormError message={message ?? undefined} />
 
+      <div>
+        <OrgCustomerFields
+          idPrefix="cc-"
+          value={org}
+          onChange={(patch) => setOrg((prev) => ({ ...prev, ...patch }))}
+          errors={fieldErrors}
+          gridClassName="grid gap-4 sm:grid-cols-2"
+        />
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Овог нэр" htmlFor="cc-fullName" hint="заавал биш" error={fieldErrors.fullName}>
+        <Field label={org.isOrg ? "Холбогдох хүний нэр" : "Овог нэр"} htmlFor="cc-fullName" hint="заавал биш" error={fieldErrors.fullName}>
           <input
             id="cc-fullName"
             type="text"

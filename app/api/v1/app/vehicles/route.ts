@@ -31,7 +31,7 @@ export async function GET(req: Request) {
           purpose: true,
           _count: {
             select: {
-              serviceOrders: { where: { status: "COMPLETED", OR: owned } },
+              serviceOrders: { where: { status: "COMPLETED", isInternal: false, OR: owned } },
               diagnosticReports: { where: { OR: owned } },
             },
           },
@@ -129,6 +129,15 @@ export async function POST(req: Request) {
         purpose: purpose || null,
         owner: { accountId: account.id, phone: account.phone },
       });
+      if (v.plateChanged) {
+        // AuditLog tenant-д хамаарах тул account замд бүтэцтэй серверийн лог.
+        console.info("[vehicle] plate changed via account re-registration", {
+          vehicleId: v.id,
+          accountId: account.id,
+          from: v.plateChanged.from,
+          to: v.plateChanged.to,
+        });
+      }
       const link = await tx.accountVehicle.create({
         data: { accountId: account.id, vehicleId: v.id },
         select: { id: true },
@@ -148,7 +157,7 @@ export async function POST(req: Request) {
           purpose: true,
           _count: {
             select: {
-              serviceOrders: { where: { status: "COMPLETED" } },
+              serviceOrders: { where: { status: "COMPLETED", isInternal: false } },
               diagnosticReports: true,
             },
           },

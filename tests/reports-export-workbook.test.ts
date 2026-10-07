@@ -30,6 +30,7 @@ const RANGE: Range = {
 
 const FIXTURE: ReportData = {
   totalRevenue: 1_250_000,
+  internalCost: 75_000,
   completedCount: 12,
   avgTicket: 104_166.67,
   activeCount: 3,
@@ -45,8 +46,8 @@ const FIXTURE: ReportData = {
     { kind: "PART", label: "Сэлбэг", total: 300_000, pct: 24 },
     { kind: "FEE", label: "Бусад", total: 50_000, pct: 4 },
   ],
-  branchRows: [{ id: "b1", name: "Төв салбар", revenue: 900_000, count: 8 }],
-  techRows: [{ id: "u1", name: "Бат Болд", revenue: 600_000, count: 5 }],
+  branchRows: [{ id: "b1", name: "Төв салбар", revenue: 900_000, internalCost: 50_000, count: 8 }],
+  techRows: [{ id: "u1", name: "Бат Болд", revenue: 600_000, internalCost: 25_000, count: 5 }],
   avgJobDurationMinutes: 45,
   jobDurationRows: [{ id: "s1", name: "Даатгал", count: 4, avgMinutes: 30 }],
   customerRows: [
@@ -85,7 +86,7 @@ test("buildReportWorkbook creates all 8 sheets in order with the expected header
     (summary.getRow(1).values as unknown[]).slice(1),
     ["Үзүүлэлт", "Утга"],
   );
-  assert.equal(summary.rowCount, 6); // header + 5 fixture rows
+  assert.equal(summary.rowCount, 7); // header + 6 fixture rows (incl. Дотоод зардал)
   assert.equal(summary.getRow(1).font?.bold, true);
 
   const status = wb.getWorksheet("Захиалгын статус")!;

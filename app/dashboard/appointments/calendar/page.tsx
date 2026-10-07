@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { appointmentAssigneeLabel, type AssigneeCandidate } from "@/lib/appointments/appointment-assignee-label";
+import { canAssignOrders } from "@/lib/auth/order-access";
+import { buildAssignableUserWhere } from "@/lib/orders/order-assignable-users";
 import { redirect } from "next/navigation";
 import { BtnLink } from "@/app/_components/landing-ops-ui";
 import { FilterSelect } from "@/app/_components/list-filters";
@@ -75,17 +78,31 @@ export default async function AppointmentsCalendarPage({
   const sp = await searchParams;
   const cal = resolveCalendar(sp);
   const scopeBranchId = workingBranchScopeId(user);
+  // QA #28: candidates for the master picker shown when confirming a
+  // master-less appointment (same eligibility filter as the list page).
   const branchId = scopeBranchId ?? (sp.branchId || "");
 
-  const branches = await prisma.branch.findMany({
-    where: {
-      tenantId: user.tenantId,
-      isActive: true,
-      ...(scopeBranchId ? { id: scopeBranchId } : {}),
-    },
-    orderBy: { name: "asc" },
-    select: { id: true, name: true },
-  });
+  const [branches, dayAssigneeCandidates] = await Promise.all([
+    prisma.branch.findMany({
+      where: {
+        tenantId: user.tenantId,
+        isActive: true,
+        ...(scopeBranchId ? { id: scopeBranchId } : {}),
+      },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+    canRespondAppointments && cal.interval === "day"
+      ? (prisma.user.findMany({
+          where: buildAssignableUserWhere({ tenantId: user.tenantId, branchId: scopeBranchId }),
+          orderBy: { firstName: "asc" },
+          select: { id: true, firstName: true, lastName: true, branchId: true, assignableBranchIds: true },
+        }) as Promise<AssigneeCandidate[]>)
+      : Promise.resolve(null),
+  ]);
+  const dayAssignees = dayAssigneeCandidates
+    ? { candidates: dayAssigneeCandidates, onlyUserId: canAssignOrders(user) ? null : user.id }
+    : undefined;
 
   // Хоцорсон ажлууд/Тэр өдрийн түүх зэрэг нэг салбарын хуваарь шаарддаг
   // харагдацуудад ашиглах "нэг сонгогдсон салбар" — тодорхой сонгосон бол тэр,
@@ -111,6 +128,8 @@ export default async function AppointmentsCalendarPage({
             account: { select: { name: true, phone: true } },
             customer: { select: { fullName: true, phone: true } },
             branch: { select: { name: true } },
+            // QA #28: хариуцах мастер (хуучин оноолтыг ч харуулна).
+            assignedTo: { select: { firstName: true, lastName: true } },
             // S14: this week/month view lists appointments directly (not the
             // interval-projected day schedule, which already reads the
             // order-derived time once linked) — without this it kept showing
@@ -393,6 +412,7 @@ export default async function AppointmentsCalendarPage({
               canRespondAppointments={canRespondAppointments}
               canEditOrders={canEditOrders}
               returnTo={returnTo}
+              assignees={dayAssignees}
             />
           ))}
         </div>
@@ -406,6 +426,7 @@ export default async function AppointmentsCalendarPage({
           canRespondAppointments={canRespondAppointments}
           canEditOrders={canEditOrders}
           returnTo={returnTo}
+          assignees={dayAssignees}
         />
       ) : cal.interval === "day" && isMultiBranchDay ? (
         <div className="flex flex-col gap-6">
@@ -417,6 +438,7 @@ export default async function AppointmentsCalendarPage({
               canRespondAppointments={canRespondAppointments}
               canEditOrders={canEditOrders}
               returnTo={returnTo}
+              assignees={dayAssignees}
             />
           ))}
         </div>
@@ -427,6 +449,7 @@ export default async function AppointmentsCalendarPage({
           canRespondAppointments={canRespondAppointments}
           canEditOrders={canEditOrders}
           returnTo={returnTo}
+          assignees={dayAssignees}
         />
       ) : cal.interval === "week" ? (
         <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2">
@@ -477,6 +500,11 @@ export default async function AppointmentsCalendarPage({
                       <div className="text-xs text-[var(--oc-muted2)] truncate mt-0.5">
                         {apptName(a)}
                       </div>
+                      {a.assignedTo ? (
+                        <div className="text-[10px] text-[var(--oc-muted3)] truncate">
+                          Мастер: {appointmentAssigneeLabel(a.assignedTo)}
+                        </div>
+                      ) : null}
                       {a.serviceOrder && a.serviceOrder.status !== "SCHEDULED" ? (
                         <div className="text-[10px] text-[var(--oc-muted4)] truncate">
                           {a.serviceOrder.scheduledAt
@@ -559,12 +587,14 @@ function DaySchedule({
   canRespondAppointments,
   canEditOrders,
   returnTo,
+  assignees,
 }: {
   schedule: DayScheduleData | null;
   branchName: string | null;
   canRespondAppointments: boolean;
   canEditOrders: boolean;
   returnTo: string;
+  assignees?: { candidates: AssigneeCandidate[]; onlyUserId: string | null };
 }) {
   if (!schedule) {
     return (
@@ -574,7 +604,7 @@ function DaySchedule({
     );
   }
 
-  const { rows, issues } = buildDayRows(schedule, canRespondAppointments, canEditOrders, returnTo);
+  const { rows, issues } = buildDayRows(schedule, canRespondAppointments, canEditOrders, returnTo, assignees);
 
   return (
     <div className="flex flex-col gap-3">
@@ -634,6 +664,11 @@ function DaySchedule({
                 <span className="text-sm text-[var(--oc-ink2)] truncate flex-1">
                   {row.name}
                 </span>
+                {row.assigneeName ? (
+                  <span className="text-xs text-[var(--oc-muted3)] truncate max-w-[200px] shrink-0">
+                    Мастер: {row.assigneeName}
+                  </span>
+                ) : null}
                 {row.issueLabel ? (
                   <span className="font-plex-mono text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 shrink-0">
                     {row.issueLabel}
@@ -661,6 +696,7 @@ function DayScheduleGrid({
   canRespondAppointments,
   canEditOrders,
   returnTo,
+  assignees,
 }: {
   schedule: DayScheduleData | null;
   branchHours: {
@@ -699,6 +735,7 @@ function DayScheduleGrid({
   canRespondAppointments: boolean;
   canEditOrders: boolean;
   returnTo: string;
+  assignees?: { candidates: AssigneeCandidate[]; onlyUserId: string | null };
 }) {
   if (!schedule) {
     return (
@@ -713,6 +750,7 @@ function DayScheduleGrid({
     canRespondAppointments,
     canEditOrders,
     returnTo,
+    assignees,
   );
 
   const hours = branchHours

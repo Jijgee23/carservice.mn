@@ -79,6 +79,7 @@ function blockTitle(row: DayRow): string {
       ? "24:00"
       : fmtUbTime(row.endMs);
   const parts = [`${fmtUbTime(row.startMs)}–${end}`, row.name];
+  if (row.assigneeName) parts.push(`Мастер: ${row.assigneeName}`);
   if (row.statusLabel) parts.push(row.statusLabel);
   if (row.paymentStatusLabel) parts.push(row.paymentStatusLabel);
   if (row.issueLabel) parts.push(`⚠ ${row.issueLabel}`);

@@ -1,4 +1,5 @@
 import { jsonError, jsonOk, requireApiUser, requirePermission } from "@/lib/api";
+import { vehicleOwnerIsOrganization } from "@/lib/vehicles/owner-kind";
 import { prisma } from "@/lib/prisma";
 import {
   VehicleCommandError,
@@ -41,13 +42,16 @@ async function loadTenantVehicle(tenantId: string, vehicleId: string) {
     select: {
       customerId: true,
       isPostpaid: true,
-      customer: { select: { id: true, fullName: true, phone: true } },
+      customer: {
+        select: { id: true, fullName: true, phone: true, isOrganization: true, orgName: true },
+      },
       vehicle: { select: VEHICLE_SELECT },
     },
   });
   if (!link) return null;
   return {
     ...link.vehicle,
+    ownerIsOrganization: vehicleOwnerIsOrganization(link.customer, link.vehicle.ownerRegnum),
     customerId: link.customerId,
     customer: link.customer,
     isPostpaid: link.isPostpaid,

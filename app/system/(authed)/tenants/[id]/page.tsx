@@ -69,7 +69,7 @@ export default async function SystemTenantDetailPage({
 
   const [revenueAgg, subscriptions, subscriptionPayments] = await Promise.all([
     prisma.serviceOrder.aggregate({
-      where: { tenantId: tenant.id, status: "COMPLETED" },
+      where: { tenantId: tenant.id, status: "COMPLETED", isInternal: false },
       _sum: { totalAmount: true },
       _count: { _all: true },
     }),

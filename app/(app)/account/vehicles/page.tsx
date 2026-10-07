@@ -28,7 +28,7 @@ export default async function AccountVehiclesPage() {
     purpose: true,
     _count: {
       select: {
-        serviceOrders: { where: { status: "COMPLETED" } },
+        serviceOrders: { where: { status: "COMPLETED", isInternal: false } },
         diagnosticReports: true,
       },
     },

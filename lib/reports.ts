@@ -10,6 +10,7 @@ import {
   type ItemKind,
   type OrderStatus,
 } from "@/lib/orders";
+import { mergeInternalSplit } from "@/lib/orders/order-internal";
 import { prisma } from "@/lib/prisma";
 import { buildIncomeSeries, type ResolvedIncomeRange } from "@/app/dashboard/income-range";
 import type { IncomePoint } from "@/app/dashboard/income-chart";
@@ -57,12 +58,16 @@ export function validateReportRangeParams(searchParams: {
     }
   }
 
+  // A lone `from`/`to` such as 2026-13-45 passes DATE_RE but is not a real date: reject it too (it would crash the query).
+  for (const [field, value] of [["from", from], ["to", to]] as const) {
+    if (value != null && Number.isNaN(new Date(`${value}T00:00:00`).getTime())) {
+      return { field, message: "Огноо буруу байна." };
+    }
+  }
+
   if (from && to) {
     const fromDate = new Date(`${from}T00:00:00`);
     const toDate = new Date(`${to}T00:00:00`);
-    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
-      return { field: "from", message: "Огноо буруу байна." };
-    }
     if (fromDate.getTime() > toDate.getTime()) {
       return { field: "to", message: "to нь from-оос хойш байх ёстой." };
     }
@@ -130,13 +135,15 @@ function daySpan(from: Date, to: Date): number {
 
 export type ReportData = {
   totalRevenue: number;
+  /** Дууссан дотоод засварын нийт дүн — орлогод ороогүй. */
+  internalCost: number;
   completedCount: number;
   avgTicket: number;
   activeCount: number;
   statusRows: { status: OrderStatus; label: string; count: number; pct: number }[];
   kindRows: { kind: ItemKind; label: string; total: number; pct: number }[];
-  branchRows: { id: string; name: string; revenue: number; count: number }[];
-  techRows: { id: string; name: string; revenue: number; count: number }[];
+  branchRows: { id: string; name: string; revenue: number; internalCost: number; count: number }[];
+  techRows: { id: string; name: string; revenue: number; internalCost: number; count: number }[];
   // Нэг ажлын мөр (Ажил/Оношилгоо) дунджаар хэдэн минутад гүйцэтгэгддэгийг —
   // харах: lib/orders.ts-ийн serviceItemTimingPatch (ServiceItem.startedAt/
   // completedAt). Зөвхөн энэ өөрчлөлтөөс өмнө дууссан хуучин мөрүүд
@@ -187,6 +194,11 @@ export async function loadReportData(
     completedAt: { gte: range.from, lte: range.to },
   };
 
+  // Орлогын тооцоо: дотоод засвар орлогод орохгүй (ажлын тоонд л орно) —
+  // дүн нь тусдаа `internalCost`-д.
+  const revenueWhere = { ...completedWhere, isInternal: false };
+  const internalWhere = { ...completedWhere, isInternal: true };
+
   const allInRangeWhere = {
     tenantId: user.tenantId,
     ...branchFilter,
@@ -199,7 +211,9 @@ export async function loadReportData(
   // 1-р давалгаа — нэгтгэлүүд (lookup entity-гүйгээр).
   const [
     revenueAgg,
+    internalAgg,
     completedCount,
+    revenueCount,
     statusCounts,
     byBranch,
     byTech,
@@ -210,23 +224,28 @@ export async function loadReportData(
     itemDurationRows,
   ] = await Promise.all([
     prisma.serviceOrder.aggregate({
-      where: completedWhere,
+      where: revenueWhere,
+      _sum: { totalAmount: true },
+    }),
+    prisma.serviceOrder.aggregate({
+      where: internalWhere,
       _sum: { totalAmount: true },
     }),
     prisma.serviceOrder.count({ where: completedWhere }),
+    prisma.serviceOrder.count({ where: revenueWhere }),
     prisma.serviceOrder.groupBy({
       by: ["status"],
       where: allInRangeWhere,
       _count: { _all: true },
     }),
     prisma.serviceOrder.groupBy({
-      by: ["branchId"],
+      by: ["branchId", "isInternal"],
       where: completedWhere,
       _sum: { totalAmount: true },
       _count: { _all: true },
     }),
     prisma.serviceOrder.groupBy({
-      by: ["assignedToId"],
+      by: ["assignedToId", "isInternal"],
       where: { ...completedWhere, assignedToId: { not: null } },
       _sum: { totalAmount: true },
       _count: { _all: true },
@@ -234,7 +253,7 @@ export async function loadReportData(
     prisma.serviceItem.groupBy({
       by: ["kind"],
       where: {
-        order: completedWhere,
+        order: revenueWhere,
       },
       _sum: { total: true },
     }),
@@ -243,7 +262,7 @@ export async function loadReportData(
       // `_sum.totalAmount` NULL байвал Postgres DESC эрэмбэд хамгийн эхэнд
       // гаргадаг тул null дүнтэй захиалгыг хасна (aggregate orderBy `nulls`
       // дэмждэггүй).
-      where: { ...completedWhere, totalAmount: { not: null } },
+      where: { ...revenueWhere, totalAmount: { not: null } },
       _sum: { totalAmount: true },
       _count: { _all: true },
       orderBy: [{ _sum: { totalAmount: "desc" } }, { customerId: "asc" }],
@@ -252,7 +271,7 @@ export async function loadReportData(
     prisma.serviceItem.groupBy({
       by: ["serviceId"],
       where: {
-        order: completedWhere,
+        order: revenueWhere,
         serviceId: { not: null },
         service: { type: "GOODS" },
       },
@@ -262,7 +281,7 @@ export async function loadReportData(
       take: 5,
     }),
     prisma.serviceOrder.findMany({
-      where: completedWhere,
+      where: revenueWhere,
       select: { completedAt: true, totalAmount: true },
     }),
     // `_avg`/`groupBy`-аар шууд хийж болохгүй (Prisma хоёр багана хоорондын
@@ -308,12 +327,8 @@ export async function loadReportData(
   // 2-р давалгаа — зөвхөн дээрх нэгтгэлд гарч ирсэн ID-уудыг л нэрлэхийн тулд
   // татна. Өмнө нь бүх салбар/ажилтан/үйлчлүүлэгч/сэлбэгийг татдаг байсан нь
   // том tenant дээр удаан байсныг (top-5 гаргахад мянга мянган мөр) зассан.
-  const branchIds = byBranch
-    .map((r) => r.branchId)
-    .filter((id): id is string => Boolean(id));
-  const techIds = byTech
-    .map((r) => r.assignedToId)
-    .filter((id): id is string => Boolean(id));
+  const branchIds = [...new Set(byBranch.map((r) => r.branchId))].filter((id): id is string => Boolean(id));
+  const techIds = [...new Set(byTech.map((r) => r.assignedToId))].filter((id): id is string => Boolean(id));
   const customerIds = topCustomers
     .map((r) => r.customerId)
     .filter((id): id is string => Boolean(id));
@@ -366,7 +381,11 @@ export async function loadReportData(
   const totalRevenue = Number.parseFloat(
     revenueAgg._sum.totalAmount?.toString() ?? "0",
   );
-  const avgTicket = completedCount > 0 ? totalRevenue / completedCount : 0;
+  const internalCost = Number.parseFloat(
+    internalAgg._sum.totalAmount?.toString() ?? "0",
+  );
+  // Дундаж дүн зөвхөн орлого үүсгэсэн (дотоод биш) захиалгаар.
+  const avgTicket = revenueCount > 0 ? totalRevenue / revenueCount : 0;
 
   const statusCountMap = Object.fromEntries(
     statusCounts.map((s) => [s.status, s._count._all]),
@@ -387,24 +406,30 @@ export async function loadReportData(
     (statusCountMap.SCHEDULED ?? 0) + (statusCountMap.IN_PROGRESS ?? 0);
 
   // Branch breakdown
-  const branchRows = byBranch
+  const branchRows = mergeInternalSplit(
+    byBranch.map((r) => ({ key: r.branchId, isInternal: r.isInternal, amount: r._sum.totalAmount, count: r._count._all })),
+  )
     .map((r) => ({
-      id: r.branchId,
-      name: branchById.get(r.branchId)?.name ?? "—",
-      revenue: Number.parseFloat(r._sum.totalAmount?.toString() ?? "0"),
-      count: r._count._all,
+      id: r.key,
+      name: branchById.get(r.key)?.name ?? "—",
+      revenue: r.revenue,
+      internalCost: r.internalCost,
+      count: r.count,
     }))
     .sort((a, b) => b.revenue - a.revenue);
 
   // Technician breakdown
-  const techRows = byTech
+  const techRows = mergeInternalSplit(
+    byTech.map((r) => ({ key: r.assignedToId ?? "—", isInternal: r.isInternal, amount: r._sum.totalAmount, count: r._count._all })),
+  )
     .map((r) => {
-      const u = r.assignedToId ? userById.get(r.assignedToId) : null;
+      const u = r.key !== "—" ? userById.get(r.key) : null;
       return {
-        id: r.assignedToId ?? "—",
+        id: r.key,
         name: u ? `${u.lastName} ${u.firstName}` : "Хариуцагчгүй",
-        revenue: Number.parseFloat(r._sum.totalAmount?.toString() ?? "0"),
-        count: r._count._all,
+        revenue: r.revenue,
+        internalCost: r.internalCost,
+        count: r.count,
       };
     })
     .sort((a, b) => b.revenue - a.revenue);
@@ -476,6 +501,7 @@ export async function loadReportData(
 
   return {
     totalRevenue,
+    internalCost,
     completedCount,
     avgTicket,
     activeCount,

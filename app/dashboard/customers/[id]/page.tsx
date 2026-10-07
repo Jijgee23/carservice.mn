@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
 import { canEdit } from "@/lib/auth/roles";
-import { customerLabel } from "@/lib/customers";
+import { customerDisplay, customerLabel } from "@/lib/customers";
 import { prisma } from "@/lib/prisma";
 import { CUSTOMER_FORM_ID, CustomerForm } from "../customer-form";
 
@@ -54,8 +54,16 @@ export default async function EditCustomerPage({
 
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">{customerLabel(customer)}</h1>
+          <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">
+            {customerDisplay(customer).primary}
+            {customer.isOrganization ? (
+              <span className="ml-3 align-middle rounded-full border border-[var(--oc-line)] px-2 py-0.5 text-xs font-medium text-[var(--oc-muted)]">
+                Байгууллага
+              </span>
+            ) : null}
+          </h1>
           <p className="text-sm text-[var(--oc-muted3)] mt-1">
+            {customer.isOrganization ? `${customerLabel(customer)} · ` : ""}
             {customer.phone} · {customer._count.serviceOrders} засварын хуудас
           </p>
         </div>
@@ -77,6 +85,10 @@ export default async function EditCustomerPage({
             phone: customer.phone,
             email: customer.email,
             note: customer.note,
+            isOrganization: customer.isOrganization,
+            orgRegnum: customer.orgRegnum,
+            orgName: customer.orgName,
+            orgEmail: customer.orgEmail,
           }}
         />
 

@@ -91,6 +91,15 @@ export async function quickCreateAccountVehicle(input: {
         purpose: purpose || null,
         owner: { accountId: account.id, phone: account.phone },
       });
+      if (vehicle.plateChanged) {
+        // AuditLog tenant-д хамаарах тул account замд бүтэцтэй серверийн лог.
+        console.info("[vehicle] plate changed via account re-registration", {
+          vehicleId: vehicle.id,
+          accountId: account.id,
+          from: vehicle.plateChanged.from,
+          to: vehicle.plateChanged.to,
+        });
+      }
       const link = await tx.accountVehicle.create({
         data: { accountId: account.id, vehicleId: vehicle.id },
         select: { id: true },

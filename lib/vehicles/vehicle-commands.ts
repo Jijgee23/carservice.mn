@@ -337,16 +337,18 @@ export async function createVehicleCommand(input: {
     throw new VehicleCommandError("Хүсэлт буруу.", 422, "VALIDATION_FAILED", fieldErrors);
   }
 
+  let orgRegnumKey: string | null = null;
   if (data.customerId) {
     const customer = await prisma.customer.findFirst({
       where: { id: data.customerId, tenantId: actor.tenantId },
-      select: { id: true },
+      select: { id: true, isOrganization: true, orgRegnum: true },
     });
     if (!customer) {
       throw new VehicleCommandError("Хүсэлт буруу.", 422, "VALIDATION_FAILED", {
         customerId: "Үйлчлүүлэгч олдсонгүй.",
       });
     }
+    if (customer.isOrganization && customer.orgRegnum) orgRegnumKey = customer.orgRegnum;
   }
 
   // `MAX_VEHICLES` — БҮХ entry point дээр шалгана (D-154, 2026-09-22
@@ -373,7 +375,11 @@ export async function createVehicleCommand(input: {
     const duplicate = await prisma.tenantVehicle.findFirst({
       where: {
         tenantId: actor.tenantId,
-        customerId: data.customerId,
+        // Байгууллага: эзний түлхүүр = orgRegnum (ижил регистртэй өөр холбоо
+        // барих хүн ч ижил эзэн); хүн: яг энэ customerId. resolveVehicleForOwner-той ижил.
+        ...(orgRegnumKey
+          ? { customer: { isOrganization: true, orgRegnum: orgRegnumKey } }
+          : { customerId: data.customerId }),
         vehicle: noPlate ? { plate: canonPlate, vin: data.vin } : { plate: canonPlate },
       },
       select: { id: true },
@@ -407,7 +413,7 @@ export async function createVehicleCommand(input: {
     }
   }
 
-  const record = await prisma.$transaction(async (tx) => {
+    const record = await prisma.$transaction(async (tx) => {
     const owner = await ownerFromCustomer(tx, actor.tenantId, customerId);
     const vehicle = await resolveVehicleForOwner(tx, { ...attrs, owner });
     const link = await ensureTenantVehicle(tx, {
@@ -415,6 +421,22 @@ export async function createVehicleCommand(input: {
       vehicleId: vehicle.id,
       customerId,
     });
+    if (vehicle.plateChanged) {
+      // Глобал мөрийн өөрчлөлт — транзакцийн дотор аудит бичнэ.
+      await logAudit(
+        {
+          tenantId: actor.tenantId,
+          userId: actor.id,
+          entity: "Vehicle",
+          entityId: link.id,
+          action: "UPDATE",
+          summary: `Дугаар солигдсон (VIN-ээр ижил машин): ${vehicle.plateChanged.from} → ${vehicle.plateChanged.to}`,
+          before: { plate: vehicle.plateChanged.from },
+          after: { plate: vehicle.plateChanged.to },
+        },
+        tx,
+      );
+    }
     if (isPostpaid) {
       await tx.tenantVehicle.update({ where: { id: link.id }, data: { isPostpaid } });
     }

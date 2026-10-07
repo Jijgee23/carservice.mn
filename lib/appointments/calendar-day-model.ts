@@ -44,6 +44,8 @@ import {
   SCHEDULE_ISSUE_LABEL,
 } from "@/lib/appointments/calendar-selection";
 
+import { appointmentAssigneeLabel } from "@/lib/appointments/appointment-assignee-label";
+
 export { SCHEDULE_ISSUE_LABEL };
 
 export type CalendarAppointmentRow = {
@@ -53,6 +55,9 @@ export type CalendarAppointmentRow = {
   serviceOrderId: string | null;
   account: { name: string | null; phone: string | null } | null;
   customer: { fullName: string | null; phone: string | null } | null;
+  /** QA #28 — optional so older callers/fixtures keep type-checking. */
+  assignedToId?: string | null;
+  assignedTo?: { id?: string; firstName: string | null; lastName: string | null } | null;
   feeAmount: unknown;
   feeQpayInvoiceId: string | null;
   feeUnderpaidAmount: unknown;
@@ -101,6 +106,9 @@ export type CalendarBlock = {
   status: AppointmentStatus | null;
   statusLabel: string;
   name: string;
+  /** QA #28: responsible master id/name (null when none). */
+  assignedToId: string | null;
+  assigneeName: string | null;
   paymentStatus: AppointmentBookingPaymentStatus | null;
   paymentStatusLabel: string | null;
   issue: CalendarBlockIssue | null;
@@ -228,6 +236,8 @@ export function buildCalendarDayModel(input: CalendarDayModelInput): CalendarDay
       status,
       statusLabel,
       name,
+      assignedToId: appt?.assignedToId ?? null,
+      assigneeName: appointmentAssigneeLabel(appt?.assignedTo),
       paymentStatus: showPaymentStatus ? paymentStatus : null,
       paymentStatusLabel: base.paymentStatusLabel,
       issue,

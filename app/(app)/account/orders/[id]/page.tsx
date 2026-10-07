@@ -78,7 +78,7 @@ export default async function AccountWalkInOrderDetailPage({
   const { id } = await params;
 
   const order = await prisma.serviceOrder.findFirst({
-    where: { id, customer: { accountId: account.id } },
+    where: { id, isInternal: false, customer: { accountId: account.id } },
     select: {
       id: true,
       number: true,

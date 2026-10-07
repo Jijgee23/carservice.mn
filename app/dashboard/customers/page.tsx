@@ -2,12 +2,12 @@ import { deleteCustomerAction } from "@/app/_actions/customers";
 import { ClickableRow } from "@/app/_components/clickable-row";
 import { RowActionsMenu, RowMenuFormItem } from "@/app/_components/row-actions";
 import { BtnLink } from "@/app/_components/landing-ops-ui";
-import { ResetFilters, SearchBox } from "@/app/_components/list-filters";
+import { FilterSelect, ResetFilters, SearchBox } from "@/app/_components/list-filters";
 import { Pagination } from "@/app/_components/pagination";
 import { EmptyState } from "@/app/_components/page-header";
 import { buildMeta, getPageInfo } from "@/lib/pagination";
-import { customerLabel } from "@/lib/customers";
-import { buildCustomerListWhere } from "@/lib/customers/customer-list-query";
+import { customerDisplay, customerLabel, orgRegnumLabel } from "@/lib/customers";
+import { buildCustomerListWhere, parseCustomerKind } from "@/lib/customers/customer-list-query";
 import { requireUser } from "@/lib/auth";
 import { canCreate, canDelete, canView, hasPermission } from "@/lib/auth/roles";
 import { redirect } from "next/navigation";
@@ -23,7 +23,7 @@ export const metadata = {
 export default async function CustomersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string; sort?: string; dir?: string }>;
+  searchParams: Promise<{ q?: string; kind?: string; page?: string; sort?: string; dir?: string }>;
 }) {
   const user = await requireUser();
   if (!canView(user, "customers")) redirect("/dashboard");
@@ -31,7 +31,7 @@ export default async function CustomersPage({
   const canRemove = canDelete(user, "customers");
   const canNotify = hasPermission(user, "customers.notify");
 
-  const { q = "", page: pageParam, sort: sortParam, dir: dirParam } =
+  const { q = "", kind: kindParam, page: pageParam, sort: sortParam, dir: dirParam } =
     await searchParams;
   const sort = parseSort(
     { sort: sortParam, dir: dirParam },
@@ -49,8 +49,9 @@ export default async function CustomersPage({
   // Хайлтын талбарууд (fullName/phone/email) энэ хуудасны хуучин зан
   // төлөвтэй яг адил хэвээр; зөвхөн `q`-г дамжуулна, page/pageSize нь энд
   // тусад нь (`getPageInfo`-оор) удирддаг тул query-д хэрэггүй.
+  const kind = parseCustomerKind(kindParam);
   const where = buildCustomerListWhere(
-    { q: q || undefined, page, pageSize, skip, take },
+    { q: q || undefined, kind: kind === "invalid" ? undefined : kind, page, pageSize, skip, take },
     { tenantId: user.tenantId },
   );
   const [customers, total, allTotal] = await Promise.all([
@@ -98,8 +99,16 @@ export default async function CustomersPage({
       ) : (
         <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] overflow-hidden flex-1 min-h-0 flex flex-col">
           <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-[var(--oc-line)]">
-            <SearchBox placeholder="Нэр, утас, имэйл, дугаараар хайх" />
-            <ResetFilters paramNames={["q"]} />
+            <SearchBox placeholder="Нэр, утас, имэйл, регистр, дугаараар хайх" />
+            <FilterSelect
+              paramName="kind"
+              placeholder="Төрөл"
+              options={[
+                { value: "org", label: "Байгууллага" },
+                { value: "person", label: "Хувь хүн" },
+              ]}
+            />
+            <ResetFilters paramNames={["q", "kind"]} />
             <span className="ml-auto font-plex-mono text-xs text-[var(--oc-muted3)] whitespace-nowrap">
               {customers.length} / {total} харагдаж байна
             </span>
@@ -134,14 +143,27 @@ export default async function CustomersPage({
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3 min-w-0 max-w-[280px]">
                           <div className="w-9 h-9 rounded-full border border-[var(--oc-line)] bg-[var(--oc-panel2)] flex items-center justify-center text-xs font-bold text-[var(--oc-ink2)] shrink-0">
-                            {customerLabel(c)[0]?.toUpperCase() ?? "?"}
+                            {customerDisplay(c).primary[0]?.toUpperCase() ?? "?"}
                           </div>
-                          <span
-                            className="text-sm font-medium text-[var(--oc-ink)] truncate"
-                            title={customerLabel(c)}
-                          >
-                            {customerLabel(c)}
-                          </span>
+                          <div className="min-w-0">
+                            <span
+                              className="block text-sm font-medium text-[var(--oc-ink)] truncate"
+                              title={customerDisplay(c).primary}
+                            >
+                              {customerDisplay(c).primary}
+                            </span>
+                            {c.isOrganization ? (
+                              <span className="flex items-center gap-2 text-xs text-[var(--oc-muted3)]">
+                                <span className="rounded-full border border-[var(--oc-line)] px-1.5 text-[10px]">
+                                  Байгууллага
+                                </span>
+                                {orgRegnumLabel(c) ? (
+                                  <span className="font-plex-mono">{orgRegnumLabel(c)}</span>
+                                ) : null}
+                                <span className="truncate">{customerLabel(c)}</span>
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
                       </td>
                       <td className="px-5 py-4 font-plex-mono text-sm text-[var(--oc-muted2)]">
@@ -189,7 +211,7 @@ export default async function CustomersPage({
             page={meta.page}
             totalPages={meta.totalPages}
             total={meta.total}
-            params={{ q, sort: sortParam ?? "", dir: dirParam ?? "" }}
+            params={{ q, kind: kindParam ?? "", sort: sortParam ?? "", dir: dirParam ?? "" }}
           />
         </div>
       )}

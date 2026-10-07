@@ -1,9 +1,11 @@
 import { Prisma } from "@/app/generated/prisma/client";
+import { findOrderIdsWithLockedPayment } from "@/lib/cash/session-attach";
 import { jsonError, jsonOk, requireApiUser, requirePermission } from "@/lib/api";
 import { resolveWorkingBranch } from "@/lib/auth/api-branch";
 import { canEditOrder, orderReadWhere } from "@/lib/auth/order-access";
 import { requireActiveSubscriptionApi } from "@/lib/subscription-server";
 import { prisma } from "@/lib/prisma";
+import { PAID_AT_SELECT, withPaidInFull } from "@/lib/orders/order-payment-totals";
 import {
   ORDER_STATUSES,
   type OrderStatus,
@@ -31,6 +33,11 @@ const ORDER_DETAIL_SELECT = {
   notes: true,
   createdAt: true,
   updatedAt: true,
+  isPostpaid: true,
+  isInternal: true,
+  plateSnapshot: true,
+  vinSnapshot: true,
+  ...PAID_AT_SELECT,
   customer: { select: { id: true, fullName: true, phone: true, email: true } },
   vehicle: {
     select: {
@@ -77,9 +84,16 @@ const ORDER_DETAIL_SELECT = {
 } satisfies Prisma.ServiceOrderSelect;
 
 // Intake-н raw багануудыг ил гаргахгүй — зөвхөн `intake` объект.
-function serializeOrderDetail<T extends IntakeViewRow>(order: T) {
-  const rest = omitIntakeColumns(order);
-  return { ...rest, intake: toIntakeView(order, { includeRecordedBy: true }) };
+function serializeOrderDetail<
+  T extends IntakeViewRow & {
+    status: string;
+    paymentStatus: string;
+    completedAt: Date | null;
+    payments: ReadonlyArray<{ paidAt: Date | null }>;
+  },
+>(order: T, hasLockedPayment: boolean) {
+  const rest = withPaidInFull(omitIntakeColumns(order) as T);
+  return { ...rest, hasLockedPayment, intake: toIntakeView(order, { includeRecordedBy: true }) };
 }
 
 export async function GET(
@@ -104,7 +118,7 @@ export async function GET(
   });
 
   if (!order) return jsonError(404, "Засварын хуудас олдсонгүй.");
-  return jsonOk({ order: serializeOrderDetail(order) });
+  return jsonOk({ order: serializeOrderDetail(order, (await findOrderIdsWithLockedPayment(prisma, auth.user.tenantId, [order.id])).has(order.id)) });
 }
 
 export async function DELETE(
@@ -172,13 +186,21 @@ export async function PATCH(
   const hasStatus = Object.prototype.hasOwnProperty.call(b, "status");
   const hasAssignment = Object.prototype.hasOwnProperty.call(b, "assignedToId");
   const hasNotes = Object.prototype.hasOwnProperty.call(b, "notes");
+  const hasPostpaid = Object.prototype.hasOwnProperty.call(b, "isPostpaid");
+  const hasInternal = Object.prototype.hasOwnProperty.call(b, "isInternal");
   if (hasStatus && (typeof b.status !== "string" || !(ORDER_STATUSES as readonly string[]).includes(b.status))) {
     return jsonError(400, "Статус буруу байна.");
   }
   if (hasNotes && typeof b.notes !== "string") {
     return jsonError(400, "notes нь string байна.");
   }
-  if (hasStatus || hasNotes) {
+  if (hasPostpaid && typeof b.isPostpaid !== "boolean") {
+    return jsonError(400, "isPostpaid нь boolean байна.");
+  }
+  if (hasInternal && typeof b.isInternal !== "boolean") {
+    return jsonError(400, "isInternal нь boolean байна.");
+  }
+  if (hasStatus || hasNotes || hasPostpaid || hasInternal) {
     const editDenied = requirePermission(auth.user, "orders.edit");
     if (editDenied && !auth.user.role?.permissions.includes("orders.editOwn")) return editDenied;
   }
@@ -200,7 +222,7 @@ export async function PATCH(
     select: { id: true, assignedToId: true },
   });
   if (!preCheck) return jsonError(404, "Засварын хуудас олдсонгүй.");
-  if ((hasStatus || hasNotes) && !canEditOrder(auth.user, preCheck)) {
+  if ((hasStatus || hasNotes || hasPostpaid || hasInternal) && !canEditOrder(auth.user, preCheck)) {
     return jsonError(403, "Танд энэ засварын хуудсыг засах эрх байхгүй.");
   }
 
@@ -208,7 +230,7 @@ export async function PATCH(
   // commands as the dashboard actions. Keep notes-only PATCH compatibility in
   // the legacy adapter below; combined requests use the commands first and
   // then return the same detail DTO.
-  if (hasStatus || hasAssignment || hasNotes) {
+  if (hasStatus || hasAssignment || hasNotes || hasPostpaid || hasInternal) {
     try {
       if (hasAssignment && b.assignedToId !== null && typeof b.assignedToId !== "string") {
         return jsonError(400, "assignedToId нь string эсвэл null байна.");
@@ -223,6 +245,8 @@ export async function PATCH(
         durationMinutes: typeof b.durationMinutes === "number" ? b.durationMinutes : undefined,
         assignedToId,
         notes: hasNotes ? b.notes as string : undefined,
+        isPostpaid: hasPostpaid ? b.isPostpaid as boolean : undefined,
+        isInternal: hasInternal ? b.isInternal as boolean : undefined,
         scope,
       });
       const updated = await prisma.serviceOrder.findFirst({
@@ -230,7 +254,7 @@ export async function PATCH(
         select: ORDER_DETAIL_SELECT,
       });
       if (!updated) return jsonError(404, "Засварын хуудас олдсонгүй.");
-      return jsonOk({ order: serializeOrderDetail(updated) });
+      return jsonOk({ order: serializeOrderDetail(updated, (await findOrderIdsWithLockedPayment(prisma, auth.user.tenantId, [updated.id])).has(updated.id)) });
     } catch (error) {
       if (error instanceof OrderCommandError) {
         return jsonError(error.status, error.message, {

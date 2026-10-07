@@ -23,7 +23,7 @@ export default async function NewVehiclePage({
   const customers = await prisma.customer.findMany({
     where: { tenantId: user.tenantId },
     orderBy: { fullName: "asc" },
-    select: { id: true, fullName: true, phone: true },
+    select: { id: true, fullName: true, phone: true, isOrganization: true, orgRegnum: true },
   });
 
   const backHref = customerId

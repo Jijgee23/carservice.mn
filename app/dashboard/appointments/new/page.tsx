@@ -2,7 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
+import { canAssignOrders } from "@/lib/auth/order-access";
 import { canCreate, workingBranchScopeId } from "@/lib/auth/roles";
+import { buildAssignableUserWhere } from "@/lib/orders/order-assignable-users";
 import { openWeekdaysOf } from "@/lib/branches";
 import { prisma } from "@/lib/prisma";
 import { safeNext } from "@/lib/safe-redirect";
@@ -28,7 +30,7 @@ export default async function NewAppointmentPage({
       ? initialScheduledAt
       : null;
 
-  const [branches, customers, vehicles, categories] = await Promise.all([
+  const [branches, customers, vehicles, categories, assignees] = await Promise.all([
     prisma.branch.findMany({
       where: {
         tenantId: user.tenantId,
@@ -47,7 +49,7 @@ export default async function NewAppointmentPage({
     prisma.customer.findMany({
       where: { tenantId: user.tenantId },
       orderBy: { fullName: "asc" },
-      select: { id: true, fullName: true, phone: true },
+      select: { id: true, fullName: true, phone: true, isOrganization: true, orgRegnum: true },
     }),
     prisma.tenantVehicle
       .findMany({
@@ -72,6 +74,13 @@ export default async function NewAppointmentPage({
           branchIds: c.branches.map((b) => b.id),
         })),
       ),
+    // QA #28: orders-ийн мастер сонгогчтой ижил шүүлтүүр (orderAssignableWhere,
+    // идэвхгүй/хугацаа дууссан/идэвхжээгүй ажилтныг хасна) — салбарт хязгаарлана.
+    prisma.user.findMany({
+      where: buildAssignableUserWhere({ tenantId: user.tenantId, branchId: scopeBranchId }),
+      orderBy: { firstName: "asc" },
+      select: { id: true, firstName: true, lastName: true, branchId: true, assignableBranchIds: true },
+    }),
   ]);
 
   return (
@@ -111,6 +120,9 @@ export default async function NewAppointmentPage({
           customers={customers}
           vehicles={vehicles}
           categories={categories}
+          assignees={assignees}
+          assigneeOnlyUserId={canAssignOrders(user) ? null : user.id}
+          currentUserId={user.id}
           defaultBranchId={scopeBranchId ?? sp.branchId ?? undefined}
           initialScheduledAt={validInitialScheduledAt?.toISOString()}
           backHref={backTarget}

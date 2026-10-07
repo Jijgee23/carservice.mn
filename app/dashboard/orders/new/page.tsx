@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { vehicleOwnerIsOrganization } from "@/lib/vehicles/owner-kind";
 import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
 import { canAssignOrders } from "@/lib/auth/order-access";
@@ -50,6 +51,8 @@ export default async function NewOrderPage({
           customerId: true,
           vehicleId: true,
           serviceOrderId: true,
+          // QA #28: цагийн хариуцах мастерыг засварын хуудсанд урьдчилан бөглөнө.
+          assignedToId: true,
           estimatedDurationMinutes: true,
           categoryId: true,
           category: { select: { name: true } },
@@ -83,7 +86,7 @@ export default async function NewOrderPage({
           branchId: sp.branchId ?? scopeBranchId ?? "",
           customerId: prefillCustomerId,
           vehicleId: prefillVehicleId,
-          assignedToId: null,
+          assignedToId: appointment?.assignedToId ?? null,
           scheduledAt:
             prefillScheduled && Number.isFinite(prefillScheduled.getTime())
               ? prefillScheduled
@@ -105,7 +108,7 @@ export default async function NewOrderPage({
     prisma.customer.findMany({
       where: { tenantId: user.tenantId },
       orderBy: { fullName: "asc" },
-      select: { id: true, fullName: true, phone: true },
+      select: { id: true, fullName: true, phone: true, isOrganization: true, orgName: true, orgRegnum: true },
     }),
     prisma.tenantVehicle
       .findMany({
@@ -114,16 +117,18 @@ export default async function NewOrderPage({
         select: {
           customerId: true,
           isPostpaid: true,
+          customer: { select: { isOrganization: true } },
           vehicle: {
-            select: { id: true, plate: true, vin: true, make: true, model: true },
+            select: { id: true, plate: true, vin: true, make: true, model: true, ownerRegnum: true },
           },
         },
       })
       .then((rows) =>
-        rows.map((r) => ({
-          ...r.vehicle,
+        rows.map(({ vehicle: { ownerRegnum, ...vehicle }, customer, ...r }) => ({
+          ...vehicle,
           customerId: r.customerId,
           isPostpaid: r.isPostpaid,
+          ownerIsOrganization: vehicleOwnerIsOrganization(customer, ownerRegnum),
         })),
       ),
     prisma.user.findMany({
@@ -150,7 +155,7 @@ export default async function NewOrderPage({
           select: {
             vehicleId: true,
             vehicle: {
-              select: { id: true, plate: true, vin: true, make: true, model: true },
+              select: { id: true, plate: true, vin: true, make: true, model: true, ownerRegnum: true },
             },
           },
         })
@@ -165,8 +170,9 @@ export default async function NewOrderPage({
     ...tenantVehicles,
     ...accountVehicles
       .filter((v) => !linkedVehicleIds.has(v.vehicleId))
-      .map((v) => ({
-        ...v.vehicle,
+      .map(({ vehicle: { ownerRegnum, ...vehicle } }) => ({
+        ...vehicle,
+        ownerIsOrganization: vehicleOwnerIsOrganization(null, ownerRegnum),
         customerId: prefillCustomerId,
         isPostpaid: false,
         isAccountVehicle: true,
@@ -227,7 +233,19 @@ export default async function NewOrderPage({
 
       <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 sm:p-5">
         <OrderForm
-          initial={initial}
+          initial={
+            initial && {
+              ...initial,
+              // QA #28: цагийн мастерыг зөвхөн сонгогдох боломжтой (идэвхтэй,
+              // тохирох) бөгөөд энэ хэрэглэгч оноож чадах үед л урьдчилан бөглөнө.
+              assignedToId:
+                initial.assignedToId &&
+                technicians.some((t) => t.id === initial.assignedToId) &&
+                (canAssignOrders(user) || initial.assignedToId === user.id)
+                  ? initial.assignedToId
+                  : null,
+            }
+          }
           appointmentId={sp.appointmentId}
           branches={branches}
           customers={customers}
@@ -238,6 +256,12 @@ export default async function NewOrderPage({
           backHref={backTarget}
           next={sp.next ? backTarget : undefined}
           // Оноох эрхгүй ажилтан зөвхөн өөрийгөө оноож болно (createOrderAction).
+          assigneeHint={
+            appointment?.assignedToId &&
+            !technicians.some((t) => t.id === appointment.assignedToId)
+              ? "Цаг захиалгын мастер идэвхгүй болсон тул өөр мастер сонгоно уу."
+              : undefined
+          }
           defaultAssignedToId={canAssignOrders(user) ? undefined : user.id}
         />
       </div>

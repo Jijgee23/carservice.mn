@@ -1,3 +1,6 @@
+import { RECEIVABLE_ORDER_WHERE } from "@/lib/orders/order-receivable";
+import { orderVinSearchClauses } from "@/lib/orders/order-list-query";
+import { formerPlate } from "@/lib/vehicle-plate";
 import { Prisma } from "@/app/generated/prisma/client";
 import {
   DateRangeFilter,
@@ -9,7 +12,7 @@ import { AddLinkButton, BtnLink } from "@/app/_components/landing-ops-ui";
 import { PageHeader } from "@/app/_components/page-header";
 import { Pagination } from "@/app/_components/pagination";
 import { buildMeta, getPageInfo } from "@/lib/pagination";
-import { customerLabel } from "@/lib/customers";
+import { customerLabel, orgRegnumLabel } from "@/lib/customers";
 import { requireUser } from "@/lib/auth";
 import { canCreate, canEdit, canView, orderAssignableWhere, workingBranchScopeId } from "@/lib/auth/roles";
 import { canAssignOrders, orderReadWhere } from "@/lib/auth/order-access";
@@ -18,6 +21,7 @@ import {
   ORDER_STATUSES,
   ORDER_STATUS_LABEL,
   PAYMENT_STATUS_LABEL,
+  INTERNAL_REPAIR_LABEL,
   POSTPAID_LABEL,
   formatTugrik,
   type OrderStatus,
@@ -26,6 +30,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { formatShortDateTime, parseSort } from "@/lib/list-sort";
 import { BulkOrdersTable, type BulkOrderRow } from "./bulk-orders-table";
+import { customerRelationSearchClauses } from "@/lib/customers/customer-search";
 
 export const metadata = {
   title: "Засварын хуудас",
@@ -40,6 +45,9 @@ export default async function OrdersPage({
     branchId?: string;
     paymentStatus?: string;
     postpaid?: string;
+    internal?: string;
+    unpaid?: string;
+    paymentMode?: string;
     customerId?: string;
     vehicleId?: string;
     dateFrom?: string;
@@ -59,6 +67,9 @@ export default async function OrdersPage({
     branchId = "",
     paymentStatus = "",
     postpaid = "",
+    internal = "",
+    unpaid = "",
+    paymentMode = "",
     customerId = "",
     vehicleId = "",
     dateFrom = "",
@@ -103,6 +114,22 @@ export default async function OrdersPage({
   }
   if (postpaid === "yes") where.isPostpaid = true;
   else if (postpaid === "no") where.isPostpaid = false;
+  if (internal === "yes") where.isInternal = true;
+  else if (internal === "no") where.isInternal = false;
+  // Нэгдсэн "Төлбөрийн нөхцөл" шүүлтүүр (postpaid/internal param-ууд хуучин холбоосонд үлдэнэ).
+  if (paymentMode === "regular") {
+    where.isPostpaid = false;
+    where.isInternal = false;
+  } else if (paymentMode === "postpaid") where.isPostpaid = true;
+  else if (paymentMode === "internal") where.isInternal = true;
+  // «Авлага» — dashboard card link: completed, non-internal, unpaid balance (same definition as lib/orders/order-receivable).
+  // Composed with AND so it narrows (never overwrites) the other filters; conflicts give an empty list.
+  if (unpaid === "1") {
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+      RECEIVABLE_ORDER_WHERE,
+    ];
+  }
   // Огнооны муж — товлосон огноо (scheduledAt)-аар шүүнэ
   const scheduledAt: Prisma.DateTimeFilter = {};
   if (dateFrom) scheduledAt.gte = new Date(`${dateFrom}T00:00:00`);
@@ -111,11 +138,12 @@ export default async function OrdersPage({
   if (q) {
     where.OR = [
       { number: { contains: q, mode: "insensitive" } },
-      { customer: { fullName: { contains: q, mode: "insensitive" } } },
-      { customer: { phone: { contains: q } } },
+      ...customerRelationSearchClauses(q, (customer) => ({ customer })),
+      { plateSnapshot: { contains: q, mode: "insensitive" } },
       { vehicle: { plate: { contains: q, mode: "insensitive" } } },
       { vehicle: { make: { contains: q, mode: "insensitive" } } },
       { vehicle: { model: { contains: q, mode: "insensitive" } } },
+      ...orderVinSearchClauses(q),
     ];
   }
 
@@ -164,7 +192,7 @@ export default async function OrdersPage({
     prisma.customer.findMany({
       where: { tenantId: user.tenantId, serviceOrders: { some: { ...orderReadWhere(user) } } },
       orderBy: { fullName: "asc" },
-      select: { id: true, fullName: true, phone: true },
+      select: { id: true, fullName: true, phone: true, isOrganization: true, orgRegnum: true },
     }),
     prisma.tenantVehicle
       .findMany({
@@ -200,6 +228,7 @@ export default async function OrdersPage({
     customerLabel: customerLabel(o.customer),
     vehicleMakeModel: `${o.vehicle.make} ${o.vehicle.model}`,
     vehiclePlate: o.vehicle.plate,
+    formerPlate: formerPlate(o.plateSnapshot, o.vehicle.plate),
     items: o.items,
     itemCount: o._count.items,
     branchName: o.branch.name,
@@ -212,6 +241,7 @@ export default async function OrdersPage({
     totalLabel: formatTugrik(o.totalAmount ? o.totalAmount.toString() : null),
     paymentStatus: o.paymentStatus as PaymentStatus,
     isPostpaid: o.isPostpaid,
+    isInternal: o.isInternal,
     status: o.status as OrderStatus,
   }));
   const employeeOptions = employees.map((e) => ({
@@ -258,7 +288,7 @@ export default async function OrdersPage({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        <SearchBox placeholder="№, үйлчлүүлэгч, машинаар хайх" />
+        <SearchBox placeholder="№, үйлчлүүлэгч, улсын/арлын дугаараар хайх" />
         <FilterSelect
           paramName="status"
           placeholder="Бүх төлөв"
@@ -282,7 +312,7 @@ export default async function OrdersPage({
           options={customers.map((c) => ({
             value: c.id,
             label: customerLabel(c),
-            hint: c.phone,
+            hint: [orgRegnumLabel(c), c.phone].filter(Boolean).join(" · "),
           }))}
         />
         <FilterSelect
@@ -306,11 +336,12 @@ export default async function OrdersPage({
           ]}
         />
         <FilterSelect
-          paramName="postpaid"
+          paramName="paymentMode"
           placeholder="Төлбөрийн нөхцөл"
           options={[
-            { value: "yes", label: POSTPAID_LABEL },
-            { value: "no", label: "Энгийн" },
+            { value: "regular", label: "Энгийн" },
+            { value: "postpaid", label: POSTPAID_LABEL },
+            { value: "internal", label: INTERNAL_REPAIR_LABEL },
           ]}
         />
         <DateRangeFilter label="Товлосон" />
@@ -322,6 +353,9 @@ export default async function OrdersPage({
             "vehicleId",
             "paymentStatus",
             "postpaid",
+            "internal",
+            "paymentMode",
+            "unpaid",
             "dateFrom",
             "dateTo",
             "status",
@@ -365,6 +399,9 @@ export default async function OrdersPage({
             vehicleId,
             paymentStatus,
             postpaid,
+            internal,
+            paymentMode,
+            unpaid,
             dateFrom,
             dateTo,
             sort: sortParam ?? "",

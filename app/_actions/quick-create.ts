@@ -28,7 +28,7 @@ async function authorize(resource: "customers" | "vehicles") {
 
 export type QuickCustomerResult = {
   ok: boolean;
-  customer?: { id: string; fullName: string; phone: string };
+  customer?: { id: string; fullName: string; phone: string; isOrganization?: boolean; orgName?: string | null; orgRegnum?: string | null };
   fieldErrors?: Record<string, string>;
   message?: string;
 };
@@ -38,6 +38,10 @@ export async function quickCreateCustomerAction(input: {
   phone: string;
   email?: string | null;
   note?: string | null;
+  isOrganization?: boolean;
+  orgRegnum?: string | null;
+  orgName?: string | null;
+  orgEmail?: string | null;
 }): Promise<QuickCustomerResult> {
   let user;
   try {
@@ -54,7 +58,16 @@ export async function quickCreateCustomerAction(input: {
   try {
     result = await createCustomerCommand({
       actor: user,
-      data: { fullName: input.fullName, phone: input.phone, email: input.email, note: input.note },
+      data: {
+        fullName: input.fullName,
+        phone: input.phone,
+        email: input.email,
+        note: input.note,
+        isOrganization: input.isOrganization === true,
+        orgRegnum: input.orgRegnum ?? null,
+        orgName: input.orgName ?? null,
+        orgEmail: input.orgEmail ?? null,
+      },
       // Түүх: энэ зам урьд нь MAX_CUSTOMERS шалгадаггүй байсан. D-154
       // (2026-09-22) шийдвэрээр хязгаар одоо бүх зам дээр үйлчилнэ — команд
       // өөрөө шалгадаг тул хязгаарт хүрсэн tenant энэ modal-аас блоклогдоно.
@@ -79,6 +92,9 @@ export async function quickCreateCustomerAction(input: {
       id: result.customer.id,
       fullName: result.customer.fullName,
       phone: result.customer.phone,
+      isOrganization: result.customer.isOrganization,
+      orgName: result.customer.orgName,
+      orgRegnum: result.customer.orgRegnum,
     },
   };
 }

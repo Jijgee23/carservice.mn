@@ -11,6 +11,13 @@ import {
   ReservationError,
 } from "@/lib/appointment-reservations";
 import { AppointmentCommandError, type AppointmentCommandActor } from "@/lib/appointments/appointment-commands";
+import {
+  assertCanSetAppointmentAssignee,
+  throwAssigneeRejection,
+  validateAppointmentAssignee,
+} from "@/lib/appointments/appointment-assignee";
+import { resolveCreateAssignee } from "@/lib/appointments/appointment-assignee-rule";
+import { canAssignOrders } from "@/lib/auth/order-access";
 
 export type RegisterAppointmentByStaffInput = {
   actor: AppointmentCommandActor;
@@ -21,6 +28,8 @@ export type RegisterAppointmentByStaffInput = {
   note: string | null;
   categoryIds: string[];
   confirmed?: boolean;
+  /** QA #28: required for orders.assign users; others default to themselves. */
+  assignedToId?: string | null;
 };
 
 export type RegisterAppointmentByStaffResult = {
@@ -76,6 +85,17 @@ export async function registerAppointmentByStaffCommand(
     );
   }
 
+  // Same rule as order creation: master required (orders.assign users pick;
+  // everyone else is assigned to themselves); others need `orders.assign`.
+  const resolvedAssignee = resolveCreateAssignee({
+    canAssign: canAssignOrders(actor),
+    actorId: actor.id,
+    requested: input.assignedToId,
+  });
+  if (!resolvedAssignee.ok) throwAssigneeRejection(resolvedAssignee);
+  const assignedToId = resolvedAssignee.assigneeId;
+  assertCanSetAppointmentAssignee(actor, assignedToId);
+
   const [branch, customer, vehicle] = await Promise.all([
     prisma.branch.findFirst({ where: { id: branchId, tenantId: actor.tenantId }, select: { id: true, name: true } }),
     prisma.customer.findFirst({
@@ -125,6 +145,11 @@ export async function registerAppointmentByStaffCommand(
       requestedAt,
       note: note || null,
       confirmed,
+      assignedToId,
+      // Eligibility is checked inside the booking transaction (row-locks the
+      // assignee/role, exactly as order creation does).
+      validateAssignee: (tx, assigneeBranchId) =>
+        validateAppointmentAssignee(tx, { tenantId: actor.tenantId, assigneeId: assignedToId, branchId: assigneeBranchId }),
     });
   } catch (error) {
     if (error instanceof ReservationConflictError) {
@@ -144,7 +169,7 @@ export async function registerAppointmentByStaffCommand(
     entityId: created.id,
     action: "CREATE",
     summary: "Утсаар цаг бүртгэсэн",
-    after: { customerId, vehicleId, requestedAt: requestedAt.toISOString(), status: "CONFIRMED" },
+    after: { customerId, vehicleId, assignedToId, requestedAt: requestedAt.toISOString(), status: "CONFIRMED" },
   });
 
   // D-191: ажилтан утсаар бүртгэсэн ч энэ Customer нь онлайн Account-тай

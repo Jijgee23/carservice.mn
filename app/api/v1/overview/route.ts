@@ -13,6 +13,8 @@
 // plain decimal strings — `JSON.stringify` cannot serialize `Decimal`
 // sensibly on its own.
 
+import { prisma } from "@/lib/prisma";
+import { findOrderIdsWithLockedPayment } from "@/lib/cash/session-attach";
 import { jsonError, jsonOk, requireApiUser } from "@/lib/api";
 import { rejectUnknownParams } from "@/lib/list-query-params";
 import { resolveWorkingBranch } from "@/lib/auth/api-branch";
@@ -39,6 +41,7 @@ export async function GET(req: Request) {
   const data = await loadOverviewData(
     {
       tenantId: auth.user.tenantId,
+      orderAccess: auth.user,
       ...(scopeResult.branchId ? { workingBranchId: scopeResult.branchId } : {}),
     },
     {
@@ -48,6 +51,7 @@ export async function GET(req: Request) {
     },
   );
 
+  const lockedOrderIds = await findOrderIdsWithLockedPayment(prisma, auth.user.tenantId, data.recentlyUpdatedOrders.map((o) => o.id));
   return jsonOk({
     overview: {
       incomeRange: {
@@ -78,6 +82,8 @@ export async function GET(req: Request) {
         changePct: data.income.changePct,
         points: data.income.points,
       },
+      // Сонгосон хугацааны дууссан дотоод засварын нийт дүн (орлогод орохгүй).
+      internalCost: data.internalCost.toString(),
       subscription: data.activeSub
         ? {
             plan: data.activeSub.subscription.plan,
@@ -89,10 +95,13 @@ export async function GET(req: Request) {
       planLimits: data.planLimits,
       postpaid: {
         vehicleCount: data.postpaidVehicleCount,
+        // Field name kept for compatibility. QA #11: value is now the outstanding balance of ALL
+        // completed non-internal orders (postpaid or not), not postpaid-only.
         receivable: data.receivable.toString(),
       },
       recentlyUpdatedOrders: data.recentlyUpdatedOrders.map((o) => ({
         id: o.id,
+        hasLockedPayment: lockedOrderIds.has(o.id),
         number: o.number,
         status: o.status,
         updatedAt: o.updatedAt.toISOString(),

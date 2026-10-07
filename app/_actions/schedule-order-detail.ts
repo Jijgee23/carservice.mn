@@ -13,6 +13,8 @@ import { canViewOrder, canEditOrder } from "@/lib/auth/order-access";
 import { tenantVisibleTemplateWhere } from "@/lib/diagnostics";
 import { prisma } from "@/lib/prisma";
 import type { OrderItemLite } from "@/app/dashboard/orders/[id]/order-items";
+import { PAYMENT_LEDGER_SELECT } from "@/lib/orders/order-payment-commands";
+import { findLockedPaymentIds } from "@/lib/cash/session-attach";
 import type { OrderPaymentRow } from "@/app/dashboard/orders/[id]/order-payments-list";
 import type {
   DiagnosticTemplateOption,
@@ -149,8 +151,9 @@ export async function getScheduleOrderDetail(
   const orderPayments = await prisma.orderPayment.findMany({
     where: { orderId: order.id, status: { not: "PENDING" } },
     orderBy: { createdAt: "desc" },
-    select: { id: true, amount: true, method: true, status: true, createdAt: true },
+    select: PAYMENT_LEDGER_SELECT,
   });
+  const lockedPaymentIds = await findLockedPaymentIds(prisma, user.tenantId, orderPayments.map((p) => p.id));
   const remainingAmount = (order.totalAmount ?? new Prisma.Decimal(0))
     .minus(order.paidAmount ?? new Prisma.Decimal(0))
     .toString();
@@ -216,6 +219,9 @@ export async function getScheduleOrderDetail(
         method: p.method,
         status: p.status,
         createdAt: p.createdAt.toISOString(),
+        bank: p.bank,
+        settlementId: p.settlementId,
+        locked: lockedPaymentIds.has(p.id),
       })),
       canRecordPayments: canCreate(user, "payments"),
       canReversePayments: canDelete(user, "payments"),

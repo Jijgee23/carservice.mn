@@ -6,6 +6,12 @@ import {
   type AppointmentStatus,
 } from "@/lib/appointments";
 import { customerLabel } from "@/lib/customers";
+import {
+  appointmentAssigneeLabel,
+  assigneeOptionsForBranch,
+  emptyAssigneeReason,
+  type AssigneeCandidate,
+} from "@/lib/appointments/appointment-assignee-label";
 import type { ScheduleIssue } from "@/lib/branch-schedule";
 import {
   type BranchScheduleAppointmentRow,
@@ -78,6 +84,8 @@ export type DayRow = {
   endsAtDayBoundary: boolean;
   uncertain: boolean;
   name: string;
+  // QA #28: хариуцах мастер (хуучин оноолтыг ч харуулна), байхгүй бол null.
+  assigneeName: string | null;
   // Түүхий төлөв — `statusLabel`/`statusClass` нь жагсаалтын badge-д зориулагдсан
   // бол `GridSchedule` блокийн өнгийг төлвөөр (`STATUS_COLOR`) шийддэг тул
   // класс задлан унших биш, enum-ыг нь шууд авна.
@@ -125,6 +133,8 @@ export function buildDayRows(
   // "Засварын хуудас үүсгэх" линкэд `next`-ээр дамжуулж, захиалга
   // үүсгэсний дараа яг энэ хуудас руу буцаах боломж олгоно.
   returnTo?: string,
+  // QA #28: a master-less PENDING appointment needs a master to be confirmed.
+  assignees?: { candidates: AssigneeCandidate[]; onlyUserId: string | null },
 ): { rows: DayRow[]; issues: ScheduleIssue[] } {
   // Selection rule (which interval rows belong to this appointments-only
   // view, and resolving an order-sourced interval back to the appointment it
@@ -200,6 +210,15 @@ export function buildDayRows(
                 (paymentStatus === "NOT_REQUIRED" || paymentStatus === "PAID")
               }
               overdue={overdue}
+              needsAssignee={!appt.assignedTo}
+              assigneeOptions={
+                assignees
+                  ? assigneeOptionsForBranch(assignees.candidates, appt.branchId, {
+                      onlyUserId: assignees.onlyUserId,
+                    })
+                  : null
+              }
+              assigneeEmptyReason={assignees ? emptyAssigneeReason(assignees.onlyUserId) : null}
             />
           ) : null}
           {showArrivalActions && appt ? (
@@ -241,6 +260,7 @@ export function buildDayRows(
         endsAtDayBoundary: row.endMs === schedule.rangeEnd.getTime(),
         uncertain: row.uncertain,
         name,
+        assigneeName: appointmentAssigneeLabel(appt?.assignedTo),
         status: appt?.status ?? null,
         statusLabel,
         statusClass,

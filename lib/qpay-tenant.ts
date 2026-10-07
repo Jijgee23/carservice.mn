@@ -17,6 +17,7 @@ export type {
   QPayPaymentStatus,
   QPayCheckResponse,
   QPayExactCheckResult,
+  QPayCancelInvoiceResult,
 } from "@/lib/qpay-core";
 
 type TenantQPaySettingsFields = QPayTokenFields & { enabled: boolean };
@@ -54,6 +55,9 @@ export const TenantQPayService = {
 
   getInvoiceUrls: (tenantId: string, invoiceId: string) =>
     client.getInvoiceUrls(tenantId, invoiceId),
+
+  /** Provider-side invoice cancel (DELETE /invoice/{id}); never throws on HTTP errors. */
+  cancelInvoice: (tenantId: string, invoiceId: string) => client.cancelInvoice(tenantId, invoiceId),
 
   /** Legacy number-shaped adapter for the pre-ledger order payment worker. */
   checkPayment: (tenantId: string, invoiceId: string, expectedAmount?: number) =>

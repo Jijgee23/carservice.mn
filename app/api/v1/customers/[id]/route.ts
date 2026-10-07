@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import {
   CustomerCommandError,
   deleteCustomerCommand,
+  orgInputFromBody,
   updateCustomerCommand,
 } from "@/lib/customers/customer-commands";
 
@@ -19,6 +20,10 @@ const CUSTOMER_DETAIL_SELECT = {
   phone: true,
   email: true,
   note: true,
+  isOrganization: true,
+  orgRegnum: true,
+  orgName: true,
+  orgEmail: true,
   createdAt: true,
   tenantVehicles: {
     where: { isActive: true },
@@ -94,6 +99,10 @@ export async function GET(
       phone: customer.phone,
       email: customer.email,
       note: customer.note,
+      isOrganization: customer.isOrganization,
+      orgRegnum: customer.orgRegnum,
+      orgName: customer.orgName,
+      orgEmail: customer.orgEmail,
       createdAt: customer.createdAt,
     },
     vehicles,
@@ -137,6 +146,7 @@ export async function PATCH(
         phone: typeof phone === "string" ? phone : "",
         email: typeof email === "string" ? email : null,
         note: typeof note === "string" ? note : null,
+        ...orgInputFromBody(body as Record<string, unknown>),
       },
     });
     return jsonOk({ customer: updated });

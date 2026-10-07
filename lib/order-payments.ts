@@ -2,9 +2,35 @@ import "server-only";
 
 import { Prisma } from "@/app/generated/prisma/client";
 import { logAudit } from "@/lib/audit";
+import { postPaymentIncome } from "@/lib/cash/sync";
 import { formatTugrik, type PaymentStatus } from "@/lib/orders";
+import { withOrderTransaction } from "@/lib/order-time-booking";
+import { recomputeOrderPaymentTotals } from "@/lib/orders/order-payment-totals";
 import { prisma } from "@/lib/prisma";
 import { TenantQPayService } from "@/lib/qpay-tenant";
+import {
+  cancelPendingQPayAtProvider,
+  defaultQPayCancelDeps,
+  QPAY_CANCEL_FAILED_MESSAGE,
+  QPAY_INVOICE_PARTIALLY_PAID_MESSAGE,
+  QPAY_PREVIOUS_PAID_MESSAGE,
+  type QPayCancelOutcome,
+} from "@/lib/orders/qpay-cancel";
+
+/** Provider-side cancel for the legacy (non-command) paths; the confirm path is this file's own `confirmOrderQPayPayment`. */
+async function providerCancelLegacy(
+  tenantId: string,
+  userId: string,
+  payment: { id: string; orderId: string; amount: { toString(): string }; qpayInvoiceId: string | null },
+): Promise<QPayCancelOutcome> {
+  return cancelPendingQPayAtProvider(
+    { tenantId, userId, payment },
+    defaultQPayCancelDeps(async (paymentId) => {
+      const r = await confirmOrderQPayPayment(tenantId, userId, paymentId);
+      return r.ok && r.paid;
+    }),
+  );
+}
 
 export type OrderQPayCheckResult =
   | {
@@ -63,6 +89,9 @@ export async function confirmOrderQPayPayment(
       qpayPaymentId: payment.qpayPaymentId,
     };
   }
+  if (payment.status !== "PENDING") {
+    return { ok: true, paid: false, message: "Энэ QPay нэхэмжлэх хүчингүй болсон байна." };
+  }
   if (!payment.qpayInvoiceId) {
     return { ok: false, reason: "no_invoice", message: "QPay invoice байхгүй." };
   }
@@ -88,40 +117,33 @@ export async function confirmOrderQPayPayment(
 
   const paidAt = check.paidAt ?? new Date();
   try {
-    await prisma.$transaction(async (tx) => {
-      const fresh = await tx.orderPayment.findUnique({
-        where: { id: payment.id },
-        select: { status: true },
-      });
-      if (fresh?.status === "PAID") return;
-
-      await tx.orderPayment.update({
-        where: { id: payment.id },
+    // Same order-row lock as every other payment path, so paid totals are read
+    // under the lock. Only a PENDING invoice may become PAID: a CANCELLED one
+    // (e.g. closed by a postpaid settlement) must never be revived by a late QR payment.
+    const applied = await withOrderTransaction(tenantId, payment.orderId, { id: true, totalAmount: true }, async (tx, raw) => {
+      const order = raw as { id: string; totalAmount: Prisma.Decimal | null } | null;
+      if (!order) return false;
+      const moved = await tx.orderPayment.updateMany({
+        where: { id: payment.id, tenantId, status: "PENDING" },
         data: { status: "PAID", paidAt, qpayPaymentId: check.paymentId },
       });
+      if (moved.count === 0) return false;
 
-      // Захиалгын paidAmount/paymentStatus-ийг шинэчлэх — гаднаас уншсан
-      // (HTTP round-trip-ийн өмнөх) хуучин утга биш, транзакц дотор дахин
-      // уншсан шинэ утгаас тооцно (зэрэгцээ бэлнээр төлсөн зэрэг өөрчлөлт
-      // алдагдахаас сэргийлнэ).
-      const freshOrder = await tx.serviceOrder.findUniqueOrThrow({
-        where: { id: payment.orderId },
-        select: { totalAmount: true, paidAmount: true },
-      });
-      const total = freshOrder.totalAmount ?? new Prisma.Decimal(0);
-      const prevPaid = freshOrder.paidAmount ?? new Prisma.Decimal(0);
-      const newPaid = prevPaid.plus(payment.amount);
-      const nextStatus = newPaid.gte(total) ? "PAID" : "PARTIAL";
-
-      await tx.serviceOrder.update({
-        where: { id: payment.orderId },
-        data: {
-          paidAmount: newPaid,
-          paymentStatus: nextStatus,
-          paidAt: nextStatus === "PAID" ? paidAt : null,
+      // Cash ledger: income entry in the same transaction (idempotent).
+      await postPaymentIncome(tx, {
+        tenantId,
+        actorId: userId,
+        payment: {
+          id: payment.id,
+          orderId: payment.orderId,
+          amount: payment.amount,
+          method: payment.method,
+          bank: payment.bank,
+          paidAt,
+          settlementId: payment.settlementId,
         },
       });
-
+      const totals = await recomputeOrderPaymentTotals(tx, tenantId, order);
       await logAudit(
         {
           tenantId,
@@ -129,17 +151,24 @@ export async function confirmOrderQPayPayment(
           entity: "ServiceOrder",
           entityId: payment.orderId,
           action: "PAYMENT_CHANGE",
-          summary: `QPay PAID · ${formatTugrik(payment.amount.toString())} → ${nextStatus}`,
+          summary: `QPay PAID · ${formatTugrik(payment.amount.toString())} → ${totals.status}`,
           after: {
             paymentId: payment.id,
             qpayPaymentId: check.paymentId,
-            newPaidAmount: newPaid.toString(),
-            paymentStatus: nextStatus,
+            newPaidAmount: totals.paid.toString(),
+            paymentStatus: totals.status,
           },
         },
         tx,
       );
+      return true;
     });
+    if (!applied) {
+      const current = await prisma.orderPayment.findFirst({ where: { id: payment.id, tenantId }, select: { status: true } });
+      if (current?.status !== "PAID") {
+        return { ok: true, paid: false, message: "Энэ QPay нэхэмжлэх хүчингүй болсон байна." };
+      }
+    }
   } catch (e) {
     return {
       ok: false,
@@ -234,8 +263,13 @@ export async function createOrReuseOrderQPayInvoice(
         },
       };
     }
-    await prisma.orderPayment.update({
-      where: { id: pending.id },
+    // Provider first (outside any tx); only then the conditional local cancel.
+    const outcome = await providerCancelLegacy(tenantId, userId, pending);
+    if (outcome === "paid") return { ok: false, reason: "already_paid", message: QPAY_PREVIOUS_PAID_MESSAGE };
+    if (outcome === "partial") return { ok: false, reason: "qpay_error", message: QPAY_INVOICE_PARTIALLY_PAID_MESSAGE };
+    if (outcome === "failed") return { ok: false, reason: "qpay_error", message: QPAY_CANCEL_FAILED_MESSAGE };
+    await prisma.orderPayment.updateMany({
+      where: { id: pending.id, tenantId, status: "PENDING" },
       data: { status: "CANCELLED" },
     });
   }
@@ -308,7 +342,9 @@ export async function createOrReuseOrderQPayInvoice(
   };
 }
 
-export type CancelOrderQPayInvoiceResult = { ok: true; orderId: string } | { ok: false };
+export type CancelOrderQPayInvoiceResult =
+  | { ok: true; orderId: string }
+  | { ok: false; code?: "QPAY_INVOICE_PAID" | "QPAY_INVOICE_PARTIALLY_PAID" | "QPAY_CANCEL_FAILED"; message?: string };
 
 /**
  * Хүлээгдэж буй QPay QR-ийг цуцлана (бүртгэгдээгүй л бол — PAID болсныг
@@ -336,9 +372,15 @@ export async function cancelOrderQPayInvoice(
       status: "PENDING",
       ...(orderId ? { orderId } : {}),
     },
-    select: { orderId: true, amount: true },
+    select: { id: true, orderId: true, amount: true, qpayInvoiceId: true },
   });
   if (!payment) return { ok: false };
+
+  // Provider first (outside any tx); a paid/partial/unverifiable invoice must stay PENDING locally.
+  const outcome = await providerCancelLegacy(tenantId, userId, payment);
+  if (outcome === "paid") return { ok: false, code: "QPAY_INVOICE_PAID", message: "Энэ QPay нэхэмжлэх төлөгдсөн байна. Төлбөрийг бүртгэлээ шалгана уу." };
+  if (outcome === "partial") return { ok: false, code: "QPAY_INVOICE_PARTIALLY_PAID", message: QPAY_INVOICE_PARTIALLY_PAID_MESSAGE };
+  if (outcome === "failed") return { ok: false, code: "QPAY_CANCEL_FAILED", message: QPAY_CANCEL_FAILED_MESSAGE };
 
   await prisma.orderPayment.updateMany({
     where: { id: paymentId, tenantId, status: "PENDING" },

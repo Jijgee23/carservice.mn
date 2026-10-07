@@ -40,6 +40,9 @@ function canSeeView(
   // Цэгтэй бол шууд permission code гэж үзнэ (ж: "audit.view") — CRUD-ийн
   // `${view}.view` дүрэмд ордоггүй standalone эрхэд.
   if (view.includes(".")) return perms.includes(view);
+  // Засварын хуудас "Өөрийн" хүрээтэй (orders.viewOwn) ажилтанд ч харагдана —
+  // orderViewScope-тэй ижил дүрэм.
+  if (view === "orders" && perms.includes("orders.viewOwn")) return true;
   return perms.includes(`${view}.view`);
 }
 
@@ -144,6 +147,26 @@ const navItems: NavItem[] = [
   },
 
   {
+    href: "/dashboard/cash/income",
+    view: "cash.manage",
+    label: "Касс",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="6" width="20" height="12" rx="2" />
+        <circle cx="12" cy="12" r="2.5" />
+        <path d="M6 12h.01M18 12h.01" />
+      </svg>
+    ),
+    children: [
+      { href: "/dashboard/cash/income", label: "Орлого" },
+      { href: "/dashboard/cash/expense", label: "Зарлага" },
+      { href: "/dashboard/cash/sessions", label: "Кассын ээлж" },
+      { href: "/dashboard/cash/settlements", label: "Тооцоо нийлэлт" },
+      { href: "/dashboard/cash/types", label: "Ангилал" },
+      { href: "/dashboard/cash/report", label: "Мөнгөн гүйлгээний тайлан" },
+    ],
+  },
+  {
     href: "/dashboard/services",
     view: "services",
     label: "Үйлчилгээ",
@@ -214,6 +237,8 @@ const secondaryItems: NavItem[] = [
       { href: "/dashboard/settings/subscription", label: "Багц" },
       // `audit.view` эрхтэй (owner биш) ажилтанд бүлэг зөвхөн энэ child-аар харагдана.
       { href: "/dashboard/audit", label: "Аудит лог", view: "audit" },
+      // `cash.manage` эрхтэй (owner биш) ажилтанд мөн зөвхөн энэ child-аар харагдана.
+      { href: "/dashboard/banks", label: "Банк", view: "cash.manage" },
     ],
   },
   {

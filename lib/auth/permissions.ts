@@ -55,13 +55,15 @@ type StandaloneCode =
   | "audit.view"
   | "orders.assignable"
   | "orders.assign"
+  | "orders.closeUnpaidPostpaid"
   | "orders.viewOwn"
   | "orders.editOwn"
   | "orders.itemStatus"
   | "orders.itemPrice"
   | "orders.itemHistory"
   | "customers.notify"
-  | "employees.schedule";
+  | "employees.schedule"
+  | "cash.manage";
 
 export type PermissionCode = CrudCode | StandaloneCode;
 
@@ -106,6 +108,12 @@ export const PERMISSIONS: readonly PermissionDef[] = [
     code: "orders.assign",
     label: "Засварын хуудсанд хариуцагч оноох",
     description: "Засварын хуудсанд ажилтан хариуцагчаар оноох.",
+    group: "Захиалга",
+  },
+  {
+    code: "orders.closeUnpaidPostpaid",
+    label: "Дараа тооцоо хаах, тооцоо нийлэх",
+    description: "Дараа тооцоот засварын хуудсыг төлбөр дутуу байхад дуусгах, дууссаны дараа төлбөр бүртгэх/буцаах (нягтлан).",
     group: "Захиалга",
   },
   {
@@ -161,6 +169,13 @@ export const PERMISSIONS: readonly PermissionDef[] = [
       "Ажилтны 'Ажлын хувиар' (аль салбарт, ямар цагаар ажилладаг)-ыг өөрчлөх. Харах эрх employees.view-тэй хамт олгогдоно.",
     group: "Удирдлага",
   },
+  {
+    code: "cash.manage",
+    label: "Касс удирдах",
+    description:
+      "Касс бүхэлд нь: бүх салбарын орлого/зарлагын бүртгэл харах, гараар нэмэх/хүчингүй болгох, ээлж нээх/хаах, дараа тооцоо хаах, тайлан татах, банк тохируулах.",
+    group: "Захиалга",
+  },
 ] as const;
 
 export const PERMISSION_CODES = PERMISSIONS.map((p) => p.code);
@@ -198,9 +213,11 @@ export const STANDALONE_PERMISSIONS: ReadonlyArray<PermissionDef> = PERMISSIONS.
     p.code === "audit.view" ||
     p.code === "orders.assignable" ||
     p.code === "orders.assign" ||
+    p.code === "orders.closeUnpaidPostpaid" ||
     p.code === "orders.itemStatus" ||
     p.code === "orders.itemPrice" ||
     p.code === "orders.itemHistory" ||
     p.code === "customers.notify" ||
-    p.code === "employees.schedule",
+    p.code === "employees.schedule" ||
+    p.code === "cash.manage",
 );

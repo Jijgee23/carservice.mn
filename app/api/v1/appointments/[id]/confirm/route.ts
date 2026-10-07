@@ -52,10 +52,33 @@ export async function POST(
   const scopeResult = await resolveWorkingBranch(req, auth.user);
   if (scopeResult.response) return scopeResult.response;
 
+  // QA #28: body is optional, but a master-less appointment needs a master to
+  // be confirmed: send `assignedToId` (string), or omit it when the caller
+  // lacks orders.assign (they become the master). Otherwise 422
+  // ASSIGNEE_REQUIRED. `null` never clears a stored master (422).
+  let assignedToId: string | null | undefined;
+  const raw = await req.text();
+  if (raw.trim()) {
+    let body: unknown;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      return jsonError(400, "JSON body буруу байна.");
+    }
+    const value = body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>).assignedToId
+      : undefined;
+    if (value !== undefined && value !== null && typeof value !== "string") {
+      return jsonError(400, "assignedToId нь string эсвэл null байна.");
+    }
+    assignedToId = typeof value === "string" ? value.trim() || null : value;
+  }
+
   try {
     const result = await confirmAppointmentCommand({
       actor: { ...auth.user, workingBranchId: scopeResult.branchId ?? undefined },
       appointmentId: id,
+      ...(assignedToId !== undefined ? { assignedToId } : {}),
     });
     return jsonOk({ ok: true, appointmentId: result.appointmentId, status: "CONFIRMED" });
   } catch (error) {

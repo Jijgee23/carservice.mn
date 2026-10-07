@@ -4,7 +4,7 @@ import { Btn, StatCell, StatGrid, TabLink, btnClass } from "@/app/_components/la
 import { requireUser } from "@/lib/auth";
 import { workingBranchScopeId } from "@/lib/auth/roles";
 import { formatDuration } from "@/lib/category-duration";
-import { ITEM_KIND_BADGE, ORDER_STATUS_BADGE, formatTugrik } from "@/lib/orders";
+import { INTERNAL_COST_LABEL, ITEM_KIND_BADGE, ORDER_STATUS_BADGE, formatTugrik } from "@/lib/orders";
 import { IncomeChart } from "../income-chart";
 import { fmt, loadReportData, parseRange, type Range } from "./data";
 
@@ -72,6 +72,7 @@ export default async function ReportsPage({
   const data = await loadReportData(user, range, workingBranchScopeId(user));
   const {
     totalRevenue,
+    internalCost,
     completedCount,
     avgTicket,
     activeCount,
@@ -110,6 +111,10 @@ export default async function ReportsPage({
           Excel татах
         </a>
 
+        <Link href="/dashboard/cash/report" className={btnClass("ghost", "sm", "shrink-0")}>
+          Мөнгөн гүйлгээний тайлан
+        </Link>
+
         <form className="ml-auto flex items-center gap-2" action="/dashboard/reports">
           <DatePicker
             mode="range"
@@ -127,8 +132,9 @@ export default async function ReportsPage({
         </form>
       </div>
 
-      <StatGrid cols={5}>
+      <StatGrid cols={6}>
         <BigStat label="Нийт орлого" value={formatTugrik(totalRevenue)} tone="accent" />
+        <BigStat label={INTERNAL_COST_LABEL} value={formatTugrik(internalCost)} />
         <StatCell label="Дууссан засварын хуудас" value={completedCount} />
         <BigStat label="Дундаж дүн" value={formatTugrik(avgTicket)} />
         <StatCell label="Идэвхтэй" value={activeCount} />
@@ -219,6 +225,11 @@ export default async function ReportsPage({
                       <span className="font-plex-mono text-sm text-[var(--oc-muted2)]">
                         {formatTugrik(b.revenue)}{" "}
                         <span className="text-[var(--oc-muted4)]">· {b.count}</span>
+                        {b.internalCost > 0 ? (
+                          <span className="block text-right text-[11px] text-[var(--oc-muted4)]">
+                            {INTERNAL_COST_LABEL}: {formatTugrik(b.internalCost)}
+                          </span>
+                        ) : null}
                       </span>
                     </div>
                     <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
@@ -253,6 +264,11 @@ export default async function ReportsPage({
                       <span className="font-plex-mono text-sm text-[var(--oc-muted2)]">
                         {formatTugrik(t.revenue)}{" "}
                         <span className="text-[var(--oc-muted4)]">· {t.count}</span>
+                        {t.internalCost > 0 ? (
+                          <span className="block text-right text-[11px] text-[var(--oc-muted4)]">
+                            {INTERNAL_COST_LABEL}: {formatTugrik(t.internalCost)}
+                          </span>
+                        ) : null}
                       </span>
                     </div>
                     <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">

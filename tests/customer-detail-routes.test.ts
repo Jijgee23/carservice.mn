@@ -195,7 +195,7 @@ test("PATCH forwards CustomerCommandError with fieldErrors when present, status/
 
 test("route delegates to the P3-B1 commands and performs no validation/normalisation of its own", () => {
   const { full } = routeSections();
-  assert.match(full, /import \{\s*CustomerCommandError,\s*deleteCustomerCommand,\s*updateCustomerCommand,\s*\} from "@\/lib\/customers\/customer-commands"/);
+  assert.match(full, /import \{\s*CustomerCommandError,\s*deleteCustomerCommand,\s*orgInputFromBody,\s*updateCustomerCommand,\s*\} from "@\/lib\/customers\/customer-commands"/);
   assert.doesNotMatch(full, /isValidPhone|normalizePhone/, "phone validation/normalisation belongs only to the command module");
   assert.doesNotMatch(full, /code === "P2002"|code === "P2003"/, "Prisma error-code mapping belongs only to the command module");
 });

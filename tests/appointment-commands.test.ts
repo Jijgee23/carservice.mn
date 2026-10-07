@@ -93,11 +93,12 @@ test("D-136: every requireUser() catch in app/_actions/appointments.ts calls uns
     requireUserCatchStarts.push(match.index + match[0].length);
   }
   // D-135 recorded seven requireUser() catches in this file (repair, confirm,
-  // reject, no-show, reschedule's nested auth catch, arrived, bulk category).
+  // reject, no-show, reschedule's nested auth catch, arrived, bulk category);
+  // QA #28 added an eighth (setAppointmentAssigneeAction).
   assert.equal(
     requireUserCatchStarts.length,
-    7,
-    `expected 7 requireUser() catches, found ${requireUserCatchStarts.length}`,
+    8,
+    `expected 8 requireUser() catches, found ${requireUserCatchStarts.length}`,
   );
   for (const start of requireUserCatchStarts) {
     const nextLines = source.slice(start, start + 200);

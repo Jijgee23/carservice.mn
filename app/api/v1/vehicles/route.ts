@@ -1,6 +1,7 @@
 import { jsonError, jsonOk, requireApiUser, requirePermission } from "@/lib/api";
 import { requireActiveSubscriptionApi } from "@/lib/subscription-server";
 import { buildMeta } from "@/lib/pagination";
+import { vehicleOwnerIsOrganization } from "@/lib/vehicles/owner-kind";
 import { prisma } from "@/lib/prisma";
 import { VehicleCommandError, createVehicleCommand } from "@/lib/vehicles/vehicle-commands";
 import {
@@ -36,7 +37,10 @@ export async function GET(req: Request) {
       take,
       select: {
         customerId: true,
-        customer: { select: { id: true, fullName: true, phone: true } },
+        isPostpaid: true,
+        customer: {
+          select: { id: true, fullName: true, phone: true, isOrganization: true, orgName: true },
+        },
         vehicle: {
           select: {
             id: true,
@@ -46,6 +50,7 @@ export async function GET(req: Request) {
             model: true,
             year: true,
             mileage: true,
+            ownerRegnum: true,
           },
         },
       },
@@ -53,9 +58,11 @@ export async function GET(req: Request) {
     prisma.tenantVehicle.count({ where }),
   ]);
 
-  const vehicles = links.map((l) => ({
-    ...l.vehicle,
+  const vehicles = links.map(({ vehicle: { ownerRegnum, ...v }, ...l }) => ({
+    ...v,
+    ownerIsOrganization: vehicleOwnerIsOrganization(l.customer, ownerRegnum),
     customerId: l.customerId,
+    isPostpaid: l.isPostpaid,
     customer: l.customer,
   }));
 

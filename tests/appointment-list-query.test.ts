@@ -24,13 +24,14 @@ test("trims q and treats an empty or whitespace-only value as absent", () => {
   });
 });
 
-test("emits the exact five-clause web-parity OR for a present q", () => {
+test("emits the web-parity OR plus the customer regnum clause for a present q", () => {
   const { q } = parseAppointmentListQuery(new URLSearchParams("q=9911"));
   assert.deepEqual(appointmentSearchWhere(q), [
     { account: { name: { contains: "9911", mode: "insensitive" } } },
     { account: { phone: { contains: "9911" } } },
     { customer: { fullName: { contains: "9911", mode: "insensitive" } } },
     { customer: { phone: { contains: "9911" } } },
+    { customer: { orgRegnum: { startsWith: "9911" } } },
     { note: { contains: "9911", mode: "insensitive" } },
   ]);
 });

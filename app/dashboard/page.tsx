@@ -4,6 +4,7 @@ import { userRoleLabel } from "@/lib/auth/roles";
 import {
   ORDER_STATUS_BADGE,
   ORDER_STATUS_LABEL,
+  INTERNAL_COST_LABEL,
   formatTugrik,
   type OrderStatus,
 } from "@/lib/orders";
@@ -52,6 +53,7 @@ export default async function DashboardPage({
     todayOrderCount,
     planLimits,
     income,
+    internalCost,
     orderTrend,
     completedTrend,
     customerTrend,
@@ -59,7 +61,7 @@ export default async function DashboardPage({
     branchTrend,
     employeeTrend,
   } = await loadOverviewData(
-    { ...user, tenantPlan: user.tenant.plan },
+    { ...user, tenantPlan: user.tenant.plan, orderAccess: user },
     params,
   );
   const incomeUp = income.changePct == null ? true : income.changePct >= 0;
@@ -67,7 +69,7 @@ export default async function DashboardPage({
   // Статистик карт хэдэн ширхэг байгаагаас хамааруулж xl цонхон дээр яг тэр
   // тоогоор багана үүсгэнэ — ингэснээр (Авлага карт нэмэгдсэн ч) бүгд нэг
   // мөрөнд багтана, сүүлчийн мөр дутуу (1 картаар) үлдэхгүй.
-  const statCardCount = 6 + (postpaidVehicleCount > 0 ? 1 : 0);
+  const statCardCount = 6 + (postpaidVehicleCount > 0 || receivable.gt(0) ? 1 : 0);
 
   return (
     <div className="p-4 sm:p-6">
@@ -121,11 +123,11 @@ export default async function DashboardPage({
           href="/dashboard/employees"
           trend={employeeTrend}
         />
-        {postpaidVehicleCount > 0 ? (
+        {postpaidVehicleCount > 0 || receivable.gt(0) ? (
           <StatCard
-            label="Авлага (дараа төлбөрт)"
+            label="Авлага (төлөгдөөгүй)"
             value={formatTugrik(receivable.toString())}
-            href="/dashboard/orders/postpaid"
+            href="/dashboard/orders?unpaid=1"
             tone={receivable.gt(0) ? "warn" : "ok"}
           />
         ) : null}
@@ -199,6 +201,15 @@ export default async function DashboardPage({
                 <span className="text-[var(--oc-muted3)]">өмнөх үе</span>
               </div>
             ) : null}
+            <div
+              title="Дотоод засварын дүн орлогод орохгүй"
+              className="mt-2 text-xs text-[var(--oc-muted3)]"
+            >
+              {INTERNAL_COST_LABEL}:{" "}
+              <span className="font-plex-mono text-[var(--oc-ink2)]">
+                {formatTugrik(internalCost.toString())}
+              </span>
+            </div>
           </div>
         </div>
 

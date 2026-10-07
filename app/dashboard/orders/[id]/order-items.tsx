@@ -29,6 +29,9 @@ import {
   type ServiceItemStatus,
 } from "@/lib/orders";
 
+const COMPLETED_LOCKED_REASON = "Дууссан ажлыг засах боломжгүй.";
+const DIAGNOSTIC_REPORT_LINKED_REASON = "Оношилгоо бөглөгдсөн тул явцыг буцаах боломжгүй.";
+
 // Цуцлахаас бусад бүх явц — чөлөөтэй сонгож болно.
 const CHANGEABLE_STATUSES = SERVICE_ITEM_STATUSES.filter(
   (s) => s !== "CANCELLED",
@@ -188,6 +191,12 @@ export function OrderItems({
         </p>
       ) : null}
 
+      {items.some((i) => i.status === "COMPLETED") && (canEdit || canChangeStatus || canChangePrice) ? (
+        <p className="px-5 py-2 text-xs text-[var(--oc-muted3)] border-b border-[var(--oc-line)]">
+          Дууссан ажлыг засах, цуцлах боломжгүй (явцыг буцааж болно, бөглөгдсөн оношилгооноос бусад). Алдааг засахын тулд шинэ мөр нэмнэ үү.
+        </p>
+      ) : null}
+
       {/* Мөрүүд — багана толгойтой хүснэгт: Тоо / Нэгж үнэ / Дүн зэрэгцэнэ */}
       <table className="w-full text-sm">
         <thead>
@@ -241,6 +250,11 @@ export function OrderItems({
               {g.items.map((it, itemIndex) => {
                 const status = it.status as ServiceItemStatus;
                 const cancelled = status === "CANCELLED";
+                // Дууссан ажил түгжигдсэн — засах/цуцлахыг сервер ч хориглоно. Явцыг
+                // буцааж болно, харин тайлантай оношилгооны мөрийг буцаахгүй.
+                const completedLocked = status === "COMPLETED";
+                const statusLocked =
+                  completedLocked && it.kind === "DIAGNOSTIC" && !!it.diagnosticReportId;
                 const needsReport =
                   it.kind === "DIAGNOSTIC" && !it.diagnosticReportId;
                 const rowStatuses = needsReport
@@ -310,7 +324,7 @@ export function OrderItems({
                       <PriceCell
                         itemId={it.id}
                         unitPrice={it.unitPrice}
-                        editable={canChangePrice && !cancelled && !paymentLocked}
+                        editable={canChangePrice && !cancelled && !completedLocked && !paymentLocked}
                       />
                     </td>
                     <td
@@ -329,13 +343,23 @@ export function OrderItems({
                               status={status}
                               statuses={rowStatuses}
                               disabledReason={
-                                !orderStarted
+                                statusLocked
+                                  ? DIAGNOSTIC_REPORT_LINKED_REASON
+                                  : !orderStarted
                                   ? "Захиалга эхлээгүй байна — эхлүүлсний дараа явц өөрчлөх боломжтой"
-                                  : it.kind === "DIAGNOSTIC" && status === "PENDING"
+                                  : needsReport && status === "PENDING"
                                     ? "Оношилгоо эхлээгүй байна — бөглөж эхлэхэд автоматаар \"Эхэлсэн\" болно"
                                     : null
                               }
                             />
+                          ) : null}
+                          {completedLocked && !canChangeStatus ? (
+                            <span
+                              title={COMPLETED_LOCKED_REASON}
+                              className="text-[11px] text-[var(--oc-muted3)] cursor-not-allowed"
+                            >
+                              Түгжигдсэн
+                            </span>
                           ) : null}
                           {canEdit && !paymentLocked && isServiceItemCancellable(status) ? (
                             <ConfirmForm

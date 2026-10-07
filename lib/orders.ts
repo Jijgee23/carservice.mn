@@ -102,6 +102,25 @@ export const POSTPAID_LABEL = "Дараа төлбөрт";
 export const POSTPAID_BADGE =
   "bg-sky-500/15 text-sky-300 border border-sky-500/25 light:bg-sky-100 light:border-sky-300 light:text-sky-700";
 
+// Дотоод засвар — төлбөргүй, дотоод зардалд бүртгэгдэнэ (дараа төлбөртэй зэрэг байж болохгүй).
+export const INTERNAL_LABEL = "Дотоод";
+export const INTERNAL_BADGE =
+  "bg-slate-500/15 text-slate-300 border border-slate-500/25 light:bg-slate-100 light:border-slate-300 light:text-slate-700";
+export const INTERNAL_REPAIR_LABEL = "Дотоод засвар";
+export const INTERNAL_COST_LABEL = "Дотоод зардал";
+export const INTERNAL_POSTPAID_CONFLICT_MESSAGE = "Дотоод засвар болон дараа тооцоо зэрэг байж болохгүй.";
+export const INTERNAL_NO_PAYMENT_MESSAGE = "Дотоод засварт төлбөр бүртгэхгүй.";
+export const INTERNAL_HAS_PAYMENTS_MESSAGE = "Төлбөр бүртгэгдсэн захиалгыг дотоод засвар болгох боломжгүй.";
+export const INTERNAL_PAYMENT_NOTE = "Дотоод засвар — төлбөргүй, дотоод зардалд бүртгэгдэнэ.";
+
+export const POSTPAID_CLOSE_FORBIDDEN_MESSAGE =
+  "Дараа тооцоот захиалгыг төлбөр дутуу байхад зөвхөн эрхтэй хэрэглэгч (нягтлан) хаана.";
+
+export const POSTPAID_SETTLEMENT_FORBIDDEN_MESSAGE =
+  "Дууссан дараа тооцоот захиалгын төлбөрийг зөвхөн эрхтэй хэрэглэгч (нягтлан) бүртгэнэ.";
+export const POSTPAID_SETTLEMENT_NOTE =
+  "Дууссан дараа тооцоот захиалгын төлбөрийг нягтлан бүртгэнэ.";
+
 export const ITEM_KINDS = ["LABOR", "DIAGNOSTIC", "PART", "FEE"] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];
 

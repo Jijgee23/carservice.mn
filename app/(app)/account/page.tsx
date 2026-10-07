@@ -115,7 +115,7 @@ export default async function AccountPage({
   // D-083: терминал, хэзээ ч биелэгдээгүй цаг (ServiceOrder огт үүсээгүй)
   // мөнхөд энд үлдэхгүй байх ёстой — /account/history рүү ч хэзээ ч
   // очихгүй (тэр нь зөвхөн COMPLETED-г шүүнэ).
-  const appointments = await prisma.appointment.findMany({
+  const appointmentsRaw = await prisma.appointment.findMany({
     where: {
       accountId: account.id,
       NOT: [
@@ -129,9 +129,13 @@ export default async function AccountPage({
       branch: { select: { name: true } },
       category: { select: { name: true } },
       payment: { select: { id: true, amount: true } },
-      serviceOrder: { select: { status: true, paymentStatus: true, totalAmount: true, paidAmount: true } },
+      serviceOrder: { select: { status: true, paymentStatus: true, totalAmount: true, paidAmount: true, isInternal: true } },
     },
   });
+  // Дотоод засвар үйлчлүүлэгчид харагдахгүй (төлөв, "Төлбөр дутуу" тэмдэг ч үгүй).
+  const appointments = appointmentsRaw.map((a) =>
+    a.serviceOrder?.isInternal ? { ...a, serviceOrder: null } : a,
+  );
 
   // Идэвхтэй (хүлээгдэж буй/баталгаажсан) цагуудыг түрүүлж, ойрын нь дээр.
   const ACTIVE = new Set(["PENDING", "CONFIRMED"]);
@@ -162,6 +166,7 @@ export default async function AccountPage({
     await prisma.serviceOrder.findMany({
       where: {
         customer: { accountId: account.id },
+        isInternal: false,
         appointment: null,
         // D-083: цуцлагдсан walk-in захиалга ч мөн адил мөнхөд энд үлдэхгүй.
         NOT: [{ status: "COMPLETED", paymentStatus: "PAID" }, { status: "CANCELLED" }],

@@ -21,8 +21,13 @@ import {
   CreateCustomerModal,
   type CreatedCustomer,
 } from "@/app/dashboard/customers/create-customer-modal";
+import {
+  assigneeOptionsForBranch,
+  emptyAssigneeReason,
+  type AssigneeCandidate,
+} from "@/lib/appointments/appointment-assignee-label";
 import type { Weekday } from "@/lib/branches";
-import { customerLabel } from "@/lib/customers";
+import { customerLabel, customerPickerHint } from "@/lib/customers";
 
 export const APPOINTMENT_FORM_ID = "appointment-form";
 
@@ -38,7 +43,13 @@ function toLocalDateKey(iso: string): string {
 }
 
 type Branch = { id: string; name: string; openWeekdays: Weekday[] };
-type Customer = { id: string; fullName: string; phone: string };
+type Customer = {
+  id: string;
+  fullName: string;
+  phone: string;
+  isOrganization?: boolean;
+  orgRegnum?: string | null;
+};
 type Vehicle = { id: string; plate: string; make: string; model: string; customerId: string | null };
 type Category = { id: string; name: string; branchIds: string[] };
 
@@ -47,6 +58,9 @@ export function AppointmentForm({
   customers: initialCustomers,
   vehicles = [],
   categories,
+  assignees = [],
+  assigneeOnlyUserId,
+  currentUserId,
   defaultBranchId,
   initialScheduledAt,
   backHref = "/dashboard/appointments",
@@ -56,6 +70,12 @@ export function AppointmentForm({
   customers: Customer[];
   vehicles?: Vehicle[];
   categories: Category[];
+  // QA #28: хариуцах мастер сонгох боломжтой ажилтнууд (orderAssignableWhere).
+  assignees?: AssigneeCandidate[];
+  // orders.assign эрхгүй бол зөвхөн өөрийгөө сонгож болно.
+  assigneeOnlyUserId?: string | null;
+  /** Preselected as the master when eligible (QA #28, same as orders). */
+  currentUserId?: string | null;
   defaultBranchId?: string;
   // Хуваарийн хуудаснаас хоосон цаг дээр дарж орж ирсэн бол тухайн цаг
   // (ISO) — сонгосон огноо/цагийг урьдчилан бөглөнө.
@@ -74,6 +94,15 @@ export function AppointmentForm({
   const [branchId, setBranchId] = useState(defaultBranchId ?? "");
   const [customerId, setCustomerIdRaw] = useState("");
   const [vehicleId, setVehicleId] = useState("");
+  // The current user is preselected as the master when eligible for the branch.
+  const defaultAssigneeFor = (forBranchId: string) =>
+    currentUserId && forBranchId &&
+    assigneeOptionsForBranch(assignees, forBranchId, { onlyUserId: assigneeOnlyUserId }).some(
+      (o) => o.value === currentUserId,
+    )
+      ? currentUserId
+      : "";
+  const [assignedToId, setAssignedToId] = useState(() => defaultAssigneeFor(defaultBranchId ?? ""));
   function setCustomerId(id: string) {
     setCustomerIdRaw(id);
     setVehicleId("");
@@ -133,8 +162,13 @@ export function AppointmentForm({
       )
     : [];
 
+  const assigneeOptions = branchId
+    ? assigneeOptionsForBranch(assignees, branchId, { onlyUserId: assigneeOnlyUserId })
+    : [];
+
   function onBranchChange(v: string) {
     setBranchId(v);
+    setAssignedToId(defaultAssigneeFor(v));
     setSelectedIso("");
     setCategoryIds([]);
     setSelectedDateKey("");
@@ -263,7 +297,7 @@ export function AppointmentForm({
                   options={customers.map((c) => ({
                     value: c.id,
                     label: customerLabel(c),
-                    hint: c.phone,
+                    hint: customerPickerHint(c),
                   }))}
                 />
               </div>
@@ -288,6 +322,22 @@ export function AppointmentForm({
                 .filter((v) => v.customerId === customerId)
                 .map((v) => ({ value: v.id, label: `${v.plate} · ${v.make} ${v.model}` }))}
             />
+          </Field>
+
+          <Field label="Хариуцах мастер *" htmlFor="assignedToId" error={fe.assignedToId}>
+            <Select
+              id="assignedToId"
+              name="assignedToId"
+              value={assignedToId}
+              onChange={setAssignedToId}
+              error={fe.assignedToId}
+              disabled={!branchId}
+              placeholder={branchId ? "— Сонгох —" : "— Эхлээд салбар сонгоно уу —"}
+              options={assigneeOptions}
+            />
+            {branchId && assigneeOptions.length === 0 ? (
+              <p className="mt-1 text-xs text-[var(--oc-warn)]">{emptyAssigneeReason(assigneeOnlyUserId)}</p>
+            ) : null}
           </Field>
 
           <CreateCustomerModal
