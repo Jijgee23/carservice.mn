@@ -8,10 +8,9 @@ import {
   type OrderPaymentActionState,
 } from "@/app/_actions/order-payments";
 import Link from "next/link";
-import { bankLabel } from "@/lib/banks";
 import { Btn } from "@/app/_components/landing-ops-ui";
 import { NO_OPEN_SESSION_REASON, NoOpenSessionNotice } from "../../cash/session-warning";
-import { PaymentMethodModal, type PaymentChoice } from "../../_components/payment-method-modal";
+import { PaymentMethodModal, type PaymentAccountOption, type PaymentChoice } from "../../_components/payment-method-modal";
 import { QPayPanel, type PendingOrderPayment } from "./qpay-widget";
 import {
   ORDER_PAYMENT_METHOD_BADGE,
@@ -27,7 +26,8 @@ export type OrderPaymentRow = {
   method: string;
   status: string;
   createdAt: string; // ISO
-  bank: string | null;
+  bankId: string | null;
+  bankLabel: string | null;
   settlementId?: string | null; // «Нэгдсэн тооцоо» — буцаах боломжгүй
   locked?: boolean; // хаагдсан ээлжийн гүйлгээ — буцаах боломжгүй (CASH_SESSION_ENTRY_LOCKED)
 };
@@ -83,6 +83,7 @@ export function OrderPaymentsList({
   canRecord,
   canReverse,
   banks,
+  canManageAccounts = false,
   cashSessionOpen,
   qpayAvailable,
   qpayConfigured,
@@ -94,7 +95,9 @@ export function OrderPaymentsList({
   canRecord: boolean;
   canReverse: boolean;
   /** Идэвхтэй банкууд (picker-д). */
-  banks: { code: string; label: string }[];
+  banks: PaymentAccountOption[];
+  /** cash.manage: the empty picker links to /dashboard/banks. */
+  canManageAccounts?: boolean;
   /** Whether the order's branch has an open cash session; when false, record/QPay/reverse are disabled. */
   cashSessionOpen: boolean;
   /** QPay сонголтыг (modal-д) гаргах эсэх — эрх + төлөгдөөгүй төлөвөөс хамаарна. */
@@ -169,8 +172,8 @@ export function OrderPaymentsList({
                 <span className="shrink-0 text-[var(--oc-muted4)] whitespace-nowrap">
                   {fmtDateTime(p.createdAt)}
                 </span>
-                {p.bank ? (
-                  <span className="shrink-0 text-[var(--oc-muted4)]">{bankLabel(p.bank)}</span>
+                {p.bankLabel ? (
+                  <span className="shrink-0 text-[var(--oc-muted4)]">{p.bankLabel}</span>
                 ) : null}
                 {p.settlementId ? (
                   <Link
@@ -219,6 +222,7 @@ export function OrderPaymentsList({
             onClose={() => setModalOpen(false)}
             title={`Төлбөр бүртгэх · Үлдэгдэл ${formatTugrik(remaining)}`}
             banks={banks}
+            canManageAccounts={canManageAccounts}
             includeQpay={qpayAvailable}
             qpayOnly={!(canRecord && hasRemaining)}
             initial={modalInitial}

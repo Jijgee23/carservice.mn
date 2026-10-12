@@ -13,6 +13,7 @@ import { canViewOrder, canEditOrder } from "@/lib/auth/order-access";
 import { tenantVisibleTemplateWhere } from "@/lib/diagnostics";
 import { prisma } from "@/lib/prisma";
 import type { OrderItemLite } from "@/app/dashboard/orders/[id]/order-items";
+import { bankRef } from "@/lib/payment-accounts";
 import { PAYMENT_LEDGER_SELECT } from "@/lib/orders/order-payment-commands";
 import { findLockedPaymentIds } from "@/lib/cash/session-attach";
 import type { OrderPaymentRow } from "@/app/dashboard/orders/[id]/order-payments-list";
@@ -219,7 +220,8 @@ export async function getScheduleOrderDetail(
         method: p.method,
         status: p.status,
         createdAt: p.createdAt.toISOString(),
-        bank: p.bank,
+        bankId: p.bankId,
+        bankLabel: bankRef(p.bankAccount).bankLabel,
         settlementId: p.settlementId,
         locked: lockedPaymentIds.has(p.id),
       })),

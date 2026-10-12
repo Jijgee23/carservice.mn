@@ -3,7 +3,7 @@
 // aggregate (groupBy/aggregate), tenant- and branch-scoped; voided entries are always excluded and taxIncluded is
 // never summed. Money leaves as Decimal strings.
 import { Prisma } from "@/app/generated/prisma/client";
-import { bankLabel } from "@/lib/banks";
+import { INACTIVE_SUFFIX, TEST_BADGE } from "@/lib/payment-accounts";
 import { hasPermission } from "@/lib/auth/roles";
 import { ORDER_PAYMENT_METHOD_LABEL } from "@/lib/orders";
 import { prisma } from "@/lib/prisma";
@@ -21,8 +21,10 @@ const ZERO = new Prisma.Decimal(0);
 const dec = (v: { toString(): string } | null | undefined) => new Prisma.Decimal((v ?? 0).toString());
 
 export type CashReportBankRow = {
+  /** PaymentAccount id (null = a bank method recorded without an account). */
   bank: string | null;
   bankLabel: string;
+  bankIsTest: boolean;
   total: string;
   count: number;
 };
@@ -32,6 +34,7 @@ export type CashReportMethodNetRow = { method: CashReportMethod; methodLabel: st
 export type CashReportSessionMethodRow = {
   method: CashReportMethod;
   bank: string | null;
+  bankLabel: string | null;
   income: string;
   expense: string;
   net: string;
@@ -107,9 +110,9 @@ export async function buildCashSummary(input: {
   const range = { gte: from, lte: to };
 
   const ledgerWhere = { tenantId, ...branchFilter, voidedAt: null, occurredAt: range };
-  const [groups, types, outsideGroups, sessionRows, workDone, settlementDirect, outstandingOrders] = await Promise.all([
+  const [groups, types, outsideGroups, sessionRows, workDone, settlementDirect, outstandingOrders, accounts] = await Promise.all([
     db.cashTransaction.groupBy({
-      by: ["direction", "method", "bank", "typeId"],
+      by: ["direction", "method", "bankId", "typeId"],
       where: ledgerWhere,
       _sum: { amount: true },
       _count: { _all: true },
@@ -168,8 +171,17 @@ export async function buildCashSummary(input: {
         },
       },
     }),
+    // Labels via the join so a rename shows on history (one tenant-scoped query).
+    db.paymentAccount.findMany({ where: { tenantId }, select: { id: true, name: true, isTest: true, isActive: true } }),
   ]);
 
+  const accountById = new Map(accounts.map((a) => [a.id, a]));
+  const nameOf = (id: string | null): { label: string; isTest: boolean } => {
+    if (!id) return { label: UNKNOWN_BANK_LABEL, isTest: false };
+    const a = accountById.get(id);
+    if (!a) return { label: id, isTest: false };
+    return { label: `${a.name}${a.isActive ? "" : INACTIVE_SUFFIX}${a.isTest ? ` (${TEST_BADGE})` : ""}`, isTest: a.isTest };
+  };
   const typeById = new Map(types.map((t) => [t.id, t]));
   const sum = (g: { _sum?: { amount?: { toString(): string } | null } | null }) => dec(g._sum?.amount);
   const cnt = (g: { _count?: { _all?: number } | null }) => g._count?._all ?? 0;
@@ -186,15 +198,17 @@ export async function buildCashSummary(input: {
     if (BANK_METHODS.includes(method)) {
       const byBank = new Map<string | null, { total: Prisma.Decimal; count: number }>();
       for (const g of rows) {
-        const key = g.bank ?? null;
+        const key = g.bankId ?? null;
         const cur = byBank.get(key) ?? { total: ZERO, count: 0 };
         byBank.set(key, { total: cur.total.plus(sum(g)), count: cur.count + cnt(g) });
       }
-      const sorted = [...byBank.entries()].sort(([a], [b]) => (a === null ? 1 : 0) - (b === null ? 1 : 0) || (a ?? "").localeCompare(b ?? ""));
+      const sorted = [...byBank.entries()].sort(([a], [b]) => (a === null ? 1 : 0) - (b === null ? 1 : 0) || nameOf(a).label.localeCompare(nameOf(b).label));
       for (const [bank, v] of sorted) {
+        const n = nameOf(bank);
         banks.push({
           bank,
-          bankLabel: bank ? bankLabel(bank) : UNKNOWN_BANK_LABEL,
+          bankLabel: n.label,
+          bankIsTest: n.isTest,
           total: v.total.toString(),
           count: v.count,
         });
@@ -263,7 +277,7 @@ export async function buildCashSummary(input: {
   type SessionGroup = { sessionId: string | null; direction: string; _sum?: { amount?: { toString(): string } | null } | null; _count?: { _all?: number } | null };
   let liveGroups: SessionGroup[] = [];
   let postCloseGroups: SessionGroup[] = [];
-  type MethodGroup = SessionGroup & { method: string; bank: string | null };
+  type MethodGroup = SessionGroup & { method: string; bankId: string | null };
   type FrozenRow = { sessionId: string; method: string; bank: string; expected: { toString(): string }; counted: { toString(): string } | null; difference: { toString(): string } | null };
   let methodGroups: MethodGroup[] = [];
   let frozenRows: FrozenRow[] = [];
@@ -288,7 +302,7 @@ export async function buildCashSummary(input: {
         : Promise.resolve([] as SessionGroup[]),
       // One grouped query for every listed session (all methods, non-voided) - no per-session queries.
       db.cashTransaction.groupBy({
-        by: ["sessionId", "method", "bank", "direction"],
+        by: ["sessionId", "method", "bankId", "direction"],
         where: { tenantId, sessionId: { in: sessionIds }, voidedAt: null },
         _sum: { amount: true },
         _count: { _all: true },
@@ -319,7 +333,7 @@ export async function buildCashSummary(input: {
     };
     for (const g of methodGroups) {
       if (g.sessionId !== s.id) continue;
-      const r = touch(g.method, g.bank ?? null);
+      const r = touch(g.method, g.bankId ?? null);
       if (g.direction === "INCOME") r.income = r.income.plus(sum(g));
       else r.expense = r.expense.plus(sum(g));
       r.count += cnt(g);
@@ -346,7 +360,7 @@ export async function buildCashSummary(input: {
         } else {
           expected = net.toString();
         }
-        return { method: r.method, bank: r.bank || null, income: r.income.toString(), expense: r.expense.toString(), net: net.toString(), count: r.count, expected, counted, difference };
+        return { method: r.method, bank: r.bank || null, bankLabel: r.bank ? nameOf(r.bank).label : null, income: r.income.toString(), expense: r.expense.toString(), net: net.toString(), count: r.count, expected, counted, difference };
       });
   };
   const items: CashReportSessionRow[] = sessionRows.map((s) => {

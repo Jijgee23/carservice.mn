@@ -211,9 +211,6 @@ export default async function CashReportPage({ searchParams }: { searchParams: P
                     <tr key={`${m.method}:${b.bank ?? "none"}`} className="border-b border-[var(--oc-line)]">
                       <td className={`${td} pl-8`}>
                         {b.bankLabel}
-                        {b.bank && b.bank !== b.bankLabel ? (
-                          <span className="ml-1.5 text-xs text-[var(--oc-muted4)]">{b.bank}</span>
-                        ) : null}
                       </td>
                       <td className={tdR}>{b.count}</td>
                       <td className={tdR}>{formatTugrik(b.total)}</td>

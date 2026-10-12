@@ -138,7 +138,7 @@ export async function confirmOrderQPayPayment(
           orderId: payment.orderId,
           amount: payment.amount,
           method: payment.method,
-          bank: payment.bank,
+          bankId: null,
           paidAt,
           settlementId: payment.settlementId,
         },

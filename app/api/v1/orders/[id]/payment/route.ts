@@ -95,7 +95,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (b.amount !== undefined && !amount) return jsonError(422, "Дүнг зөв оруулна уу.", { fieldErrors: { amount: "Дүнг зөв оруулна уу." } });
   if (b.paymentStatus === "PARTIAL" && !amount) return jsonError(422, "Хагас төлбөрт дүн шаардлагатай.", { fieldErrors: { amount: "Дүн оруулна уу." } });
   try {
-    const result = await createOrderPaymentCommand({ actor: auth.user, orderId: id, method, amount, bank: typeof b.bank === "string" ? b.bank : null, scope: scopeResult.branchId });
+    const result = await createOrderPaymentCommand({ actor: auth.user, orderId: id, method, amount, bank: typeof b.bankId === "string" ? b.bankId : typeof b.bank === "string" ? b.bank : null, scope: scopeResult.branchId });
     await notifyOrderPaymentReceived({ tenantId: auth.user.tenantId, orderId: result.orderId, amount: result.payment.amount.toString(), accountId: result.accountId, appointmentId: result.appointmentId });
     const order = await prisma.serviceOrder.findFirst({
       where: { id, tenantId: auth.user.tenantId, ...(scopeResult.branchId ? { branchId: scopeResult.branchId } : {}) },

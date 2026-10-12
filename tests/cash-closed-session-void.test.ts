@@ -10,7 +10,7 @@ const read = (p: string) => readFile(new URL(`../${p}`, import.meta.url), "utf8"
 test("B1: safeCashActionMessage passes domain errors, hides everything else behind the generic message", async () => {
   const { safeCashActionMessage } = await import("../lib/cash/action-failure");
   const { CashError } = await import("../lib/cash/rules");
-  const { PaymentBankError } = await import("../lib/banks");
+  const { PaymentAccountError } = await import("../lib/payment-accounts");
   const { SUBSCRIPTION_LOCKED_MESSAGE } = await import("../lib/subscription");
   const generic = "Серверийн алдаа гарлаа. Дахин оролдоно уу.";
   const logged: unknown[][] = [];
@@ -18,7 +18,7 @@ test("B1: safeCashActionMessage passes domain errors, hides everything else behi
   console.error = (...a: unknown[]) => { logged.push(a); };
   try {
     assert.equal(safeCashActionMessage("t", new CashError("Касс нээгээгүй.", 409, "CASH_SESSION_CLOSED")), "Касс нээгээгүй.");
-    assert.equal(safeCashActionMessage("t", new PaymentBankError("Банк сонгоно уу.", "PAYMENT_BANK_REQUIRED")), "Банк сонгоно уу.");
+    assert.equal(safeCashActionMessage("t", new PaymentAccountError("Банк сонгоно уу.", "PAYMENT_BANK_REQUIRED")), "Банк сонгоно уу.");
     assert.equal(safeCashActionMessage("t", new Error(SUBSCRIPTION_LOCKED_MESSAGE)), SUBSCRIPTION_LOCKED_MESSAGE);
     assert.equal(logged.length, 0);
     const leak = new Error('ENOENT: open "C:\\srv\\uploads\\cash\\t1\\x.png" / column "tenantId"');

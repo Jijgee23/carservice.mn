@@ -10,9 +10,8 @@ import { FormError } from "@/app/_components/auth-shell";
 import { DatePicker } from "@/app/_components/date-picker";
 import { Btn, Field } from "@/app/_components/landing-ops-ui";
 import { Modal } from "@/app/_components/modal";
-import { bankLabel } from "@/lib/banks";
 import { formatPriceInput, formatTugrik } from "@/lib/orders";
-import { PaymentMethodModal, paymentChoiceSummary, type PaymentChoice } from "../../_components/payment-method-modal";
+import { PaymentMethodModal, paymentChoiceSummary, type PaymentAccountOption, type PaymentChoice } from "../../_components/payment-method-modal";
 import { PosSimulatorModal } from "../../_components/pos-simulator";
 import { NO_OPEN_SESSION_REASON, NoOpenSessionNotice } from "../../cash/session-warning";
 
@@ -31,7 +30,9 @@ type Props = {
   branches: Option[];
   defaultBranchId: string;
   customers: Option[];
-  banks: { code: string; label: string }[];
+  banks: PaymentAccountOption[];
+  /** cash.manage: the empty picker links to /dashboard/banks. */
+  canManageAccounts?: boolean;
   /** Business-day "YYYY-MM-DD" (Asia/Ulaanbaatar). */
   today: string;
   /** Branch ids that currently have an open cash session (any method: settling is disabled for a branch without one). */
@@ -63,7 +64,7 @@ export function SettleButton(props: Props) {
   );
 }
 
-function SettleForm({ branches, defaultBranchId, customers, banks, today, openBranchIds, onDone }: Props & { onDone: () => void }) {
+function SettleForm({ branches, defaultBranchId, customers, banks, canManageAccounts, today, openBranchIds, onDone }: Props & { onDone: () => void }) {
   const [branchId, setBranchId] = useState(defaultBranchId);
   const [customerId, setCustomerId] = useState("");
   const [orders, setOrders] = useState<EligibleOrder[] | null>(null);
@@ -278,7 +279,7 @@ function SettleForm({ branches, defaultBranchId, customers, banks, today, openBr
             onClick={() => setPickerOpen(true)}
             className="compact-input w-full text-left"
           >
-            {paymentChoiceSummary(choice)}
+            {paymentChoiceSummary(choice, banks)}
           </button>
         </Field>
         <Field label="Огноо" htmlFor="settle-date" required error={fieldErrors.occurredAt}>
@@ -295,6 +296,7 @@ function SettleForm({ branches, defaultBranchId, customers, banks, today, openBr
         onClose={() => setPickerOpen(false)}
         title="Төлбөрийн хэлбэр"
         banks={banks}
+        canManageAccounts={canManageAccounts}
         initial={choice}
         onConfirm={(c) => {
           setChoice(c);
@@ -303,7 +305,7 @@ function SettleForm({ branches, defaultBranchId, customers, banks, today, openBr
       />
       <PosSimulatorModal
         open={posOpen}
-        bankName={bankLabel(bank)}
+        bankName={banks.find((b) => b.id === bank)?.name ?? ""}
         amount={formatPriceInput(total)}
         onCancel={() => setPosOpen(false)}
         onSuccess={() => {

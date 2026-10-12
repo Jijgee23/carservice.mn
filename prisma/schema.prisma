@@ -60,6 +60,7 @@ model Tenant {
   cashTransactions         CashTransaction[]
   postpaidSettlements      PostpaidSettlement[]
   cashSessions             CashSession[]
+  paymentAccounts          PaymentAccount[]
   appointments            Appointment[]
   appointmentPayments      AppointmentPayment[]
   notifications            Notification[]
@@ -1195,8 +1196,10 @@ model OrderPayment {
   paidAt        DateTime?
 
   // Хүлээн авсан банк (BANK_TRANSFER/CARD үед заавал; CARD-д POS-ийн банк).
-  // Код нь lib/banks.ts-д — DB enum биш (жагсаалт кодоор өөрчлөгдөнө).
-  bank String?
+  // legacy, no longer written — replaced by bankId (PaymentAccount).
+  bank        String?
+  bankId      String?
+  bankAccount PaymentAccount? @relation(fields: [bankId], references: [id], onDelete: Restrict)
 
   // Дараа тооцооны нэг мөнгөн гүйлгээгээр (PostpaidSettlement) хаагдсан төлбөр
   // (Phase C2). Тэр үед кассын орлогыг settlement нэг дор бичнэ.
@@ -1208,6 +1211,7 @@ model OrderPayment {
 
   @@index([tenantId, status])
   @@index([tenantId, bank])
+  @@index([tenantId, bankId])
   @@index([orderId])
   @@index([qpayInvoiceId])
   @@index([settlementId])
@@ -1252,6 +1256,8 @@ model CashTransaction {
   amount         Decimal             @db.Decimal(12, 2)
   method         OrderPaymentMethod
   bank           String?
+  bankId         String?
+  bankAccount    PaymentAccount?     @relation(fields: [bankId], references: [id], onDelete: Restrict)
   occurredAt     DateTime
   note           String?
   attachmentPath String?
@@ -1276,6 +1282,7 @@ model CashTransaction {
 
   @@index([tenantId, branchId, occurredAt])
   @@index([tenantId, direction, typeId])
+  @@index([tenantId, bankId])
   @@index([sessionId])
   @@index([orderId])
   @@index([settlementId])
@@ -1293,6 +1300,8 @@ model PostpaidSettlement {
   amount      Decimal            @db.Decimal(12, 2)
   method      OrderPaymentMethod
   bank        String?
+  bankId      String?
+  bankAccount PaymentAccount?    @relation(fields: [bankId], references: [id], onDelete: Restrict)
   createdById String
   createdBy   User               @relation("PostpaidSettlementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   createdAt   DateTime           @default(now())
@@ -1306,6 +1315,7 @@ model PostpaidSettlement {
 
   @@index([tenantId, branchId, createdAt])
   @@index([tenantId, customerId])
+  @@index([tenantId, bankId])
 }
 
 // Кассын ээлж (Phase C3).
@@ -1344,6 +1354,7 @@ model CashSession {
 // Per-(method, bank) close figures of a session (Odoo-style register close). Frozen at close.
 // bank is NOT nullable: "" means "no bank" (CASH/QPAY/OTHER), so the composite unique below really is
 // unique (Postgres treats NULLs as distinct in a unique index).
+// bank now holds a PaymentAccount id ('' = none); no FK (Prisma cannot express NULLS NOT DISTINCT).
 model CashSessionMethodCount {
   id         String             @id @default(cuid())
   tenantId   String
@@ -1357,6 +1368,38 @@ model CashSessionMethodCount {
 
   @@unique([sessionId, method, bank])
   @@index([tenantId])
+}
+
+enum PaymentAccountType {
+  BANK_ACCOUNT
+  POS
+}
+
+// Tenant-defined receiving account (Данс) or POS terminal (Карт). Payments reference it by bankId.
+// Type is fixed after creation: BANK_ACCOUNT <-> BANK_TRANSFER, POS <-> CARD.
+// legacyCode is set only on rows backfilled from the old fixed bank list (KHAN, GOLOMT, ...).
+model PaymentAccount {
+  id            String             @id @default(cuid())
+  tenantId      String
+  tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type          PaymentAccountType
+  name          String
+  accountNumber String?
+  terminalId    String?
+  merchantId    String?
+  isTest        Boolean            @default(false)
+  isActive      Boolean            @default(true)
+  legacyCode    String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  orderPayments       OrderPayment[]
+  cashTransactions    CashTransaction[]
+  postpaidSettlements PostpaidSettlement[]
+
+  @@unique([tenantId, type, accountNumber])
+  @@unique([tenantId, type, legacyCode])
+  @@index([tenantId, isActive])
 }
 
 // --- SubscriptionPayment (тенант төлбөр + QPay invoice) -----------------

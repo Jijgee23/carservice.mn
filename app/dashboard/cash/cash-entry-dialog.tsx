@@ -7,9 +7,8 @@ import { FormError } from "@/app/_components/auth-shell";
 import { DatePicker } from "@/app/_components/date-picker";
 import { Btn, Field } from "@/app/_components/landing-ops-ui";
 import { Modal } from "@/app/_components/modal";
-import { PaymentMethodModal, paymentChoiceSummary, type PaymentChoice } from "../_components/payment-method-modal";
+import { PaymentMethodModal, paymentChoiceSummary, type PaymentAccountOption, type PaymentChoice } from "../_components/payment-method-modal";
 import { PosSimulatorModal } from "../_components/pos-simulator";
-import { bankLabel } from "@/lib/banks";
 import { formatPriceInput, liveFormatPriceInput } from "@/lib/orders";
 import { CustomerPicker } from "./customer-picker";
 import { OrderPaymentTab } from "./order-payment-tab";
@@ -23,7 +22,9 @@ type Props = {
   types: Option[];
   branches: Option[];
   defaultBranchId: string;
-  banks: { code: string; label: string }[];
+  banks: PaymentAccountOption[];
+  /** cash.manage: the empty picker links to /dashboard/banks. */
+  canManageAccounts?: boolean;
   /** Business-day "YYYY-MM-DD" (Asia/Ulaanbaatar). */
   today: string;
   /** Branch ids that currently have an open cash session (any method: saving is disabled for a branch without one). */
@@ -121,6 +122,7 @@ export function CashCreateButton(props: Props) {
             defaultBranchId={props.defaultBranchId}
             showBranchSelect={!props.branchPinned}
             banks={props.banks}
+            canManageAccounts={props.canManageAccounts}
             openBranchIds={props.openBranchIds}
             onRecorded={() => {
               recordedRef.current = true;
@@ -138,7 +140,7 @@ export function CashCreateButton(props: Props) {
   );
 }
 
-function CashEntryForm({ direction, types, branches, defaultBranchId, branchPinned, banks, today, openBranchIds, onDone }: Props & { onDone: () => void }) {
+function CashEntryForm({ direction, types, branches, defaultBranchId, branchPinned, banks, canManageAccounts, today, openBranchIds, onDone }: Props & { onDone: () => void }) {
   const isIncome = direction === "INCOME";
   const [choice, setChoice] = useState<PaymentChoice>({ method: "CASH", bank: "" });
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -261,7 +263,7 @@ function CashEntryForm({ direction, types, branches, defaultBranchId, branchPinn
             onClick={() => setPickerOpen(true)}
             className="compact-input w-full text-left"
           >
-            {paymentChoiceSummary(choice)}
+            {paymentChoiceSummary(choice, banks)}
           </button>
         </Field>
         <Field label="Харилцагч (үйлчлүүлэгч)" htmlFor="cash-customer" error={fieldErrors.customerId}>
@@ -335,6 +337,7 @@ function CashEntryForm({ direction, types, branches, defaultBranchId, branchPinn
         onClose={() => setPickerOpen(false)}
         title="Төлбөрийн хэлбэр"
         banks={banks}
+        canManageAccounts={canManageAccounts}
         initial={choice}
         onConfirm={(c) => {
           setChoice(c);
@@ -343,7 +346,7 @@ function CashEntryForm({ direction, types, branches, defaultBranchId, branchPinn
       />
       <PosSimulatorModal
         open={posAmount !== null}
-        bankName={bankLabel(choice.bank)}
+        bankName={banks.find((b) => b.id === choice.bank)?.name ?? ""}
         amount={posAmount ?? ""}
         onCancel={() => setPosAmount(null)}
         onSuccess={() => {

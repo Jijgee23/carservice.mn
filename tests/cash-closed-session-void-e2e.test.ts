@@ -157,7 +157,7 @@ test("locked flag: true only for a live entry in a closed session (entry / settl
   assert.equal((await findLockedPaymentIds(l.tx, "t1", [])).size, 0);
 
   const { serializeLedgerPayment } = await import("../lib/orders/order-payment-commands");
-  const row = { id: "p1", amount: { toString: () => "5" }, method: "CASH", status: "PAID", paidAt: null, createdAt: new Date(), bank: null, settlementId: null };
+  const row = { id: "p1", amount: { toString: () => "5" }, method: "CASH", status: "PAID", paidAt: null, createdAt: new Date(), bankId: null, bankAccount: null, settlementId: null };
   assert.equal(serializeLedgerPayment(row as never, true).locked, true);
   assert.equal(serializeLedgerPayment(row as never).locked, false);
 });
@@ -178,6 +178,7 @@ test("report: no closedSessionRefunds field; legacy compensation types count in 
   const client = {
     cashTransaction: { groupBy: async (a: { by: string[] }) => (a.by.includes("typeId") ? groups : []) },
     cashSessionMethodCount: { findMany: async () => [] },
+    paymentAccount: { findMany: async () => [] }, // bank labels (report reads accounts via one tenant-scoped query)
     cashTransactionType: { findMany: async () => [{ id: "ty-pay", name: "p", systemKey: "ORDER_PAYMENT" }, { id: "ty-out", name: "o", systemKey: "CLOSED_SESSION_VOID_OUT" }] },
     cashSession: { findMany: async () => [] },
     serviceOrder: { aggregate: async () => ({ _sum: { totalAmount: null }, _count: { _all: 0 } }), findMany: async () => [] },

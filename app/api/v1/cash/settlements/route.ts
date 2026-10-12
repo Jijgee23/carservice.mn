@@ -29,7 +29,7 @@ export async function GET(req: Request) {
   }
 }
 
-// POST /api/v1/cash/settlements  { branchId, customerId, orderIds: string[], method, bank?, occurredAt?, note?, expectedAmount? }
+// POST /api/v1/cash/settlements  { branchId, customerId, orderIds: string[], method, bankId? (legacy bank? still accepted), occurredAt?, note?, expectedAmount? }
 // Permission: cash.manage AND orders.closeUnpaidPostpaid. -> 201 { settlement: SettlementDetail }
 export async function POST(req: Request) {
   const auth = await requireCashApiUser(req);
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
       customerId: body.customerId,
       orderIds: body.orderIds,
       method: body.method,
-      bank: body.bank,
+      bank: typeof body.bankId === "string" ? body.bankId : body.bank,
       occurredAt: body.occurredAt,
       note: body.note,
       expectedAmount: body.expectedAmount,

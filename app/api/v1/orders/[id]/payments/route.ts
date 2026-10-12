@@ -51,7 +51,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const scopeResult = await resolveWorkingBranch(req, auth.user);
   if (scopeResult.response) return scopeResult.response;
   try {
-    const result = await createOrderPaymentCommand({ actor: auth.user, orderId: id, method: b.method, amount, bank: typeof b.bank === "string" ? b.bank : null, scope: scopeResult.branchId });
+    const result = await createOrderPaymentCommand({ actor: auth.user, orderId: id, method: b.method, amount, bank: typeof b.bankId === "string" ? b.bankId : typeof b.bank === "string" ? b.bank : null, scope: scopeResult.branchId });
     await notifyOrderPaymentReceived({ tenantId: auth.user.tenantId, orderId: result.orderId, amount: amount.toString(), accountId: result.accountId, appointmentId: result.appointmentId });
     return jsonOk({ payment: serializeLedgerPayment(result.payment), order: { paidAmount: result.totals.paid.toString(), paymentStatus: result.totals.status, totalAmount: result.totals.total.toString(), remainingAmount: result.totals.remaining.toString() } }, { status: 201 });
   } catch (error) {

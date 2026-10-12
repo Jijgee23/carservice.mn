@@ -46,7 +46,7 @@ test("note is normalised and propagated command -> postPaymentIncome -> CashTran
     cashTransaction: { createMany: async (a: { data: Record<string, unknown>[] }) => { data = a.data[0]; return { count: 1 }; } },
   };
   try {
-    await postPaymentIncome(tx as never, { tenantId: "t1", actorId: "u1", note: " paid by X ", payment: { id: "p1", orderId: "o1", amount: 5 as never, method: "CASH", bank: null, paidAt: new Date() } });
+    await postPaymentIncome(tx as never, { tenantId: "t1", actorId: "u1", note: " paid by X ", payment: { id: "p1", orderId: "o1", amount: 5 as never, method: "CASH", bankId: null, paidAt: new Date() } });
   } catch {
     // session/type helpers need a DB; fall through to the source check below
   }

@@ -1,4 +1,3 @@
-import { bankLabel } from "@/lib/banks";
 import type { SerializedCashSession } from "@/lib/cash/session";
 import { formatTugrik, ORDER_PAYMENT_METHOD_LABEL } from "@/lib/orders";
 
@@ -16,6 +15,7 @@ export function withCashRow(s: Session): BreakdownRow[] {
   const cash: BreakdownRow = {
     method: "CASH",
     bank: null,
+    bankLabel: null,
     income: s.cashIn ?? "0",
     expense: s.cashOut ?? "0",
     net: String(Number(s.cashIn ?? 0) - Number(s.cashOut ?? 0)),
@@ -41,9 +41,9 @@ export function sessionTotals(s: Session): { income: string; expense: string; ne
   };
 }
 
-export function methodRowLabel(r: Pick<BreakdownRow, "method" | "bank">): string {
+export function methodRowLabel(r: Pick<BreakdownRow, "method" | "bank" | "bankLabel">): string {
   const base = ORDER_PAYMENT_METHOD_LABEL[r.method] ?? r.method;
-  return r.bank ? `${base} · ${bankLabel(r.bank)}` : base;
+  return r.bank ? `${base} · ${r.bankLabel ?? "Банк тодорхойгүй"}` : base;
 }
 
 function diffText(difference: string | null): string {

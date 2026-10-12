@@ -16,7 +16,7 @@ export { recomputeOrderPaymentTotals };
 import { prisma, type PrismaTransactionClient } from "@/lib/prisma";
 import { TenantQPayService } from "@/lib/qpay-tenant";
 import { createNotification } from "@/lib/notifications";
-import { assertPaymentBank, bankLabel, PaymentBankError } from "@/lib/banks";
+import { BANK_REF_SELECT, bankRef, PaymentAccountError, resolvePaymentAccount } from "@/lib/payment-accounts";
 import { assertCashSessionOpen, assertEntryNotInClosedSession, CASH_SESSION_CLOSED_CODE, CASH_SESSION_CLOSED_MESSAGE, CASH_SESSION_ENTRY_LOCKED_CODE, CASH_SESSION_ENTRY_LOCKED_MESSAGE, findLockedPaymentIds } from "@/lib/cash/session-attach";
 import { postPaymentIncome, voidPaymentIncome } from "@/lib/cash/sync";
 import {
@@ -257,7 +257,8 @@ export const PAYMENT_LEDGER_SELECT = {
   status: true,
   paidAt: true,
   createdAt: true,
-  bank: true,
+  bankId: true,
+  bankAccount: { select: BANK_REF_SELECT },
   settlementId: true,
 } satisfies Prisma.OrderPaymentSelect;
 
@@ -272,8 +273,7 @@ export function serializeLedgerPayment(payment: LedgerPaymentRow, locked = false
     status: payment.status,
     paidAt: payment.paidAt?.toISOString() ?? null,
     createdAt: payment.createdAt.toISOString(),
-    bank: payment.bank,
-    bankLabel: payment.bank ? bankLabel(payment.bank) : null,
+    ...bankRef(payment.bankAccount),
     settlementId: payment.settlementId,
     /** true when the payment's ledger entry is in a CLOSED cash session: reverse is refused (409 CASH_SESSION_ENTRY_LOCKED). */
     locked,
@@ -363,25 +363,23 @@ export async function createOrderPaymentCommand(input: {
     }
     const amount = tender.applied;
     const paidAt = new Date();
-    let bank: string | null = null;
-    if (input.method === "BANK_TRANSFER" || input.method === "CARD") {
-      const tenant = await tx.tenant.findUnique({ where: { id: input.actor.tenantId }, select: { enabledBanks: true } });
-      try {
-        bank = assertPaymentBank(input.method, input.bank, tenant?.enabledBanks);
-      } catch (error) {
-        if (error instanceof PaymentBankError) throw new OrderPaymentCommandError(error.message, error.status, error.code, { bank: error.message });
-        throw error;
-      }
+    let account: Awaited<ReturnType<typeof resolvePaymentAccount>> = null;
+    try {
+      account = await resolvePaymentAccount(tx, input.actor.tenantId, input.method, input.bank);
+    } catch (error) {
+      if (error instanceof PaymentAccountError) throw new OrderPaymentCommandError(error.message, error.status, error.code, { bank: error.message });
+      throw error;
     }
+    const bankId = account?.id ?? null;
     const payment = await tx.orderPayment.create({
-      data: { tenantId: input.actor.tenantId, orderId: order.id, amount, method: input.method, status: "PAID", paidAt, bank },
+      data: { tenantId: input.actor.tenantId, orderId: order.id, amount, method: input.method, status: "PAID", paidAt, bankId },
       select: PAYMENT_LEDGER_SELECT,
     });
     // Cash ledger: this payment is PAID from birth -> income entry, same transaction.
     await postPaymentIncome(tx, {
       tenantId: input.actor.tenantId,
       actorId: input.actor.id,
-      payment: { id: payment.id, orderId: order.id, amount: payment.amount, method: payment.method, bank: payment.bank, paidAt: payment.paidAt },
+      payment: { id: payment.id, orderId: order.id, amount: payment.amount, method: payment.method, bankId: payment.bankId, paidAt: payment.paidAt },
       note,
     });
     await cancelPendingQPay(tx, input.actor.tenantId, order.id, providerSweep.cancellable);
@@ -393,8 +391,8 @@ export async function createOrderPaymentCommand(input: {
       entity: "ServiceOrder",
       entityId: order.id,
       action: "PAYMENT_CHANGE",
-      summary: `${ORDER_PAYMENT_METHOD_LABEL[input.method]}${bank ? ` (${bankLabel(bank)})` : ""} · ${formatTugrik(amount.toString())} бүртгэв`,
-      after: { paymentId: payment.id, method: input.method, bank, amount: amount.toString(), paidAmount: totals.paid.toString(), paymentStatus: totals.status },
+      summary: `${ORDER_PAYMENT_METHOD_LABEL[input.method]}${account ? ` (${account.name})` : ""} · ${formatTugrik(amount.toString())} бүртгэв`,
+      after: { paymentId: payment.id, method: input.method, bankId, amount: amount.toString(), paidAmount: totals.paid.toString(), paymentStatus: totals.status },
     }, tx);
     return { payment, orderId: order.id, accountId: order.appointment?.accountId ?? null, appointmentId: order.appointment?.id ?? null, totals, change: tender.change };
   });
@@ -648,7 +646,7 @@ export async function confirmOrderQPayPaymentCommand(input: {
     await postPaymentIncome(tx, {
       tenantId: input.actor.tenantId,
       actorId: input.actor.id,
-      payment: { id: fresh.id, orderId: order.id, amount: fresh.amount, method: fresh.method, bank: null, paidAt: qpayPaidAt },
+      payment: { id: fresh.id, orderId: order.id, amount: fresh.amount, method: fresh.method, bankId: null, paidAt: qpayPaidAt },
     });
     await cancelPendingQPay(tx, input.actor.tenantId, order.id, finalSiblingsCancellable);
     const totals = await recomputeOrderPaymentTotals(tx, input.actor.tenantId, order);

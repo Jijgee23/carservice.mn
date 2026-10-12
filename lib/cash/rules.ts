@@ -2,6 +2,7 @@
 // beyond the Decimal class, so plain unit tests can exercise them.
 import { Prisma } from "@/app/generated/prisma/client";
 import { bookingDateKey, bookingDayBounds, parseBusinessLocalDateTime } from "@/lib/booking-time";
+import type { PaymentAccountErrorCode } from "@/lib/payment-accounts";
 
 export const CASH_DIRECTIONS = ["INCOME", "EXPENSE"] as const;
 export type CashDirectionValue = (typeof CASH_DIRECTIONS)[number];
@@ -65,6 +66,7 @@ export type CashErrorCode =
   | "CASH_ATTACHMENT_INVALID"
   | "PAYMENT_BANK_REQUIRED"
   | "PAYMENT_BANK_NOT_ENABLED"
+  | PaymentAccountErrorCode
   | "POSTPAID_SETTLEMENT_FORBIDDEN"
   | "SETTLEMENT_ORDER_INVALID"
   | "SETTLEMENT_AMOUNT_CHANGED"

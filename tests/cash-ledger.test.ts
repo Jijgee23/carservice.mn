@@ -154,18 +154,18 @@ test("voidCashEntry and type commands enforce permission and required reason bef
 test("entry filters build a tenant-scoped where; a pinned branch scope always wins; voided handled by caller", async () => {
   const { buildCashEntryWhere } = await import("../lib/cash/ledger");
   const rules = await import("../lib/cash/rules");
-  const w = buildCashEntryWhere("t1", { branchId: "bX", direction: "INCOME", method: "CARD", bank: "KHAN", typeId: "ty", from: "2026-10-01", to: "2026-10-05" }, null);
+  const w = buildCashEntryWhere("t1", { branchId: "bX", direction: "INCOME", method: "CARD", bank: "pa1", typeId: "ty", from: "2026-10-01", to: "2026-10-05" }, null);
   assert.equal(w.tenantId, "t1");
   assert.equal(w.branchId, "bX");
   assert.equal(w.direction, "INCOME");
-  assert.equal(w.bank, "KHAN");
+  assert.deepEqual(w.AND, [{ OR: [{ bankId: "pa1" }, { bankAccount: { tenantId: "t1", legacyCode: "pa1" } }] }]);
   const occurred = w.occurredAt as { gte: Date; lt: Date };
   assert.equal(occurred.gte.toISOString(), "2026-09-30T16:00:00.000Z");
   assert.equal(occurred.lt.toISOString(), "2026-10-05T16:00:00.000Z"); // end of 10-05 local, exclusive
   assert.equal(buildCashEntryWhere("t1", { branchId: "bX" }, "bPinned").branchId, "bPinned");
   assert.throws(() => buildCashEntryWhere("t1", { direction: "X" }, null), (e: unknown) => e instanceof rules.CashError && e.code === "CASH_TYPE_INVALID");
   assert.throws(() => buildCashEntryWhere("t1", { from: "garbage" }, null), (e: unknown) => e instanceof rules.CashError && e.code === "CASH_DATE_INVALID");
-  assert.throws(() => buildCashEntryWhere("t1", { bank: "NOPE" }, null), (e: unknown) => e instanceof rules.CashError && e.code === "PAYMENT_BANK_NOT_ENABLED");
+  // The bank filter is an opaque account id (id-only, ruling for Task 5): an unknown id simply matches nothing, so there is no code validation to throw.
   assert.equal("voidedAt" in w, false);
 });
 
@@ -203,7 +203,7 @@ test("postPaymentIncome writes ONE income entry copying payment + order data, id
   const created = await sync.postPaymentIncome(tx, {
     tenantId: "t1",
     actorId: "u1",
-    payment: { id: "p1", orderId: "o1", amount: await decimal("5000"), method: "BANK_TRANSFER", bank: "KHAN", paidAt },
+    payment: { id: "p1", orderId: "o1", amount: await decimal("5000"), method: "BANK_TRANSFER", bankId: "acct-1", paidAt },
   });
   assert.equal(created, true);
   const call = calls.find((c) => c.fn === "createMany")!;
@@ -213,7 +213,7 @@ test("postPaymentIncome writes ONE income entry copying payment + order data, id
   assert.deepEqual(
     { ...args.data[0], amount: String(args.data[0].amount) },
     {
-      tenantId: "t1", branchId: "b1", direction: "INCOME", typeId: "type-1", amount: "5000", method: "BANK_TRANSFER", bank: "KHAN",
+      tenantId: "t1", branchId: "b1", direction: "INCOME", typeId: "type-1", amount: "5000", method: "BANK_TRANSFER", bankId: "acct-1",
       occurredAt: paidAt, customerId: "c1", orderPaymentId: "p1", orderId: "o1", sessionId: null, createdById: "u1",
     },
   );
@@ -221,12 +221,12 @@ test("postPaymentIncome writes ONE income entry copying payment + order data, id
   assert.equal(orderLookup.where.tenantId, "t1");
   // a repeat (row already exists) reports false and never throws
   const again = fakeTx({ createdCount: 0 });
-  assert.equal(await sync.postPaymentIncome(again.tx, { tenantId: "t1", actorId: "u1", payment: { id: "p1", orderId: "o1", amount: await decimal("5000"), method: "CASH", bank: null, paidAt } }), false);
+  assert.equal(await sync.postPaymentIncome(again.tx, { tenantId: "t1", actorId: "u1", payment: { id: "p1", orderId: "o1", amount: await decimal("5000"), method: "CASH", bankId: null, paidAt } }), false);
 });
 
 test("postPaymentIncome skips settlement payments and unknown orders; seeds system types lazily", async () => {
   const sync = await import("../lib/cash/sync");
-  const payment = { id: "p1", orderId: "o1", amount: await decimal("1"), method: "CASH", bank: null, paidAt: new Date() };
+  const payment = { id: "p1", orderId: "o1", amount: await decimal("1"), method: "CASH", bankId: null, paidAt: new Date() };
   const a = fakeTx();
   assert.equal(await sync.postPaymentIncome(a.tx, { tenantId: "t1", actorId: "u1", payment: { ...payment, settlementId: "s1" } }), false);
   assert.equal(a.calls.length, 0);

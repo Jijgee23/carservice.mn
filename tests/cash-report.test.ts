@@ -44,7 +44,7 @@ function matches(row: Row, where: Row): boolean {
 
 const D = async (v: string | number) => new (await import("../app/generated/prisma/client")).Prisma.Decimal(v);
 
-function fake(data: { tx: Row[]; sessions: Row[]; orders: Row[]; payments: Row[]; types: Row[]; frozen?: Row[] }) {
+function fake(data: { tx: Row[]; sessions: Row[]; orders: Row[]; payments: Row[]; types: Row[]; frozen?: Row[]; accounts?: Row[] }) {
   const queries: Row[] = [];
   data_payments = data.payments;
   const sumOf = (rows: Row[], field: string) => rows.reduce((a, r) => a + Number(r[field] ?? 0), 0);
@@ -75,6 +75,12 @@ function fake(data: { tx: Row[]; sessions: Row[]; orders: Row[]; payments: Row[]
       },
     },
     cashTransactionType: { findMany: async () => data.types },
+    paymentAccount: {
+      findMany: async (a: { where: Row }) => {
+        queries.push(a.where);
+        return (data.accounts ?? ACCOUNTS).filter((r) => matches(r, a.where));
+      },
+    },
     cashSession: {
       findMany: async (a: { where: Row }) => {
         queries.push(a.where);
@@ -106,7 +112,11 @@ const TYPES = [
   { id: "ty-int", name: "Дотоод засварын зардал", systemKey: "INTERNAL_REPAIR" },
   { id: "ty-rent", name: "Түрээс", systemKey: null },
 ];
-const tx = (o: Row): Row => ({ tenantId: "t1", branchId: "b1", voidedAt: null, occurredAt: IN_RANGE, sessionId: null, bank: null, taxIncluded: null, ...o });
+const ACCOUNTS: Row[] = [
+  { id: "pa-khan", tenantId: "t1", name: "Хаан банк", isTest: false, isActive: true },
+  { id: "pa-golomt", tenantId: "t1", name: "Голомт банк", isTest: false, isActive: true },
+];
+const tx = (o: Row): Row => ({ tenantId: "t1", branchId: "b1", voidedAt: null, occurredAt: IN_RANGE, sessionId: null, bankId: null, taxIncluded: null, ...o });
 
 test("income by method/bank per-bank totals; voided and tax are excluded; net per method", async () => {
   const { buildCashSummary } = await import("../lib/cash/report");
@@ -117,10 +127,10 @@ test("income by method/bank per-bank totals; voided and tax are excluded; net pe
     payments: [],
     tx: [
       tx({ direction: "INCOME", typeId: "ty-pay", method: "CASH", amount: 100000 }),
-      tx({ direction: "INCOME", typeId: "ty-pay", method: "BANK_TRANSFER", bank: "KHAN", amount: 50000 }),
-      tx({ direction: "INCOME", typeId: "ty-pay", method: "BANK_TRANSFER", bank: "KHAN", amount: 30000 }),
-      tx({ direction: "INCOME", typeId: "ty-pay", method: "BANK_TRANSFER", bank: null, amount: 7000 }),
-      tx({ direction: "INCOME", typeId: "ty-pay", method: "CARD", bank: "GOLOMT", amount: 20000 }),
+      tx({ direction: "INCOME", typeId: "ty-pay", method: "BANK_TRANSFER", bankId: "pa-khan", amount: 50000 }),
+      tx({ direction: "INCOME", typeId: "ty-pay", method: "BANK_TRANSFER", bankId: "pa-khan", amount: 30000 }),
+      tx({ direction: "INCOME", typeId: "ty-pay", method: "BANK_TRANSFER", bankId: null, amount: 7000 }),
+      tx({ direction: "INCOME", typeId: "ty-pay", method: "CARD", bankId: "pa-golomt", amount: 20000 }),
       tx({ direction: "INCOME", typeId: "ty-pay", method: "QPAY", amount: 9000 }),
       tx({ direction: "INCOME", typeId: "ty-pay", method: "CASH", amount: 999999, voidedAt: IN_RANGE }),
       tx({ direction: "EXPENSE", typeId: "ty-rent", method: "CASH", amount: 40000, taxIncluded: 4000 }),
@@ -136,10 +146,10 @@ test("income by method/bank per-bank totals; voided and tax are excluded; net pe
   const bt = m("BANK_TRANSFER");
   assert.equal(bt.total, "87000");
   assert.deepEqual(bt.banks.map((b) => [b.bank, b.bankLabel, b.total, b.count]), [
-    ["KHAN", "Хаан банк", "80000", 2],
+    ["pa-khan", "Хаан банк", "80000", 2],
     [null, "Банк тодорхойгүй", "7000", 1],
   ]);
-  assert.deepEqual(m("CARD").banks.map((b) => [b.bank, b.total]), [["GOLOMT", "20000"]]);
+  assert.deepEqual(m("CARD").banks.map((b) => [b.bank, b.total]), [["pa-golomt", "20000"]]);
   assert.equal(m("QPAY").total, "9000");
   assert.equal(s.totals.income, "216000");
   assert.equal(s.totals.expense, "55000");
@@ -154,12 +164,37 @@ test("income by method/bank per-bank totals; voided and tax are excluded; net pe
   assert.deepEqual(s.internalCost, { total: "15000", count: 1 });
 });
 
+test("Review focus 4/5: renamed/test/inactive accounts relabel via the join; null bankId on a bank method sorts last", async () => {
+  const { buildCashSummary } = await import("../lib/cash/report");
+  const { client } = fake({
+    types: TYPES, sessions: [], orders: [], payments: [],
+    accounts: [
+      { id: "pa1", tenantId: "t1", name: "Шинэ нэр", isTest: true, isActive: true },
+      { id: "pa2", tenantId: "t1", name: "Хуучин", isTest: false, isActive: false },
+      { id: "pa-other", tenantId: "t2", name: "Бусад", isTest: false, isActive: true },
+    ],
+    tx: [
+      tx({ direction: "INCOME", typeId: "ty-pay", method: "CARD", bankId: null, amount: 100 }),
+      tx({ direction: "INCOME", typeId: "ty-pay", method: "CARD", bankId: "pa1", amount: 3000 }),
+      tx({ direction: "INCOME", typeId: "ty-pay", method: "CARD", bankId: "pa2", amount: 50 }),
+    ],
+  });
+  const s = await buildCashSummary({ actor: ACTOR, from: FROM, to: TO, client, branchId: "b1" });
+  const card = s.incomeByMethod.find((r) => r.method === "CARD")!;
+  assert.deepEqual(card.banks.map((b) => [b.bank, b.bankLabel, b.bankIsTest, b.total]), [
+    ["pa2", "Хуучин (идэвхгүй)", false, "50"],
+    ["pa1", "Шинэ нэр (Туршилт)", true, "3000"],
+    [null, "Банк тодорхойгүй", false, "100"],
+  ]);
+});
+
 test("every query is tenant scoped, voids excluded, and a pinned scope beats the requested branch", async () => {
   const { buildCashSummary } = await import("../lib/cash/report");
   const { client, queries } = fake({ types: TYPES, sessions: [], orders: [], payments: [], tx: [] });
   const s = await buildCashSummary({ actor: ACTOR, from: FROM, to: TO, client, branchId: "other", scope: "b1" });
   assert.equal(s.branchId, "b1");
-  assert.equal(queries.length, 6);
+  // 7 = 6 aggregate/group queries + one tenant-scoped paymentAccount.findMany for bank labels
+  assert.equal(queries.length, 7);
   for (const q of queries) {
     assert.equal(q.tenantId, "t1");
     assert.equal(q.branchId ?? (q.order as Row | undefined)?.branchId ?? "b1", "b1");
@@ -238,7 +273,7 @@ test("sessions: frozen expected for closed, live for open, post-close voids, out
       // outside any session
       tx({ direction: "INCOME", typeId: "ty-pay", method: "CASH", amount: 8000 }),
       tx({ direction: "EXPENSE", typeId: "ty-rent", method: "CASH", amount: 2500 }),
-      tx({ direction: "INCOME", typeId: "ty-pay", method: "CARD", bank: "KHAN", amount: 9999 }),
+      tx({ direction: "INCOME", typeId: "ty-pay", method: "CARD", bankId: "pa-khan", amount: 9999 }),
     ],
   });
   const s = await buildCashSummary({ actor: ACTOR, from: FROM, to: TO, client, branchId: "b1" });
@@ -283,16 +318,16 @@ test("session byMethod: live per-method rows for open, frozen counts for closed,
     types: TYPES, orders: [], payments: [],
     sessions: [sClosed, sOpen],
     frozen: [
-      { tenantId: "t1", sessionId: "s1", method: "CARD", bank: "KHAN", expected: "30000", counted: "29000", difference: "-1000" },
+      { tenantId: "t1", sessionId: "s1", method: "CARD", bank: "pa-khan", expected: "30000", counted: "29000", difference: "-1000" },
       { tenantId: "t1", sessionId: "s1", method: "QPAY", bank: "", expected: "9000", counted: "9000", difference: "0" },
     ],
     tx: [
       tx({ direction: "INCOME", typeId: "ty-pay", method: "CASH", amount: 120000, sessionId: "s1" }),
       tx({ direction: "EXPENSE", typeId: "ty-rent", method: "CASH", amount: 20000, sessionId: "s1" }),
-      tx({ direction: "INCOME", typeId: "ty-pay", method: "CARD", bank: "KHAN", amount: 30000, sessionId: "s1" }),
+      tx({ direction: "INCOME", typeId: "ty-pay", method: "CARD", bankId: "pa-khan", amount: 30000, sessionId: "s1" }),
       tx({ direction: "INCOME", typeId: "ty-pay", method: "QPAY", amount: 9000, sessionId: "s1" }),
-      tx({ direction: "INCOME", typeId: "ty-pay", method: "CARD", bank: "KHAN", amount: 999, sessionId: "s1", voidedAt: IN_RANGE }),
-      tx({ direction: "INCOME", typeId: "ty-pay", method: "BANK_TRANSFER", bank: "GOLOMT", amount: 7000, sessionId: "s2" }),
+      tx({ direction: "INCOME", typeId: "ty-pay", method: "CARD", bankId: "pa-khan", amount: 999, sessionId: "s1", voidedAt: IN_RANGE }),
+      tx({ direction: "INCOME", typeId: "ty-pay", method: "BANK_TRANSFER", bankId: "pa-golomt", amount: 7000, sessionId: "s2" }),
       tx({ direction: "EXPENSE", typeId: "ty-int", method: "OTHER", amount: 500, sessionId: "s2" }),
     ],
   });
@@ -302,14 +337,14 @@ test("session byMethod: live per-method rows for open, frozen counts for closed,
   assert.equal(closed.totalExpense, "20000");
   assert.deepEqual(closed.byMethod.map((r) => [r.method, r.bank, r.income, r.expense, r.net, r.count, r.expected, r.counted, r.difference]), [
     ["CASH", null, "120000", "20000", "100000", 2, "150000", "148000", "-2000"],
-    ["CARD", "KHAN", "30000", "0", "30000", 1, "30000", "29000", "-1000"],
+    ["CARD", "pa-khan", "30000", "0", "30000", 1, "30000", "29000", "-1000"],
     ["QPAY", null, "9000", "0", "9000", 1, "9000", "9000", "0"],
   ]);
   assert.equal(open.totalIncome, "7000");
   assert.equal(open.totalExpense, "500");
   assert.deepEqual(open.byMethod.map((r) => [r.method, r.bank, r.net, r.expected, r.counted, r.difference]), [
     ["CASH", null, "0", "10000", null, null],
-    ["BANK_TRANSFER", "GOLOMT", "7000", "7000", null, null],
+    ["BANK_TRANSFER", "pa-golomt", "7000", "7000", null, null],
     ["OTHER", null, "-500", "-500", null, null],
   ]);
   // one tenant-scoped grouped query for all listed sessions (no N+1)
@@ -344,14 +379,14 @@ test("byMethod: CASH collapses to one row even with mixed bank values; frozen-on
     types: TYPES, orders: [], payments: [],
     sessions: [await mk("s1", "b1", false), await mk("s2", "b1", true), await mk("s3", "b1", true), await mk("s4", "b2", false)],
     frozen: [
-      { tenantId: "t1", sessionId: "s2", method: "CARD", bank: "KHAN", expected: "500", counted: "400", difference: "-100" },
-      { tenantId: "t1", sessionId: "s3", method: "CASH", bank: "KHAN", expected: "1", counted: "1", difference: "0" },
-      { tenantId: "t1", sessionId: "s4", method: "CARD", bank: "KHAN", expected: "5", counted: "5", difference: "0" },
+      { tenantId: "t1", sessionId: "s2", method: "CARD", bank: "pa-khan", expected: "500", counted: "400", difference: "-100" },
+      { tenantId: "t1", sessionId: "s3", method: "CASH", bank: "pa-khan", expected: "1", counted: "1", difference: "0" },
+      { tenantId: "t1", sessionId: "s4", method: "CARD", bank: "pa-khan", expected: "5", counted: "5", difference: "0" },
     ],
     tx: [
       tx({ direction: "INCOME", typeId: "ty-pay", method: "CASH", amount: 100, sessionId: "s1" }),
-      tx({ direction: "INCOME", typeId: "ty-pay", method: "CASH", bank: "KHAN", amount: 40, sessionId: "s1" }),
-      tx({ direction: "EXPENSE", typeId: "ty-rent", method: "CASH", bank: "GOLOMT", amount: 10, sessionId: "s1" }),
+      tx({ direction: "INCOME", typeId: "ty-pay", method: "CASH", bankId: "pa-khan", amount: 40, sessionId: "s1" }),
+      tx({ direction: "EXPENSE", typeId: "ty-rent", method: "CASH", bankId: "pa-golomt", amount: 10, sessionId: "s1" }),
       tx({ direction: "INCOME", typeId: "ty-pay", method: "CASH", amount: 7, sessionId: "s4", branchId: "b2" }),
     ],
   });
@@ -363,7 +398,7 @@ test("byMethod: CASH collapses to one row even with mixed bank values; frozen-on
   assert.deepEqual(a.map((r) => [r.method, r.bank, r.income, r.expense, r.net, r.count]), [["CASH", null, "140", "10", "130", 3]]);
   // (b) frozen CARD row, no entries
   const b = byId.get("s2")!.byMethod.find((r) => r.method === "CARD")!;
-  assert.deepEqual([b.bank, b.income, b.expense, b.net, b.count, b.expected, b.counted, b.difference], ["KHAN", "0", "0", "0", 0, "500", "400", "-100"]);
+  assert.deepEqual([b.bank, b.income, b.expense, b.net, b.count, b.expected, b.counted, b.difference], ["pa-khan", "0", "0", "0", 0, "500", "400", "-100"]);
   // (c) closed session without CASH entries: CASH row still present, from session columns (even with a stray frozen CASH+bank row)
   const c = byId.get("s3")!.byMethod;
   assert.deepEqual(c.map((r) => [r.method, r.bank, r.income, r.expense, r.net, r.count, r.expected, r.counted, r.difference]), [["CASH", null, "0", "0", "0", 0, "1100", "900", "-200"]]);
@@ -391,7 +426,7 @@ test("cash summary workbook has a sheet per section with Mongolian headers", asy
   const { client } = fake({
     types: TYPES, orders: [], payments: [], sessions: [],
     tx: [
-      tx({ direction: "INCOME", typeId: "ty-pay", method: "CARD", bank: "KHAN", amount: 1000 }),
+      tx({ direction: "INCOME", typeId: "ty-pay", method: "CARD", bankId: "pa-khan", amount: 1000 }),
       tx({ direction: "EXPENSE", typeId: "ty-rent", method: "CASH", amount: 400 }),
     ],
   });

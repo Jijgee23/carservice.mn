@@ -45,6 +45,7 @@ export const ENTITY_TYPES = [
   "CashTransactionType",
   "PostpaidSettlement",
   "CashSession",
+  "PaymentAccount",
 ] as const;
 
 export type EntityType = (typeof ENTITY_TYPES)[number];

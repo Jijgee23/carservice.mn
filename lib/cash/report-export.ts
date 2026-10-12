@@ -1,6 +1,5 @@
 // Phase D: one workbook, a sheet per section of the cash summary report. Pure: summary in, Buffer out.
 import ExcelJS from "exceljs";
-import { bankLabel } from "@/lib/banks";
 import { bookingDateKey } from "@/lib/booking-time";
 import { ORDER_PAYMENT_METHOD_LABEL } from "@/lib/orders";
 import type { CashSummary } from "./report";
@@ -131,7 +130,7 @@ export async function buildCashSummaryWorkbook(summary: CashSummary) {
       branch: s.branch.name,
       status: s.status === "OPEN" ? "Нээлттэй" : "Хаагдсан",
       method: ORDER_PAYMENT_METHOD_LABEL[m.method] ?? m.method,
-      bank: m.bank ? bankLabel(m.bank) : "",
+      bank: m.bankLabel ?? "",
       income: num(m.income),
       expense: num(m.expense),
       net: num(m.net),

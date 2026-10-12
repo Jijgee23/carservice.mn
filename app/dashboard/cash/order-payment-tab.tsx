@@ -6,7 +6,7 @@ import { Btn, Field } from "@/app/_components/landing-ops-ui";
 import { bookingDateKey } from "@/lib/booking-time";
 import { formatTugrik } from "@/lib/orders";
 import type { PayableOrderRow } from "@/lib/orders/order-payment-search";
-import { PaymentMethodPanel, type PaymentChoice } from "../_components/payment-method-modal";
+import { PaymentMethodPanel, type PaymentAccountOption, type PaymentChoice } from "../_components/payment-method-modal";
 import { NoOpenSessionNotice } from "./session-warning";
 
 function fmtDate(iso: string): string {
@@ -25,6 +25,7 @@ export function OrderPaymentTab({
   defaultBranchId,
   showBranchSelect,
   banks,
+  canManageAccounts,
   openBranchIds,
   onDone,
   onRecorded,
@@ -33,7 +34,8 @@ export function OrderPaymentTab({
   defaultBranchId: string;
   /** Only when the working branch is ALL/unset; pinned-branch users see no selector. */
   showBranchSelect: boolean;
-  banks: { code: string; label: string }[];
+  banks: PaymentAccountOption[];
+  canManageAccounts?: boolean;
   openBranchIds: string[];
   /** Called after a payment was recorded (closes the dialog and refreshes the list). */
   onDone: () => void;
@@ -199,6 +201,7 @@ export function OrderPaymentTab({
             }}
             title="Төлбөр бүртгэх"
             banks={banks}
+            canManageAccounts={canManageAccounts}
             defaultAmount={picked.remaining}
             changeBase={remainingNum}
             onRecord={recordPayment}

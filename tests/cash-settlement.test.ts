@@ -100,7 +100,7 @@ test("assertNotSettlementPayment blocks any payment carrying a settlementId", as
   const c = await import("../lib/orders/order-payment-commands");
   c.assertNotSettlementPayment([{ settlementId: null }, {}]);
   assert.throws(() => c.assertNotSettlementPayment([{ settlementId: null }, { settlementId: "s1" }]), (e: unknown) => code("SETTLEMENT_PAYMENT_LOCKED")(e) && (e as { status: number; message: string }).status === 422 && (e as { message: string }).message === "Нэгдсэн тооцооны төлбөрийг тооцоогоор нь цуцална уу.");
-  const row = c.serializeLedgerPayment({ id: "p", amount: await D(5), method: "CASH", status: "PAID", paidAt: null, createdAt: new Date(), bank: null, settlementId: "s1" } as never);
+  const row = c.serializeLedgerPayment({ id: "p", amount: await D(5), method: "CASH", status: "PAID", paidAt: null, createdAt: new Date(), bankId: null, bankAccount: null, settlementId: "s1" } as never);
   assert.equal(row.settlementId, "s1");
 });
 
@@ -128,7 +128,13 @@ async function makeDb(seed: { orders: Array<Record<string, unknown>>; payments?:
     branch: { findFirst: async () => ({ id: "b1", isActive: true }) },
     cashSession: { findFirst: async () => (db.openSessionId ? { id: db.openSessionId } : null) },
     customer: { findFirst: async () => ({ id: "c1" }) },
-    tenant: { findUnique: async () => ({ enabledBanks: [] }) },
+    paymentAccount: {
+      findFirst: async ({ where }: { where: { id?: string } }) => {
+        if (where.id === "acct-bank") return { id: "acct-bank", type: "BANK_ACCOUNT", name: "Хаан банк", isTest: false, isActive: true, legacyCode: null };
+        if (where.id === "acct-pos") return { id: "acct-pos", type: "POS", name: "Голомт POS", isTest: false, isActive: true, legacyCode: null };
+        return null;
+      },
+    },
     cashTransactionType: { findFirst: async () => ({ id: "type-settle" }) },
     serviceOrder: {
       findMany: async ({ where }: { where: { id: { in: string[] } } }) => db.orders.filter((o) => where.id.in.includes(o.id as string)),
@@ -221,6 +227,28 @@ test("runCreateSettlement: stale expectedAmount, ineligible order and missing ba
     [{ orderIds: ["o1", "nope"] }, "SETTLEMENT_ORDER_INVALID"],
     [{ method: "BANK_TRANSFER" }, "PAYMENT_BANK_REQUIRED"],
     [{ occurredAt: new Date("2026-09-01T00:00:00Z") }, "CASH_DATE_INVALID"],
+  ] as Array<[Record<string, unknown>, string]>) {
+    const { db, tx } = await makeDb({ orders: [order({ id: "o1", totalAmount: await D(100) }), order({ id: "o2", totalAmount: await D(50) })] });
+    await assert.rejects(s.runCreateSettlement(tx, createInput(over)), code(expected));
+    assert.equal(db.settlements.length + db.txns.length + db.payments.length, 0, expected);
+  }
+});
+
+test("runCreateSettlement: stores bankId on the settlement, every payment and the ledger entry", async () => {
+  const s = await import("../lib/cash/settlement");
+  const { db, tx } = await makeDb({ orders: [order({ id: "o1", totalAmount: await D(100) }), order({ id: "o2", totalAmount: await D(50) })] });
+  const id = await s.runCreateSettlement(tx, createInput({ method: "BANK_TRANSFER", bankInput: "acct-bank" }));
+  assert.equal(db.settlements[0].bankId, "acct-bank");
+  assert.deepEqual(db.payments.filter((p) => p.settlementId === id).map((p) => p.bankId), ["acct-bank", "acct-bank"]);
+  assert.equal(db.txns[0].bankId, "acct-bank");
+  assert.equal(db.audits.length, 1);
+});
+
+test("runCreateSettlement: POS account on a BANK_TRANSFER settlement or unknown account aborts before any write", async () => {
+  const s = await import("../lib/cash/settlement");
+  for (const [over, expected] of [
+    [{ method: "CARD", bankInput: "acct-bank" }, "PAYMENT_BANK_TYPE_MISMATCH"],
+    [{ method: "BANK_TRANSFER", bankInput: "nope" }, "PAYMENT_BANK_NOT_ENABLED"],
   ] as Array<[Record<string, unknown>, string]>) {
     const { db, tx } = await makeDb({ orders: [order({ id: "o1", totalAmount: await D(100) }), order({ id: "o2", totalAmount: await D(50) })] });
     await assert.rejects(s.runCreateSettlement(tx, createInput(over)), code(expected));
@@ -350,7 +378,7 @@ test("runCreateSettlement attaches the lump entry to the open cash session for e
   for (const [method, expected] of [["CASH", "sess-1"], ["BANK_TRANSFER", "sess-1"]] as const) {
     const { db, tx } = await makeDb({ orders: [order({ id: "o1", number: "1", totalAmount: await D(100), paymentStatus: "UNPAID" })] });
     db.openSessionId = "sess-1";
-    await s.runCreateSettlement(tx, createInput({ orderIds: ["o1"], method, bankInput: method === "CASH" ? undefined : "KHAN" }));
+    await s.runCreateSettlement(tx, createInput({ orderIds: ["o1"], method, bankInput: method === "CASH" ? undefined : "acct-bank" }));
     assert.equal(db.txns[0].sessionId ?? null, expected, method);
   }
   const { db, tx } = await makeDb({ orders: [order({ id: "o1", number: "1", totalAmount: await D(100), paymentStatus: "UNPAID" })] });

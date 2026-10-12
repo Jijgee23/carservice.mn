@@ -13,7 +13,7 @@ export type PaymentForLedger = {
   orderId: string;
   amount: Prisma.Decimal;
   method: string;
-  bank: string | null;
+  bankId: string | null;
   paidAt: Date | null;
   /** Payments closed by a postpaid settlement are posted as one lump entry (Phase C2) — skipped here. */
   settlementId?: string | null;
@@ -48,7 +48,7 @@ export async function postPaymentIncome(
       typeId,
       amount: payment.amount,
       method: payment.method as "CASH" | "BANK_TRANSFER" | "CARD" | "QPAY" | "OTHER",
-      bank: payment.bank,
+      bankId: payment.bankId,
       occurredAt: payment.paidAt ?? input.now ?? new Date(),
       customerId: order.customerId,
       orderPaymentId: payment.id,

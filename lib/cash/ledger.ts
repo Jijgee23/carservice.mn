@@ -1,6 +1,6 @@
 import { Prisma } from "@/app/generated/prisma/client";
 import { logAudit } from "@/lib/audit";
-import { assertPaymentBank, bankLabel, isBankCode, PaymentBankError } from "@/lib/banks";
+import { BANK_REF_SELECT, PaymentAccountError, bankRef, resolvePaymentAccount } from "@/lib/payment-accounts";
 import { hasPermission } from "@/lib/auth/roles";
 import { bookingDayBounds } from "@/lib/booking-time";
 import { ORDER_PAYMENT_METHOD_LABEL, formatTugrik } from "@/lib/orders";
@@ -39,7 +39,8 @@ export const CASH_ENTRY_SELECT = {
   direction: true,
   amount: true,
   method: true,
-  bank: true,
+  bankId: true,
+  bankAccount: { select: BANK_REF_SELECT },
   occurredAt: true,
   note: true,
   attachmentPath: true,
@@ -81,8 +82,7 @@ export function serializeCashEntry(entry: CashEntryRow, orderNumber: string | nu
     amount: entry.amount.toString(),
     method: entry.method,
     methodLabel: ORDER_PAYMENT_METHOD_LABEL[entry.method as keyof typeof ORDER_PAYMENT_METHOD_LABEL] ?? entry.method,
-    bank: entry.bank,
-    bankLabel: entry.bank ? bankLabel(entry.bank) : null,
+    ...bankRef(entry.bankAccount),
     occurredAt: entry.occurredAt.toISOString(),
     note: entry.note,
     attachmentPath: entry.attachmentPath,
@@ -192,15 +192,12 @@ export async function createCashEntry(input: CreateCashEntryInput): Promise<Seri
       select: { direction: true, isActive: true, systemKey: true },
     });
     assertTypeUsableForEntry(type, direction);
-    let bank: string | null = null;
-    if (method === "BANK_TRANSFER" || method === "CARD") {
-      const tenant = await tx.tenant.findUnique({ where: { id: tenantId }, select: { enabledBanks: true } });
-      try {
-        bank = assertPaymentBank(method, input.bank, tenant?.enabledBanks);
-      } catch (error) {
-        if (error instanceof PaymentBankError) throw new CashError(error.message, error.status, error.code, { bank: error.message });
-        throw error;
-      }
+    let bankId: string | null = null;
+    try {
+      bankId = (await resolvePaymentAccount(tx, tenantId, method, input.bank))?.id ?? null;
+    } catch (error) {
+      if (error instanceof PaymentAccountError) throw new CashError(error.message, error.status, error.code, { bank: error.message });
+      throw error;
     }
     if (customerId) {
       const customer = await tx.customer.findFirst({ where: { id: customerId, tenantId }, select: { id: true } });
@@ -218,7 +215,7 @@ export async function createCashEntry(input: CreateCashEntryInput): Promise<Seri
         typeId,
         amount,
         method,
-        bank,
+        bankId,
         occurredAt,
         note,
         attachmentPath,
@@ -238,7 +235,7 @@ export async function createCashEntry(input: CreateCashEntryInput): Promise<Seri
       entityId: row.id,
       action: "CREATE",
       summary: `${direction === "INCOME" ? "Орлого" : "Зарлага"} · ${row.type.name} · ${formatTugrik(amount.toString())}`,
-      after: { direction, typeId, amount: amount.toString(), method, bank, occurredAt: occurredAt.toISOString(), taxIncluded: taxIncluded?.toString() ?? null },
+      after: { direction, typeId, amount: amount.toString(), method, bankId, occurredAt: occurredAt.toISOString(), taxIncluded: taxIncluded?.toString() ?? null },
     }, tx);
     return row;
   });
@@ -355,8 +352,10 @@ export function buildCashEntryWhere(tenantId: string, filters: CashEntryFilters,
     where.sessionId = null;
   }
   if (filters.bank) {
-    if (!isBankCode(filters.bank)) throw new CashError("Банк буруу.", 422, "PAYMENT_BANK_NOT_ENABLED", { bank: "Банк буруу." });
-    where.bank = filters.bank;
+    // A PaymentAccount id, or a legacy bank code (old clients/bookmarks, e.g. ?bank=KHAN) of THIS tenant's accounts.
+    // An unknown value matches nothing. Appended to AND so it never clobbers other clauses.
+    const existing = where.AND == null ? [] : Array.isArray(where.AND) ? where.AND : [where.AND];
+    where.AND = [...existing, { OR: [{ bankId: filters.bank }, { bankAccount: { tenantId, legacyCode: filters.bank } }] }];
   }
   if (filters.from || filters.to) {
     const occurredAt: Prisma.DateTimeFilter = {};

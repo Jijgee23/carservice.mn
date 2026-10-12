@@ -2,22 +2,31 @@
 
 import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Btn } from "@/app/_components/landing-ops-ui";
-import { bankLabel } from "@/lib/banks";
+import { PAYMENT_ACCOUNTS_ADD_LINK, PAYMENT_ACCOUNTS_EMPTY, TEST_BADGE } from "@/lib/payment-accounts";
 import { formatPriceInput, liveFormatPriceInput } from "@/lib/orders";
 import { DialogShell, PosSimulator } from "./pos-simulator";
 
 export type PaymentMethodKey = "CASH" | "QPAY" | "BANK_TRANSFER" | "CARD" | "OTHER";
 export type PaymentChoice = { method: PaymentMethodKey; bank: string };
 
-type Bank = { code: string; label: string };
+export type PaymentAccountOption = {
+  id: string;
+  type: "BANK_ACCOUNT" | "POS";
+  name: string;
+  accountNumberMasked: string;
+  terminalId: string | null;
+  isTest: boolean;
+};
 
 type Base = {
   open: boolean;
   onClose: () => void;
   /** Гарчиг, жишээ «Төлбөр бүртгэх · Үлдэгдэл 10,000₮». */
   title: string;
-  /** Идэвхтэй банкууд (Tenant.enabledBanks-аар шүүгдсэн). */
-  banks: Bank[];
+  /** Идэвхтэй төлбөрийн сонголтууд (данс / POS). */
+  banks: PaymentAccountOption[];
+  /** Сонголт байхгүй үед «Төлбөрийн сонголт» руу холбоос харуулах эсэх (cash.manage). */
+  canManageAccounts?: boolean;
   /** Зөвхөн захиалгын төлбөрийн формд QPay мөр гаргана. */
   includeQpay?: boolean;
   /** Бүртгэх эрхгүй (зөвхөн QPay эрхтэй) үед зөвхөн QPay мөр үлдээнэ. */
@@ -66,39 +75,46 @@ type Row = {
 const keyOf = (c: PaymentChoice) => `${c.method}:${c.bank}`;
 
 /** Товч харуулалт, жишээ «💳 Хаан банк · POS» — форм дээрх «Төлбөрийн хэлбэр» товчид. */
-export function paymentChoiceSummary(choice: PaymentChoice): string {
+export function paymentChoiceSummary(choice: PaymentChoice, banks: PaymentAccountOption[]): string {
+  const nameOf = (id: string) => banks.find((b) => b.id === id)?.name ?? id;
   switch (choice.method) {
     case "CASH":
       return "💵 Бэлэн";
     case "QPAY":
       return "▦ QPay";
     case "BANK_TRANSFER":
-      return `🏦 ${bankLabel(choice.bank)} · Данс`;
+      return `🏦 ${nameOf(choice.bank)} · Данс`;
     case "CARD":
-      return `💳 ${bankLabel(choice.bank)} · POS`;
+      return `💳 ${nameOf(choice.bank)} · POS`;
     default:
       return "Бусад";
   }
 }
 
-function buildRows(banks: Bank[], includeQpay: boolean, qpayOnly: boolean): Row[] {
+function accountRowLabel(b: PaymentAccountOption): string {
+  return `${b.name}${b.isTest ? ` · ${TEST_BADGE}` : ""}${b.accountNumberMasked ? ` · ${b.accountNumberMasked}` : ""}`;
+}
+
+export function buildPaymentRows(banks: PaymentAccountOption[], includeQpay: boolean, qpayOnly: boolean): Row[] {
   const cash: PaymentChoice = { method: "CASH", bank: "" };
   const qpay: PaymentChoice = { method: "QPAY", bank: "" };
   const other: PaymentChoice = { method: "OTHER", bank: "" };
   if (qpayOnly) return [{ key: keyOf(qpay), choice: qpay, label: "QPay", group: "top", icon: "▦" }];
   const rows: Row[] = [{ key: keyOf(cash), choice: cash, label: "Бэлэн", group: "top", icon: "💵" }];
   if (includeQpay) rows.push({ key: keyOf(qpay), choice: qpay, label: "QPay", group: "top", icon: "▦" });
-  for (const b of banks) {
-    const choice: PaymentChoice = { method: "BANK_TRANSFER", bank: b.code };
-    rows.push({ key: keyOf(choice), choice, label: b.label, group: "transfer", icon: "🏦" });
+  for (const b of banks.filter((x) => x.type === "BANK_ACCOUNT")) {
+    const choice: PaymentChoice = { method: "BANK_TRANSFER", bank: b.id };
+    rows.push({ key: keyOf(choice), choice, label: accountRowLabel(b), group: "transfer", icon: "🏦" });
   }
-  for (const b of banks) {
-    const choice: PaymentChoice = { method: "CARD", bank: b.code };
-    rows.push({ key: keyOf(choice), choice, label: b.label, group: "card", icon: "💳" });
+  for (const b of banks.filter((x) => x.type === "POS")) {
+    const choice: PaymentChoice = { method: "CARD", bank: b.id };
+    rows.push({ key: keyOf(choice), choice, label: accountRowLabel(b), group: "card", icon: "💳" });
   }
   rows.push({ key: keyOf(other), choice: other, label: "Бусад", group: "other", icon: "•••" });
   return rows;
 }
+
+const buildRows = buildPaymentRows;
 
 const GROUP_HEADER: Partial<Record<Row["group"], string>> = {
   transfer: "Дансаар шилжүүлэх",
@@ -181,6 +197,19 @@ function ModalBody(props: PaymentMethodModalProps) {
           onKeyDown={onListKeyDown}
           className={`${detailOpen ? "hidden sm:block" : "block"} w-full sm:w-64 shrink-0 overflow-y-auto border-r border-[var(--oc-line)] p-2`}
         >
+          {banks.length === 0 && !qpayOnly ? (
+            <div className="px-2 pt-3 pb-1 text-xs text-[var(--oc-muted3)]">
+              {PAYMENT_ACCOUNTS_EMPTY}
+              {props.canManageAccounts ? (
+                <>
+                  {" "}
+                  <a href="/dashboard/banks" className="underline hover:text-[var(--oc-ink)]">
+                    {PAYMENT_ACCOUNTS_ADD_LINK}
+                  </a>
+                </>
+              ) : null}
+            </div>
+          ) : null}
           {rows.map((r, i) => {
             const header = r.group !== rows[i - 1]?.group ? GROUP_HEADER[r.group] : undefined;
             const active = r.key === selectedKey;
@@ -261,12 +290,15 @@ function PickerDetail({ row, onConfirm }: { row: Row; onConfirm: (c: PaymentChoi
 }
 
 function FullDetail(props: FullProps & { row: Row }) {
-  const { row, defaultAmount, onRecord, cashWarning, recordBlockedNotice, changeBase, otherNote, qpayPanel, extraFields, onClose } = props;
+  const { banks, row, defaultAmount, onRecord, cashWarning, recordBlockedNotice, changeBase, otherNote, qpayPanel, extraFields, onClose } = props;
   const { method, bank } = row.choice;
   const [amount, setAmount] = useState(formatPriceInput(defaultAmount));
   const [pos, setPos] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const account = banks.find((b) => b.id === bank);
+  const posText = `${account?.name ?? ""}${account?.terminalId ? ` · TID ${account.terminalId}` : ""}`;
 
   const amountNum = Number.parseFloat(amount.replace(/,/g, ""));
   const amountOk = Number.isFinite(amountNum) && amountNum > 0;
@@ -297,7 +329,7 @@ function FullDetail(props: FullProps & { row: Row }) {
       <div className="flex flex-col gap-4">
         <div className="text-base font-semibold text-[var(--oc-ink)]">{selectionTitle(row)}</div>
         <PosSimulator
-          bankName={bankLabel(bank)}
+          bankName={posText}
           amount={amount}
           pending={pending}
           error={error}

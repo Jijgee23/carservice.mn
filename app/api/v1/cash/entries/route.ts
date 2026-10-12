@@ -40,7 +40,7 @@ export async function GET(req: Request) {
   }
 }
 
-// POST /api/v1/cash/entries  { direction, typeId, branchId, amount, method, bank?, occurredAt?, note?, attachmentPath?, taxIncluded?, customerId?, counterparty? }
+// POST /api/v1/cash/entries  { direction, typeId, branchId, amount, method, bankId? (legacy bank? still accepted), occurredAt?, note?, attachmentPath?, taxIncluded?, customerId?, counterparty? }
 // -> 201 { entry: CashEntry }
 export async function POST(req: Request) {
   const auth = await requireCashApiUser(req);
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
       branchId: body.branchId,
       amount: body.amount,
       method: body.method,
-      bank: body.bank,
+      bank: typeof body.bankId === "string" ? body.bankId : body.bank,
       occurredAt: body.occurredAt,
       note: body.note,
       attachmentPath: body.attachmentPath,

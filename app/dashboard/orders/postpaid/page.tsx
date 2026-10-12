@@ -14,9 +14,10 @@ import { customerDisplay, customerLabel, orgRegnumLabel } from "@/lib/customers"
 import { requireUser } from "@/lib/auth";
 import { canView, hasPermission, workingBranchScopeId } from "@/lib/auth/roles";
 import { bookingDateKey } from "@/lib/booking-time";
-import { getTenantBanks } from "@/lib/tenant-banks";
+import { listPickerAccounts } from "@/lib/payment-account-service";
 import { openSessionBranchIds } from "../../cash/open-sessions";
 import { SettleButton } from "./settle-dialog";
+import type { PaymentAccountOption } from "../../_components/payment-method-modal";
 import { orderReadWhere } from "@/lib/auth/order-access";
 import {
   ORDER_STATUS_BADGE,
@@ -154,17 +155,17 @@ export default async function PostpaidOrdersPage({
   let settle: {
     branches: { id: string; name: string }[];
     customers: { id: string; name: string }[];
-    banks: { code: string; label: string }[];
+    banks: PaymentAccountOption[];
     openBranchIds: string[];
   } | null = null;
   if (canSettle) {
-    const [branches, tenantBanks] = await Promise.all([
+    const [branches, pickerAccounts] = await Promise.all([
       prisma.branch.findMany({
         where: { tenantId: user.tenantId, ...(scopeBranchId ? { id: scopeBranchId } : {}) },
         orderBy: { name: "asc" },
         select: { id: true, name: true },
       }),
-      getTenantBanks(user.tenantId),
+      listPickerAccounts(user.tenantId),
     ]);
     // Eligibility is the ORDER snapshot (postpaid, COMPLETED, non-internal, outstanding > 0), not the
     // current vehicle link, so source the picker from orders.
@@ -203,11 +204,10 @@ export default async function PostpaidOrdersPage({
         name: [d.primary, d.secondary, orgRegnumLabel(c)].filter(Boolean).join(" · "),
       });
     }
-    const labelByCode = new Map(tenantBanks.banks.map((b) => [b.code, b.label] as const));
     settle = {
       branches,
       customers: [...byCustomer.values()].sort((a, b) => a.name.localeCompare(b.name, "mn")),
-      banks: tenantBanks.enabledBanks.map((code) => ({ code, label: labelByCode.get(code) ?? code })),
+      banks: pickerAccounts,
       openBranchIds: await openSessionBranchIds(user.tenantId, branches.map((b) => b.id)),
     };
   }
@@ -228,6 +228,8 @@ export default async function PostpaidOrdersPage({
               defaultBranchId={scopeBranchId ?? settle.branches[0]?.id ?? ""}
               customers={settle.customers}
               banks={settle.banks}
+              // Valid as constant true: SettleButton renders only inside the canSettle branch, which requires cash.manage.
+              canManageAccounts
               openBranchIds={settle.openBranchIds}
               today={bookingDateKey(new Date())}
             />

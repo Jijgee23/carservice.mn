@@ -7,6 +7,7 @@ import { Prisma } from "@/app/generated/prisma/client";
 import { logAudit } from "@/lib/audit";
 import { hasPermission } from "@/lib/auth/roles";
 import { formatTugrik } from "@/lib/orders";
+import { loadPaymentAccountLabels, type LabelReader } from "@/lib/payment-accounts";
 import { prisma, type PrismaTransactionClient } from "@/lib/prisma";
 import { CASH_ENTRY_SELECT, parseBound, serializeCashEntry, type CashScope } from "./ledger";
 import {
@@ -84,14 +85,14 @@ const groupKey = (method: string, bank: string) => `${method}|${bank}`;
 /** Live per-(method, bank) totals of a session: non-voided entries of ANY method, one row per group present. */
 export async function sessionMethodTotals(client: SessionClient, tenantId: string, sessionId: string): Promise<SessionMethodTotal[]> {
   const groups = await client.cashTransaction.groupBy({
-    by: ["method", "bank", "direction"],
+    by: ["method", "bankId", "direction"],
     where: { tenantId, sessionId, voidedAt: null },
     _sum: { amount: true },
     _count: { _all: true },
   });
   const byKey = new Map<string, SessionMethodTotal>();
   for (const g of groups) {
-    const bank = g.bank ?? "";
+    const bank = g.bankId ?? "";
     const key = groupKey(g.method, bank);
     const row = byKey.get(key) ?? { method: g.method as SessionMethod, bank, income: ZERO, expense: ZERO, net: ZERO, count: 0 };
     const amount = new Prisma.Decimal((g._sum?.amount ?? 0).toString());
@@ -108,7 +109,7 @@ export async function sessionMethodTotals(client: SessionClient, tenantId: strin
 
 type LedgerGroup = {
   method: string;
-  bank: string | null;
+  bankId: string | null;
   direction: string;
   _sum: { amount: Prisma.Decimal | number | string | null } | null;
   _count: { _all: number } | null;
@@ -123,7 +124,7 @@ export function liveTotalsFromGroups(openingCash: Prisma.Decimal, groups: Readon
   const entryCount = cash.reduce((n, g) => n + (g._count?._all ?? 0), 0);
   const byKey = new Map<string, SessionMethodTotal>();
   for (const g of groups) {
-    const bank = g.bank ?? "";
+    const bank = g.bankId ?? "";
     const key = groupKey(g.method, bank);
     const row = byKey.get(key) ?? { method: g.method as SessionMethod, bank, income: ZERO, expense: ZERO, net: ZERO, count: 0 };
     if (g.direction === "INCOME") row.income = row.income.plus(amountOf(g));
@@ -154,7 +155,7 @@ export async function computeExpectedCashBatch(
   const result = new Map<string, ReturnType<typeof liveTotalsFromGroups>>();
   if (sessions.length === 0) return result;
   const groups = await client.cashTransaction.groupBy({
-    by: ["sessionId", "method", "bank", "direction"],
+    by: ["sessionId", "method", "bankId", "direction"],
     where: { tenantId, sessionId: { in: sessions.map((s) => s.id) }, voidedAt: null },
     _sum: { amount: true },
     _count: { _all: true },
@@ -218,7 +219,7 @@ type LiveTotals = {
  * session's drawer figures (expected INCLUDES opening cash). Non-CASH rows: open -> expected = live net, counted/difference
  * null; closed -> the frozen CashSessionMethodCount values (a frozen group with no live entries any more is kept, zeros).
  */
-function serializeByMethod(row: SessionRow, live: LiveTotals, closed: boolean) {
+function serializeByMethod(row: SessionRow, live: LiveTotals, closed: boolean, bankLabels: ReadonlyMap<string, string>) {
   const frozen = new Map((row.methodCounts ?? []).map((m) => [groupKey(m.method, m.bank), m]));
   const rows = [...live.byMethod];
   if (closed) {
@@ -247,6 +248,7 @@ function serializeByMethod(row: SessionRow, live: LiveTotals, closed: boolean) {
     return {
       method: g.method,
       bank: g.bank === "" ? null : g.bank,
+      bankLabel: g.bank === "" ? null : (bankLabels.get(g.bank) ?? g.bank),
       income: g.income.toString(),
       expense: g.expense.toString(),
       net: g.net.toString(),
@@ -259,7 +261,7 @@ function serializeByMethod(row: SessionRow, live: LiveTotals, closed: boolean) {
 }
 
 /** JSON shape. Open: expectedCash is live and counted/difference are null. Closed: the frozen stored values. */
-export function serializeCashSession(row: SessionRow, live: LiveTotals | null) {
+export function serializeCashSession(row: SessionRow, live: LiveTotals | null, bankLabels: ReadonlyMap<string, string> = new Map()) {
   const closed = row.closedAt != null;
   return {
     id: row.id,
@@ -280,7 +282,7 @@ export function serializeCashSession(row: SessionRow, live: LiveTotals | null) {
     entryCount: live?.entryCount ?? null,
     // All methods (non-voided): total entries and the per-(method, bank) breakdown. Cash-only fields above are unchanged.
     totalEntryCount: live?.totalEntryCount ?? null,
-    byMethod: live ? serializeByMethod(row, live, closed) : [],
+    byMethod: live ? serializeByMethod(row, live, closed, bankLabels) : [],
   };
 }
 
@@ -301,8 +303,22 @@ export async function hasOpenSession(client: Pick<PrismaTransactionClient, "cash
   return open != null;
 }
 
+/** One tenant-scoped label query (none when no account id is involved) for every bank key across the sessions being serialized. */
+async function labelsFor(
+  client: LabelReader,
+  tenantId: string,
+  sessions: ReadonlyArray<{ methodCounts?: ReadonlyArray<{ bank: string }> }>,
+  totals: Iterable<{ byMethod: ReadonlyArray<{ bank: string }> }>,
+): Promise<Map<string, string>> {
+  const ids: string[] = [];
+  for (const s of sessions) for (const m of s.methodCounts ?? []) ids.push(m.bank);
+  for (const t of totals) for (const g of t.byMethod) ids.push(g.bank);
+  return loadPaymentAccountLabels(client, tenantId, ids);
+}
+
 async function liveSerialize(row: SessionRow, tenantId: string): Promise<SerializedCashSession> {
-  return serializeCashSession(row, await computeExpectedCash(prisma, tenantId, row));
+  const live = await computeExpectedCash(prisma, tenantId, row);
+  return serializeCashSession(row, live, await labelsFor(prisma, tenantId, [row], [live]));
 }
 
 function branchRequired(): CashError {
@@ -383,6 +399,23 @@ export type MethodCountInput = { method: SessionMethod; bank: string; counted: P
 const methodCountInvalid = (field: string, message = "Утга буруу байна.") =>
   new CashError(message, 422, "CASH_FIELD_INVALID", { [field]: message });
 
+/** An older client may send a legacy bank code; map it (or an id) to this tenant's account id. Unknown values pass through and fail the group check. */
+async function mapCountBanks(tx: PrismaTransactionClient, tenantId: string, inputs: MethodCountInput[]): Promise<MethodCountInput[]> {
+  const out: MethodCountInput[] = [];
+  for (const m of inputs) {
+    if (!m.bank) {
+      out.push(m);
+      continue;
+    }
+    const row = await tx.paymentAccount.findFirst({
+      where: { tenantId, OR: [{ id: m.bank }, { legacyCode: m.bank, type: m.method === "CARD" ? "POS" : "BANK_ACCOUNT" }] },
+      select: { id: true },
+    });
+    out.push({ ...m, bank: row?.id ?? m.bank });
+  }
+  return out;
+}
+
 /**
  * Shape-validates the optional close input `[{ method, bank?, counted? }]`. counted null/""/absent = not counted.
  * CASH is rejected (the drawer uses countedCash). Duplicate (method, bank) -> 422. Group existence is checked in the tx.
@@ -411,7 +444,7 @@ export async function closeCashSession(input: {
   scope?: CashScope;
   sessionId: string;
   countedCash: unknown;
-  /** Optional per-(method, bank) counted amounts for non-CASH groups, e.g. [{ method: "CARD", bank: "KHAN", counted: "120000" }]. */
+  /** Optional per-(method, bank) counted amounts for non-CASH groups, e.g. [{ method: "CARD", bank: "<paymentAccountId>", counted: "120000" }]. */
   methodCounts?: unknown;
   note?: unknown;
   now?: Date;
@@ -423,7 +456,7 @@ export async function closeCashSession(input: {
   const closeNote = normalizeOptionalText(input.note, "note", MAX_NOTE_LENGTH);
   const tenantId = actor.tenantId;
   const scope = effectiveBranchScope(actor, input.scope);
-  const { closed, totals } = await prisma.$transaction(async (tx) => {
+  const { closed, totals, labels } = await prisma.$transaction(async (tx) => {
     const found = await tx.cashSession.findFirst({ where: { id: input.sessionId, tenantId }, select: { id: true, branchId: true } });
     if (!found || (scope != null && found.branchId !== scope)) throw new CashError("Ээлж олдсонгүй.", 404, "CASH_SESSION_NOT_FOUND");
     await lockBranch(tx, tenantId, found.branchId);
@@ -442,7 +475,8 @@ export async function closeCashSession(input: {
     // Per-(method, bank) rows for every NON-CASH group present (CASH uses the CashSession columns). QPAY has no count
     // input: counted = expected, difference 0. Input for a group the session does not have -> 422 (tx rolls back).
     const groups = live.byMethod.filter((g) => g.method !== "CASH");
-    for (const m of methodInputs) {
+    const mappedInputs = await mapCountBanks(tx, tenantId, methodInputs);
+    for (const m of mappedInputs) {
       if (!groups.some((g) => g.method === m.method && g.bank === m.bank)) {
         throw methodCountInvalid("methodCounts", "Энэ ээлжид ийм төлбөрийн аргын гүйлгээ байхгүй.");
       }
@@ -450,7 +484,7 @@ export async function closeCashSession(input: {
     if (groups.length) {
       await tx.cashSessionMethodCount.createMany({
         data: groups.map((g) => {
-          const given = methodInputs.find((m) => m.method === g.method && m.bank === g.bank)?.counted ?? null;
+          const given = mappedInputs.find((m) => m.method === g.method && m.bank === g.bank)?.counted ?? null;
           const counted = g.method === "QPAY" ? g.net : given;
           return { tenantId, sessionId: session.id, method: g.method, bank: g.bank, expected: g.net, counted, difference: counted ? counted.minus(g.net) : null };
         }),
@@ -468,9 +502,9 @@ export async function closeCashSession(input: {
       after: { open: false, countedCash: countedCash.toString(), expectedCash: live.expectedCash.toString(), difference: difference.toString() },
     }, tx);
     const row = await tx.cashSession.findUniqueOrThrow({ where: { id: session.id }, select: SESSION_SELECT });
-    return { closed: row, totals: live };
+    return { closed: row, totals: live, labels: await labelsFor(tx, tenantId, [row], [live]) };
   });
-  return serializeCashSession(closed, totals);
+  return serializeCashSession(closed, totals, labels);
 }
 
 /** Current (open) session of a branch with live expected cash, or null. */
@@ -516,7 +550,8 @@ export async function listSessions(input: { actor: CashActor; scope?: CashScope;
   ]);
   // One groupBy for the whole page (was 2 aggregate queries per row).
   const totals = await computeExpectedCashBatch(prisma, tenantId, rows);
-  const sessions = rows.map((row) => serializeCashSession(row, totals.get(row.id) ?? liveTotalsFromGroups(row.openingCash, [])));
+  const labels = await labelsFor(prisma, tenantId, rows, totals.values());
+  const sessions = rows.map((row) => serializeCashSession(row, totals.get(row.id) ?? liveTotalsFromGroups(row.openingCash, []), labels));
   return { sessions, total };
 }
 

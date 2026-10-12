@@ -50,7 +50,8 @@ import { openSessionBranchIds } from "../../cash/open-sessions";
 import { PAYMENT_LEDGER_SELECT } from "@/lib/orders/order-payment-commands";
 import { PAID_PAYMENT_LOCKED_CANCEL_REASON } from "@/lib/cash/locked-copy";
 import { findLockedPaymentIds } from "@/lib/cash/session-attach";
-import { getTenantBanks } from "@/lib/tenant-banks";
+import { bankRef } from "@/lib/payment-accounts";
+import { listPickerAccounts } from "@/lib/payment-account-service";
 import { StatusControls } from "./status-controls";
 import { OrderForm } from "../order-form";
 import { vehicleOwnerIsOrganization } from "@/lib/vehicles/owner-kind";
@@ -207,7 +208,7 @@ export default async function OrderDetailPage({
 
   // QPay тохиргоо + одоо хүлээгдэж байгаа QPay invoice + бүртгэгдсэн
   // төлбөрүүдийн жагсаалт (арга бүрээр — жишээ нь 20,000₮ QPay, 50,000₮ бэлнээр).
-  const [qpayConfig, pendingOrderPayment, orderPayments, tenantBanks] = await Promise.all([
+  const [qpayConfig, pendingOrderPayment, orderPayments, pickerAccounts] = await Promise.all([
     prisma.tenantQPaySettings.findUnique({
       where: { tenantId: user.tenantId },
       select: { enabled: true },
@@ -221,7 +222,7 @@ export default async function OrderDetailPage({
       orderBy: { createdAt: "desc" },
       select: PAYMENT_LEDGER_SELECT,
     }),
-    getTenantBanks(user.tenantId),
+    listPickerAccounts(user.tenantId),
   ]);
   const qpayReady = Boolean(qpayConfig?.enabled);
   const lockedPaymentIds = await findLockedPaymentIds(prisma, user.tenantId, orderPayments.map((p) => p.id));
@@ -583,11 +584,13 @@ export default async function OrderDetailPage({
                     method: p.method,
                     status: p.status,
                     createdAt: p.createdAt.toISOString(),
-                    bank: p.bank,
+                    bankId: p.bankId,
+                    bankLabel: bankRef(p.bankAccount).bankLabel,
                     settlementId: p.settlementId,
                     locked: lockedPaymentIds.has(p.id),
                   }))}
-                  banks={tenantBanks.banks.filter((b) => tenantBanks.enabledBanks.includes(b.code))}
+                  banks={pickerAccounts}
+                  canManageAccounts={hasPermission(user, "cash.manage")}
                   cashSessionOpen={cashSessionOpen}
                   remaining={remainingAmount}
                   canRecord={canRecordPayments && canSettle}

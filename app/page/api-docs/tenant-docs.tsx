@@ -349,19 +349,22 @@ Res:  200 { "order": {...} }
         <Endpoint method="GET" path="/api/v1/orders/[id]/payments" auth="bearer" bearerLabel={BEARER} tags={["Эрх: payments.view"]} title="Засварын хуудасны бүртгэгдсэн төлбөрүүд (банкны мэдээлэлтэй).">
           <Code>{`Res: 200 { "payments": [{ "id": "...", "amount": "50000", "method": "CASH|CARD|BANK_TRANSFER|QPAY|OTHER", "status": "PAID|PENDING|CANCELLED|FAILED",
                          "paidAt": "ISO" | null, "createdAt": "ISO",
-                         "bank": "KHAN" | null, "bankLabel": "Хаан банк" | null,
+                         "bankId": "..." | null, "bank": "KHAN" | null, "bankLabel": "Хаан банк" | null,   // bankId = төлбөрийн сонголтын id; bank = хуучин код (хуучин бус данс → null)
+                         "bankType": "BANK_ACCOUNT" | "POS" | null, "bankIsTest": false,
                          "locked": false,                                  // true = төлбөрийн кассын бичлэг ХААГДСАН ээлжид: буцаах боломжгүй (409 CASH_SESSION_ENTRY_LOCKED); UI товчийг идэвхгүй болгоно
                          "settlementId": "..." | null }] }   // settlementId != null = «Нэгдсэн тооцоо»-ны төлбөр: тусад нь буцаах боломжгүй (422 SETTLEMENT_PAYMENT_LOCKED)
 403 { "error": "Танд энэ төлбөрийг харах эрх байхгүй.", "code": "ORDER_VIEW_FORBIDDEN" }
 404 { "error": "Засварын хуудас олдсонгүй.", "code": "ORDER_NOT_FOUND" }`}</Code>
         </Endpoint>
 
-        <Endpoint method="POST" path="/api/v1/orders/[id]/payments" auth="bearer" bearerLabel={BEARER} tags={["Эрх: payments.create", "Багц идэвхтэй байх шаардлагатай"]} title="Төлбөр бүртгэх. BANK_TRANSFER/CARD үед хүлээн авсан банк (bank) заавал; бусад аргад bank үл тооцогдож null хадгалагдана.">
-          <Code>{`Req:  { "method": "CASH|CARD|BANK_TRANSFER|OTHER", "amount": "50000", "bank": "KHAN" }
-      // bank — зөвхөн BANK_TRANSFER/CARD үед. CARD-д POS терминалын банк. GET /api/v1/banks-ийн кодуудаас.
+        <Endpoint method="POST" path="/api/v1/orders/[id]/payments" auth="bearer" bearerLabel={BEARER} tags={["Эрх: payments.create", "Багц идэвхтэй байх шаардлагатай"]} title="Төлбөр бүртгэх. BANK_TRANSFER/CARD үед төлбөрийн сонголт (bankId) заавал; бусад аргад bankId үл тооцогдож null хадгалагдана.">
+          <Code>{`Req:  { "method": "CASH|CARD|BANK_TRANSFER|OTHER", "amount": "50000", "bankId": "..." }
+      // bankId — зөвхөн BANK_TRANSFER/CARD үед; GET /api/v1/banks-ийн accounts[].id. BANK_TRANSFER → type=BANK_ACCOUNT, CARD → type=POS данс.
+      // Хуучин апп "bank": "KHAN" (хуучин код) илгээсээр байж болно — тенантын тухайн кодтой хуучин данс руу шийдэгдэнэ.
 Res:  201 { "payment": { ...дээрх payment бүтэц }, "order": { "paidAmount", "paymentStatus", "totalAmount", "remainingAmount" } }
 422 { "error": "Банкаа сонгоно уу.", "code": "PAYMENT_BANK_REQUIRED", "fieldErrors": { "bank": "..." } }
-422 { "error": "Энэ банк идэвхгүй байна.", "code": "PAYMENT_BANK_NOT_ENABLED", "fieldErrors": { "bank": "..." } }
+422 { "error": "Энэ банк идэвхгүй байна.", "code": "PAYMENT_BANK_NOT_ENABLED", "fieldErrors": { "bank": "..." } }   // идэвхгүй, олдоогүй эсвэл өөр тенантын данс
+422 { "code": "PAYMENT_BANK_TYPE_MISMATCH", "fieldErrors": { "bank": "..." } }   // BANK_TRANSFER-д POS, CARD-д данс сонгосон
       // Бусад: PAYMENT_AMOUNT_INVALID, PAYMENT_ALREADY_PAID, PAYMENT_OVERPAYMENT, ORDER_EDIT_FORBIDDEN ...
 409 { "error": "Касс нээгээгүй байна. Эхлээд кассаа нээнэ үү.", "code": "CASH_SESSION_CLOSED" }   // салбарын кассын ээлж нээлттэй биш (бүх төлбөрийн арга)
       // CASH_SESSION_CLOSED: төлбөр бүртгэх, буцаах (reverse, бүгдийг буцаах), QPay нэхэмжлэх үүсгэхэд захиалгын салбарт нээлттэй касс (кассын ээлж) заавал байна. Нээсэн QPay нэхэмжлэхийн төлбөр орсныг баталгаажуулах/QPay цуцлахад хамаарахгүй.
@@ -369,30 +372,54 @@ Res:  201 { "payment": { ...дээрх payment бүтэц }, "order": { "paidAmo
       // CASH_SESSION_ENTRY_LOCKED: хаагдсан кассын ээлжид хамаарах төлбөрийг (аль ч арга) буцаах боломжгүй — 409 { "code": "CASH_SESSION_ENTRY_LOCKED", "error": "Хаагдсан ээлжийн гүйлгээг буцаах боломжгүй." } (POST /payments/[paymentId]/reverse, PATCH /payment {paymentStatus:"UNPAID"} бүгдийг буцаах). Бүгдийг буцаахад нэг ч түгжигдсэн төлбөр байвал бүхэлд нь татгалзана. Ээлжгүй (хуучин) бичлэг нээлттэй ээлжид буцаагдсаар байна. Иймээс хаагдсан ээлжид төлөгдсөн захиалгыг цуцлах, мөрийг засах/цуцлахад 422 { "code": "PAID_PAYMENT_LOCKED" } буцна («Төлбөр нь хаагдсан ээлжид бүртгэгдсэн тул захиалгыг цуцлах боломжгүй.» / «...мөрийг засах, цуцлах боломжгүй.») — энэ үед PAID_PAYMENT_EXISTS («эхлээд төлбөрийг буцаа») биш; payment.locked = true байгааг UI-д ашиглана.`}</Code>
         </Endpoint>
 
-        <Endpoint method="GET" path="/api/v1/banks" auth="bearer" bearerLabel={BEARER} title="Банкны тогтмол жагсаалт + тенантын идэвхтэй банкууд (төлбөрийн банк сонгогчид).">
-          <Code>{`Res: 200 { "banks": [{ "code": "KHAN", "label": "Хаан банк" }, ...11 банк],
-           "enabledBanks": ["KHAN", "GOLOMT"],   // хоосон тохиргоо → бүх банк
-           "configured": false }                   // тенант өөрөө сонгоогүй бол false
-      // Сонгогч зөвхөн enabledBanks-ийг харуулна. Хадгалагдсан банк идэвхгүй болсон ч label-ээ үргэлж харуулна (үл мэдэгдэх код → код өөрөө).`}</Code>
+        <Endpoint method="GET" path="/api/v1/banks" auth="bearer" bearerLabel={BEARER} title="Тенантын идэвхтэй төлбөрийн сонголтууд (данс, POS) — төлбөрийн сонгогчид. Дугаар далдлагдсан.">
+          <Code>{`Res: 200 { "accounts": [{ "id": "...", "type": "BANK_ACCOUNT" | "POS", "method": "BANK_TRANSFER" | "CARD", "name": "Хаан банк",
+                          "accountNumberMasked": "••••1234", "terminalId": "..." | null, "merchantId": "..." | null, "isTest": false }],
+           // Хуучин аппуудад зориулсан нийцтэй талбарууд:
+           "banks": [{ "code": "KHAN", "label": "Хаан банк" }, ...11 банк],
+           "enabledBanks": ["KHAN", "GOLOMT"],   // тенантын идэвхтэй ХУУЧИН дансны (BANK_ACCOUNT) кодууд
+           "configured": true }                    // enabledBanks.length > 0
+      // Шинэ апп зөвхөн accounts-ийг ашиглана: method=BANK_TRANSFER → type=BANK_ACCOUNT, method=CARD → type=POS. isTest=true → «Туршилт» тэмдэг.
+      // Шинэ тенант өгөгдмөлөөр данс/POS-гүй (хоосон accounts) — Банк хуудаснаас бүртгэнэ. Идэвхгүй болсон данс түүхэн бичлэгт label-ээ хадгална.`}</Code>
         </Endpoint>
 
-        <Endpoint method="PUT" path="/api/v1/banks/enabled" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage", "Багц идэвхтэй байх шаардлагатай"]} title="Идэвхтэй банкуудыг тохируулах (хоосон жагсаалт = бүх банк).">
-          <Code>{`Req:  { "enabledBanks": ["KHAN", "GOLOMT"] }   // давхардал арилгагдана
-Res:  200 { "banks": [...], "enabledBanks": [...], "configured": true }
-403 { "error": "Танд кассыг удирдах эрх байхгүй.", "code": "CASH_MANAGE_FORBIDDEN" }
-422 { "error": "Банкны код буруу байна.", "code": "BANK_CODE_INVALID" }`}</Code>
+        <Endpoint method="GET" path="/api/v1/payment-accounts" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage"]} title="Төлбөрийн сонголтуудын удирдлагын жагсаалт (бүтэн дансны дугаартай). includeInactive=1 → идэвхгүйг оролцуулна.">
+          <Code>{`Query: includeInactive=1   // заавал биш
+Res: 200 { "accounts": [{ "id": "...", "type": "BANK_ACCOUNT" | "POS", "method": "BANK_TRANSFER" | "CARD", "name": "Хаан банк",
+                          "accountNumber": "5012345678" | null, "accountNumberMasked": "••••5678",
+                          "terminalId": "..." | null, "merchantId": "..." | null, "isTest": false, "isActive": true }] }
+403 { "error": "Танд кассыг удирдах эрх байхгүй.", "code": "CASH_MANAGE_FORBIDDEN" }`}</Code>
+        </Endpoint>
+
+        <Endpoint method="POST" path="/api/v1/payment-accounts" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage", "Багц идэвхтэй байх шаардлагатай"]} title="Төлбөрийн сонголт (данс эсвэл POS) нэмэх.">
+          <Code>{`Req:  { "type": "BANK_ACCOUNT" | "POS", "name": "Хаан банк", "accountNumber": "5012 3456-78",   // тоо болгон цэвэрлэгдэнэ, 6–20 орон, (тенант, төрөл)-д давтагдахгүй
+        "terminalId": "T0001", "merchantId": "M0001", "isTest": true }                // terminalId/merchantId ≤32 үсэг/тоо, isTest — зөвхөн POS
+Res:  201 { "account": { ...дээрх бүтэц } }
+403 CASH_MANAGE_FORBIDDEN
+409 { "error": "Энэ дансны дугаар аль хэдийн бүртгэгдсэн байна.", "code": "PAYMENT_ACCOUNT_DUPLICATE", "fieldErrors": { "accountNumber": "..." } }
+422 { "error": "...", "code": "PAYMENT_ACCOUNT_INVALID", "fieldErrors": { "<талбар>": "..." } }`}</Code>
+        </Endpoint>
+
+        <Endpoint method="PATCH" path="/api/v1/payment-accounts/[id]" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage", "Багц идэвхтэй байх шаардлагатай"]} title="Төлбөрийн сонголт засах / идэвхгүй болгох. Устгахгүй; type өөрчлөгдөхгүй.">
+          <Code>{`Req:  { "name"?, "accountNumber"?, "terminalId"?, "merchantId"?, "isTest"?, "isActive"? }   // type илгээвэл 422
+Res:  200 { "account": { ...дээрх бүтэц } }
+      // Нэр өөрчилбөл түүхэн төлбөр, тайланд шинэ нэр харагдана. isActive=false → сонгогчоос алга болно, хуучин бичлэг « (идэвхгүй)» гэж харагдана.
+403 CASH_MANAGE_FORBIDDEN
+404 { "code": "PAYMENT_ACCOUNT_NOT_FOUND" }
+409 { "code": "PAYMENT_ACCOUNT_DUPLICATE" }  422 { "code": "PAYMENT_ACCOUNT_INVALID", "fieldErrors": {...} }`}</Code>
         </Endpoint>
 
         <Endpoint method="GET" path="/api/v1/cash/entries" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage"]} title="Кассын орлого/зарлагын бичлэгүүд + нийлбэр (хүчингүй болсон бичлэг нийлбэрт орохгүй).">
           <Code>{`Query: from=YYYY-MM-DD  to=YYYY-MM-DD (Улаанбаатарын өдөр, to өдрийн төгсгөл хүртэл)  branchId  direction=INCOME|EXPENSE
-       typeId  method=CASH|BANK_TRANSFER|CARD|QPAY|OTHER  bank=KHAN..  includeVoided=1  outsideSession=1 («Ээлжээс гадуур»: method=CASH бөгөөд sessionId=null)  page  pageSize (≤200, default 50)
+       typeId  method=CASH|BANK_TRANSFER|CARD|QPAY|OTHER  bank=<төлбөрийн сонголтын id>  includeVoided=1  outsideSession=1 («Ээлжээс гадуур»: method=CASH бөгөөд sessionId=null)  page  pageSize (≤200, default 50)
        // Ажиллах салбар (X-Working-Branch) тогтсон бол branchId-г дарж тэр салбараар хязгаарлана.
 Res: 200 {
   "entries": [{
     "id": "...", "direction": "INCOME" | "EXPENSE",
     "type": { "id", "name": "Засварын орлого", "systemKey": "ORDER_PAYMENT" | "POSTPAID_SETTLEMENT" | "INTERNAL_REPAIR" | null, "isSystem": true },
     "branch": { "id", "name" },
-    "amount": "50000", "method": "CASH", "methodLabel": "Бэлэн", "bank": "KHAN" | null, "bankLabel": "Хаан банк" | null,
+    "amount": "50000", "method": "CASH", "methodLabel": "Бэлэн",
+    "bankId": "..." | null, "bank": "KHAN" | null, "bankLabel": "Хаан банк" | null, "bankType": "BANK_ACCOUNT" | "POS" | null, "bankIsTest": false,   // bank = хуучин код (эсвэл null)
     "occurredAt": "ISO", "note": "..." | null, "attachmentPath": "/uploads/cash/{tenantId}/..." | null,
     "taxIncluded": "5000" | null,            // «Татвар (туршилт)» — зөвхөн зарлага, ямар ч нийлбэрт орохгүй
     "customer": { "id", "name" } | null, "counterparty": "..." | null,
@@ -404,14 +431,14 @@ Res: 200 {
   "totals": { "income": "0", "expense": "0", "net": "0", "incomeCount": 0, "expenseCount": 0 },
   "pagination": { "page", "pageSize", "total", "totalPages", "hasPrev", "hasNext" } }
 403 { "error": "Танд кассыг удирдах эрх байхгүй.", "code": "CASH_MANAGE_FORBIDDEN" }
-422 { "code": "CASH_DATE_INVALID" | "CASH_TYPE_INVALID" | "CASH_METHOD_INVALID" | "PAYMENT_BANK_NOT_ENABLED", "fieldErrors": {...} }
+422 { "code": "CASH_DATE_INVALID" | "CASH_TYPE_INVALID" | "CASH_METHOD_INVALID" | "PAYMENT_BANK_NOT_ENABLED" | "PAYMENT_BANK_TYPE_MISMATCH", "fieldErrors": {...} }
       // Төлбөр PAID болох бүрт орлого автоматаар бичигдэнэ; төлбөр буцаавал бичлэг хүчингүй болно. Дотоод засвар дуусахад зарлага автоматаар бичигдэнэ.`}</Code>
         </Endpoint>
 
         <Endpoint method="POST" path="/api/v1/cash/entries" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage", "Багц идэвхтэй байх шаардлагатай"]} title="Гар орлого/зарлага бүртгэх.">
           <Code>{`Req:  { "direction": "INCOME" | "EXPENSE", "typeId": "...", "branchId": "...", "amount": "50000",
         "method": "CASH" | "BANK_TRANSFER" | "CARD" | "OTHER",           // QPAY гараар бүртгэхгүй
-        "bank": "KHAN",                                                    // BANK_TRANSFER/CARD үед заавал
+        "bankId": "...",                                                    // BANK_TRANSFER/CARD үед заавал (GET /banks accounts[].id; хуучин "bank" код мөн хүлээн авна)
         "occurredAt": "2026-10-05" | "2026-10-05T14:30" | ISO (+offset),   // default одоо; 1 хоногоос урагш болохгүй. Offset-гүй = Улаанбаатарын цаг
         "note": "...", "attachmentPath": "/uploads/cash/{tenantId}/...",   // POST /cash/attachments-ийн url
         "taxIncluded": "5000",                                             // зөвхөн EXPENSE, ≤ amount
@@ -423,7 +450,7 @@ Res:  201 { "entry": { ...дээрх бүтэц } }
       codes: CASH_TYPE_INVALID (төрөл идэвхгүй/чиглэл таарахгүй/системийн төрөл) · CASH_AMOUNT_INVALID (>0, ≤2 орон, ≤9,999,999,999.99) ·
              CASH_METHOD_INVALID · CASH_DATE_INVALID · CASH_BRANCH_INVALID (салбар олдсонгүй/идэвхгүй/ажиллах хүрээнээс гадуур) ·
              CASH_TAX_INVALID · CASH_FIELD_INVALID (note ≤1000, counterparty ≤200, customer олдсонгүй) · CASH_ATTACHMENT_INVALID ·
-             PAYMENT_BANK_REQUIRED · PAYMENT_BANK_NOT_ENABLED`}</Code>
+             PAYMENT_BANK_REQUIRED · PAYMENT_BANK_NOT_ENABLED · PAYMENT_BANK_TYPE_MISMATCH`}</Code>
         </Endpoint>
 
         <Endpoint method="POST" path="/api/v1/cash/entries/[id]/void" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage", "Багц идэвхтэй байх шаардлагатай"]} title="Бичлэгийг хүчингүй болгох (засах/устгах байхгүй).">
@@ -447,14 +474,14 @@ Res: 200 { "orders": [{ "id", "number", "plate": "..." | null, "completedAt": "I
         <Endpoint method="POST" path="/api/v1/cash/settlements" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage + orders.closeUnpaidPostpaid", "Багц идэвхтэй байх шаардлагатай"]} title="Нэг удаагийн төлбөрөөр олон дараа төлбөрт захиалгыг нэг дор хаах (бүтэн тооцоо) — кассад НЭГ орлого бичигдэнэ.">
           <Code>{`Req:  { "branchId": "...", "customerId": "...", "orderIds": ["...", "..."],   // ≥1, ≤100, давхардал арилгагдана
         "method": "CASH" | "BANK_TRANSFER" | "CARD" | "OTHER",               // QPAY байхгүй
-        "bank": "KHAN",                                                        // BANK_TRANSFER/CARD үед заавал
+        "bankId": "...",                                                        // BANK_TRANSFER/CARD үед заавал (хуучин "bank" код мөн хүлээн авна)
         "occurredAt": "2026-10-05" | "2026-10-05T14:30" | ISO,                // default одоо; захиалга дууссанаас өмнө байж болохгүй
         "note": "...",
         "expectedAmount": "250000" }                                           // сонголттой: хэрэглэгчийн харсан нийт дүн
       // Дүн = сонгосон захиалга бүрийн үлдэгдлийн нийлбэр (хэсэгчилсэн тооцоо байхгүй). Захиалга бүрт нэг PAID төлбөр (settlementId-тай) үүснэ.
 Res:  201 { "settlement": {
   "id", "branch": { "id", "name" }, "customer": { "id", "name" }, "amount": "250000",
-  "method": "BANK_TRANSFER", "methodLabel": "Дансаар", "bank": "KHAN" | null, "bankLabel": "..." | null,
+  "method": "BANK_TRANSFER", "methodLabel": "Дансаар", "bankId": "..." | null, "bank": "KHAN" | null, "bankLabel": "..." | null, "bankType": "BANK_ACCOUNT" | "POS" | null, "bankIsTest": false,
   "occurredAt": "ISO", "note": "..." | null, "orderCount": 2, "entryId": "...",
   "locked": false,   // true = нэгдсэн бичлэг хаагдсан ээлжид: цуцлах боломжгүй (409 CASH_SESSION_ENTRY_LOCKED)
   "createdAt": "ISO", "createdBy": { "id", "name" }, "voidedAt": "ISO" | null, "voidedBy": {...} | null, "voidReason": "..." | null,
@@ -466,7 +493,7 @@ Res:  201 { "settlement": {
 409 { "code": "QPAY_INVOICE_PARTIALLY_PAID" }   // сонгосон захиалгын QPay нэхэмжлэхэд хэсэгчлэн төлбөр орсон
 502 { "code": "QPAY_CANCEL_FAILED" }   // сонгосон захиалгын хүлээгдэж буй QPay нэхэмжлэхийг QPay дээр цуцалж чадсангүй
 422 { "code": "SETTLEMENT_ORDER_INVALID", "orderId": "...", "reason": "NOT_FOUND|BRANCH_MISMATCH|CUSTOMER_MISMATCH|NOT_POSTPAID|INTERNAL|NOT_COMPLETED|NO_BALANCE" }
-422 { "code": "SETTLEMENT_EMPTY" } | CASH_METHOD_INVALID | CASH_DATE_INVALID | CASH_AMOUNT_INVALID | CASH_BRANCH_INVALID | CASH_FIELD_INVALID | PAYMENT_BANK_REQUIRED | PAYMENT_BANK_NOT_ENABLED
+422 { "code": "SETTLEMENT_EMPTY" } | CASH_METHOD_INVALID | CASH_DATE_INVALID | CASH_AMOUNT_INVALID | CASH_BRANCH_INVALID | CASH_FIELD_INVALID | PAYMENT_BANK_REQUIRED | PAYMENT_BANK_NOT_ENABLED | PAYMENT_BANK_TYPE_MISMATCH
 409 { "code": "CASH_SESSION_CLOSED", "error": "Касс нээгээгүй байна. Эхлээд кассаа нээнэ үү." }   // салбарт кассын ээлж нээлттэй биш (бүх төлбөрийн арга)`}</Code>
         </Endpoint>
 
@@ -502,7 +529,7 @@ Res:  201 { "session": {
   "note": "..." | null,
   "cashIn": "...", "cashOut": "...", "entryCount": 0,        // хүчингүй болоогүй БЭЛЭН бичлэгүүдийн нийлбэр/тоо
   "totalEntryCount": 0,                                  // бүх аргын (хүчингүй болоогүй) бичлэгийн тоо
-  "byMethod": [{ "method": "CASH|CARD|BANK_TRANSFER|QPAY|OTHER", "bank": "KHAN" | null,
+  "byMethod": [{ "method": "CASH|CARD|BANK_TRANSFER|QPAY|OTHER", "bank": "<төлбөрийн сонголтын id>" | null, "bankLabel": "Хаан банк" | null,   // энд bank = id (бүлэглэх түлхүүр)
     "income": "...", "expense": "...", "net": "...", "count": 0,
     "expected": "..." | null, "counted": "..." | null, "difference": "..." | null }] } }
       // byMethod: (арга, банк) бүлэг тус бүр. expected/counted/difference нь нээлттэй үед expected=net (CASH: нээлтийн үлдэгдэлтэй), бусад null; хаасны дараа хөлдсөн утга.
@@ -542,7 +569,7 @@ Res: 200 { "branchId": "...", "open": true | false }
         </Endpoint>
 
         <Endpoint method="POST" path="/api/v1/cash/sessions/[id]/close" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage", "Багц идэвхтэй байх шаардлагатай"]} title="«Касс хаах»: бодит тоолсон мөнгөө оруулж ээлжийг хаах (expectedCash, difference хөлдөнө).">
-          <Code>{`Req:  { "countedCash": "148000", "methodCounts": [{ "method": "CARD", "bank": "KHAN", "counted": "120000" }], "note": "..." }
+          <Code>{`Req:  { "countedCash": "148000", "methodCounts": [{ "method": "CARD", "bank": "<төлбөрийн сонголтын id>", "counted": "120000" }], "note": "..." }
       // countedCash ≥ 0 (бэлэн мөнгө). methodCounts заавал биш: бэлэн бус бүлэг (CARD/BANK_TRANSFER банкаар) тус бүрийн тоолсон дүн;
       // counted хоосон/null = тоолоогүй. QPAY тооллогогүй (counted = expected). Ээлжид байхгүй бүлэг/CASH/сөрөг дүн → 422 CASH_FIELD_INVALID.
       // Хаахад бүлэг бүрийн expected (цэвэр дүн), counted, difference хөлдөнө (session.byMethod).
@@ -556,7 +583,7 @@ Res:  200 { "session": { ..., "status": "CLOSED", "countedCash": "148000", "expe
 Res: 200 { "range": { "from", "to", "label", "key" }, "summary": {
   "range": { "from": "ISO", "to": "ISO" }, "branchId": "..." | null,
   "incomeByMethod": [{ "method": "CASH|BANK_TRANSFER|CARD|QPAY|OTHER", "methodLabel", "total": "...", "count": 0,
-      "banks": [{ "bank": "KHAN" | null, "bankLabel": "Хаан банк" | "Банк тодорхойгүй", "total", "count" }] }],  // banks зөвхөн BANK_TRANSFER, CARD
+      "banks": [{ "bank": "<төлбөрийн сонголтын id>" | null, "bankLabel": "Хаан банк" | "Банк тодорхойгүй", "bankIsTest": false, "total", "count" }] }],  // banks зөвхөн BANK_TRANSFER, CARD; Туршилт POS-ийн төлбөр мөн нийлбэрт ордог
   "incomeByType": [{ "typeId", "name", "systemKey": "ORDER_PAYMENT" | "POSTPAID_SETTLEMENT" | null, "total", "count" }],
   "expenseByType": [{ ...ижил, systemKey "INTERNAL_REPAIR" = дотоод засварын зардал }],
   "expenseByMethod": [{ "method", "methodLabel", "total", "count" }],

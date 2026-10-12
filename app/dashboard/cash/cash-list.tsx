@@ -13,7 +13,7 @@ import { CashError } from "@/lib/cash/rules";
 import { listCashTypes, serializeCashType } from "@/lib/cash/types";
 import { ORDER_PAYMENT_METHOD_LABEL, formatTugrik } from "@/lib/orders";
 import { prisma } from "@/lib/prisma";
-import { getTenantBanks } from "@/lib/tenant-banks";
+import { listPickerAccounts } from "@/lib/payment-account-service";
 import { CashRangeFilter } from "./cash-range-filter";
 import { CashCreateButton } from "./cash-entry-dialog";
 import { openSessionBranchIds } from "./open-sessions";
@@ -87,7 +87,7 @@ export async function CashListPage({
       orderBy: { name: "asc" },
       select: { id: true, name: true, isActive: true },
     }))();
-  const [result, typeRows, branches, tenantBanks, openBranchIds] = await Promise.all([
+  const [result, typeRows, branches, pickerAccounts, openBranchIds] = await Promise.all([
     listCashEntries({
       actor: user,
       filters: {
@@ -111,7 +111,7 @@ export async function CashListPage({
     }),
     listCashTypes({ actor: user, direction, includeInactive: true }),
     branchesPromise,
-    getTenantBanks(user.tenantId),
+    listPickerAccounts(user.tenantId),
     branchesPromise.then((rows) => openSessionBranchIds(user.tenantId, rows.map((r) => r.id))),
   ]);
 
@@ -144,7 +144,6 @@ export async function CashListPage({
   };
   // One notice per page (not per row) when a listed entry's branch has no open register.
   const hasClosedRegisterRow = entries.some((e) => !e.isSystem && e.voidedAt == null && !openBranchIds.includes(e.branch.id));
-  const bankLabelByCode = new Map(tenantBanks.banks.map((b) => [b.code, b.label] as const));
 
   return (
     <div className="p-4 sm:p-6 max-w-full flex-1 flex flex-col min-h-0 w-full">
@@ -162,7 +161,8 @@ export async function CashListPage({
           types={types.filter((t) => t.isActive && !t.isSystem).map((t) => ({ id: t.id, name: t.name }))}
           branches={activeBranches.map((b) => ({ id: b.id, name: b.name }))}
           defaultBranchId={defaultBranchId}
-          banks={tenantBanks.enabledBanks.map((code) => ({ code, label: bankLabelByCode.get(code) ?? code }))}
+          banks={pickerAccounts}
+          canManageAccounts={hasPermission(user, "cash.manage")}
           today={today}
           openBranchIds={openBranchIds}
           branchPinned={Boolean(scopeBranchId)}
@@ -192,7 +192,7 @@ export async function CashListPage({
         <FilterSelect
           paramName="bank"
           placeholder="Бүх банк"
-          options={tenantBanks.banks.map((b) => ({ value: b.code, label: b.label }))}
+          options={pickerAccounts.map((b) => ({ value: b.id, label: `${b.name} · ${b.type === "POS" ? "POS" : "Данс"}` }))}
         />
         <FilterSelect
           paramName="session"

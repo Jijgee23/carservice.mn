@@ -12,7 +12,7 @@
 // Every write below happens inside that one transaction, ledger included.
 import { Prisma } from "@/app/generated/prisma/client";
 import { logAudit } from "@/lib/audit";
-import { assertPaymentBank, bankLabel, PaymentBankError } from "@/lib/banks";
+import { BANK_REF_SELECT, PaymentAccountError, bankRef, resolvePaymentAccount } from "@/lib/payment-accounts";
 import { hasPermission } from "@/lib/auth/roles";
 import { ORDER_PAYMENT_METHOD_LABEL, POSTPAID_SETTLEMENT_FORBIDDEN_MESSAGE, formatTugrik } from "@/lib/orders";
 import { recomputeOrderPaymentTotals } from "@/lib/orders/order-payment-totals";
@@ -224,7 +224,8 @@ const SETTLEMENT_LIST_SELECT = {
   id: true,
   amount: true,
   method: true,
-  bank: true,
+  bankId: true,
+  bankAccount: { select: BANK_REF_SELECT },
   createdAt: true,
   voidedAt: true,
   voidReason: true,
@@ -240,7 +241,8 @@ const SETTLEMENT_DETAIL_SELECT = {
   id: true,
   amount: true,
   method: true,
-  bank: true,
+  bankId: true,
+  bankAccount: { select: BANK_REF_SELECT },
   createdAt: true,
   voidedAt: true,
   voidReason: true,
@@ -268,7 +270,7 @@ type SettlementSummaryInput = {
   id: string;
   amount: Prisma.Decimal;
   method: string;
-  bank: string | null;
+  bankAccount: { id: string; name: string; type: string; isTest: boolean; isActive: boolean; legacyCode: string | null } | null;
   createdAt: Date;
   voidedAt: Date | null;
   voidReason: string | null;
@@ -288,8 +290,7 @@ function serializeSummary(row: SettlementSummaryInput, orderCount: number) {
     amount: row.amount.toString(),
     method: row.method,
     methodLabel: ORDER_PAYMENT_METHOD_LABEL[row.method] ?? row.method,
-    bank: row.bank,
-    bankLabel: row.bank ? bankLabel(row.bank) : null,
+    ...bankRef(row.bankAccount),
     occurredAt: (entry?.occurredAt ?? row.createdAt).toISOString(),
     note: entry?.note ?? null,
     orderCount,
@@ -525,20 +526,17 @@ export async function runCreateSettlement(txIn: unknown, input: ParsedCreate): P
   assertExpectedAmount(total, input.expectedAmount);
   assertOccurredAfterCompletion(allocations, input.occurredAt);
 
-  let bank: string | null = null;
-  if (input.method === "BANK_TRANSFER" || input.method === "CARD") {
-    const tenant = await tx.tenant.findUnique({ where: { id: tenantId }, select: { enabledBanks: true } });
-    try {
-      bank = assertPaymentBank(input.method, input.bankInput, tenant?.enabledBanks);
-    } catch (error) {
-      if (error instanceof PaymentBankError) throw new CashError(error.message, error.status, error.code, { bank: error.message });
-      throw error;
-    }
+  let bankId: string | null = null;
+  try {
+    bankId = (await resolvePaymentAccount(tx, tenantId, input.method, input.bankInput))?.id ?? null;
+  } catch (error) {
+    if (error instanceof PaymentAccountError) throw new CashError(error.message, error.status, error.code, { bank: error.message });
+    throw error;
   }
 
   const typeId = await getSystemTypeId(tx, tenantId, "POSTPAID_SETTLEMENT");
   const settlement = await tx.postpaidSettlement.create({
-    data: { tenantId, branchId: input.branchId, customerId: input.customerId, amount: total, method: input.method, bank, createdById: input.actorId },
+    data: { tenantId, branchId: input.branchId, customerId: input.customerId, amount: total, method: input.method, bankId, createdById: input.actorId },
     select: { id: true },
   });
   // A pending QPay invoice must not later add a second payment on a now-settled order (same as the single-payment path).
@@ -552,7 +550,7 @@ export async function runCreateSettlement(txIn: unknown, input: ParsedCreate): P
   await tx.orderPayment.updateMany({ where: { tenantId, orderId: { in: input.orderIds }, method: "QPAY", status: "PENDING" }, data: { status: "CANCELLED" } });
   for (const allocation of allocations) {
     await tx.orderPayment.create({
-      data: { tenantId, orderId: allocation.orderId, amount: allocation.amount, method: input.method, status: "PAID", paidAt: input.occurredAt, bank, settlementId: settlement.id },
+      data: { tenantId, orderId: allocation.orderId, amount: allocation.amount, method: input.method, status: "PAID", paidAt: input.occurredAt, bankId, settlementId: settlement.id },
       select: { id: true },
     });
     await recomputeOrderPaymentTotals(tx, tenantId, { id: allocation.orderId, totalAmount: allocation.orderTotal });
@@ -569,7 +567,7 @@ export async function runCreateSettlement(txIn: unknown, input: ParsedCreate): P
       typeId,
       amount: total,
       method: input.method,
-      bank,
+      bankId,
       occurredAt: input.occurredAt,
       note: input.note,
       customerId: input.customerId,
@@ -587,7 +585,7 @@ export async function runCreateSettlement(txIn: unknown, input: ParsedCreate): P
     entityId: settlement.id,
     action: "PAYMENT_CHANGE",
     summary: `Дараа тооцоо · ${allocations.length} захиалга · ${formatTugrik(total.toString())}`,
-    after: { amount: total.toString(), method: input.method, bank, customerId: input.customerId, orders: allocations.map((a) => ({ orderId: a.orderId, number: a.orderNumber, amount: a.amount.toString() })) },
+    after: { amount: total.toString(), method: input.method, bankId, customerId: input.customerId, orders: allocations.map((a) => ({ orderId: a.orderId, number: a.orderNumber, amount: a.amount.toString() })) },
   }, tx);
   return settlement.id;
 }
