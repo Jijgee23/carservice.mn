@@ -26,13 +26,37 @@ import { getAppBaseUrl } from "@/lib/subscription-server";
  * рүү мэдэгдэл очно.
  */
 export const BOOKING_FEE_CURRENCY = "MNT";
+/** Statuses in which a booking fee may still be checked out (a dead booking must not get a payable QR). */
+const FEE_CHECKOUT_LIVE_STATUSES = ["PENDING", "CONFIRMED"] as const;
+/** Machine code returned (HTTP 409) when the fee can no longer be paid because the booking is dead. */
+export const APPOINTMENT_NOT_PAYABLE_CODE = "APPOINTMENT_NOT_PAYABLE" as const;
+export const FEE_CHECKOUT_DEAD_MESSAGE = "Энэ цаг цуцлагдсан тул хураамж төлөх боломжгүй.";
+function isFeeCheckoutLive(status: string): boolean {
+  return (FEE_CHECKOUT_LIVE_STATUSES as readonly string[]).includes(status);
+}
+export const FEE_CHECKOUT_ERROR_MESSAGE =
+  "QPay нэхэмжлэх үүсгэхэд алдаа гарлаа. Түр хүлээгээд дахин оролдоно уу.";
+export const DEAD_BOOKING_PAID_MESSAGE =
+  "Төлбөр хүлээж авсан ч энэ цаг цуцлагдсан байсан тул захиалга идэвхжихгүй. " +
+  "Байгууллагатай холбогдож буцаан олголт хийлгэнэ үү.";
+export const FEE_CHECK_ERROR_MESSAGE =
+  "Төлбөр шалгахад алдаа гарлаа. Түр хүлээгээд дахин оролдоно уу.";
 
 type CheckoutResult =
   | { ok: true; required: false } // хураамж идэвхгүй — үнэгүй, checkout хэрэггүй
   | { ok: true; required: true } // QPay invoice амжилттай татагдсан (эсвэл өмнө нь бэлэн/төлөгдсөн)
-  | { ok: false; required: true; error: string }; // invoice татахад алдаа гарсан
+  | { ok: false; required: true; error: string; code?: typeof APPOINTMENT_NOT_PAYABLE_CODE }; // invoice татахад алдаа гарсан; code = цаг идэвхгүй (цуцлагдсан)
 
-export type AppointmentFeeStatus = "PENDING" | "PAID" | "UNDERPAID" | "FAILED";
+/**
+ * `REFUNDED` is an additive value (customer API contract): the fee was paid and
+ * later refunded. Older clients show it as pending (harmless: retry is a no-op); see CUSTOMER_API_CONTRACT.md.
+ */
+export type AppointmentFeeStatus =
+  | "PENDING"
+  | "PAID"
+  | "UNDERPAID"
+  | "FAILED"
+  | "REFUNDED";
 
 export type AppointmentFeeInfo = {
   status: AppointmentFeeStatus;
@@ -58,11 +82,11 @@ export function serializeAppointmentFee(appt: {
   feeQrText: string | null;
   feeQpayUrls: Prisma.JsonValue | null;
   feeUnderpaidAmount: Prisma.Decimal | null;
-  payment: { amount: Prisma.Decimal; currency: string } | null;
+  payment: { amount: Prisma.Decimal; currency: string; status: string } | null;
 }): AppointmentFeeInfo {
   if (appt.payment) {
     return {
-      status: "PAID",
+      status: appt.payment.status === "REFUNDED" ? "REFUNDED" : "PAID",
       amount: Number.parseFloat(appt.payment.amount.toString()),
       currency: appt.payment.currency,
       qrImage: null,
@@ -144,11 +168,18 @@ async function requestFeeCheckout(
         feeQpayUrls: Prisma.JsonNull,
       },
     });
-    return { ok: false, required: true, error: inv.error };
+    // Provider text can carry upstream bodies/config hints — log it, never return it.
+    console.error("[appointment-fee] QPay createInvoice failed:", appointmentId, inv.error);
+    return { ok: false, required: true, error: FEE_CHECKOUT_ERROR_MESSAGE };
   }
 
   const persisted = await prisma.appointment.updateMany({
-    where: { id: appointmentId, feeQpayInvoiceId: null, payment: { is: null } },
+    where: {
+      id: appointmentId,
+      feeQpayInvoiceId: null,
+      payment: { is: null },
+      status: { in: [...FEE_CHECKOUT_LIVE_STATUSES] },
+    },
     data: {
       feeAmount: amount,
       feeCurrency: BOOKING_FEE_CURRENCY,
@@ -159,9 +190,46 @@ async function requestFeeCheckout(
     },
   });
   if (persisted.count !== 1) {
+    // The appointment may have been cancelled/rejected while the provider call was
+    // in flight: the just-created invoice would be a payable QR on a dead booking.
+    const current = await prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      select: { status: true, feeQpayInvoiceId: true, payment: { select: { id: true } } },
+    });
+    if (current && !isFeeCheckoutLive(current.status)) {
+      const cancelled = await QPayService.cancelInvoice(inv.invoice_id);
+      if (!cancelled.ok && cancelled.reason !== "not_found") {
+        console.warn("[appointment-fee] could not cancel orphan invoice for dead booking:", appointmentId, cancelled.reason);
+      }
+      return { ok: false, required: true, error: FEE_CHECKOUT_DEAD_MESSAGE, code: APPOINTMENT_NOT_PAYABLE_CODE };
+    }
     // Another request won the local claim while this provider call was in
-    // flight. Treat the operation as idempotently satisfied; the persisted
-    // row is the source of truth for the caller's next read.
+    // flight. Cancel THIS call's now-redundant invoice (paying it would not be
+    // matched to the booking) and return the existing one; the persisted row is
+    // the source of truth for the caller's next read.
+    if (current && (current.payment || (current.feeQpayInvoiceId && current.feeQpayInvoiceId !== inv.invoice_id))) {
+      try {
+        const cancelled = await QPayService.cancelInvoice(inv.invoice_id);
+        if (!cancelled.ok && cancelled.reason !== "not_found") {
+          console.warn("[appointment-fee] could not cancel duplicate invoice:", appointmentId, cancelled.reason);
+        }
+      } catch (e) {
+        console.warn("[appointment-fee] duplicate invoice cancel threw:", appointmentId, e instanceof Error ? e.name : "UnknownError");
+      }
+    }
+    // Nothing is attached to the booking (no invoice, no payment): this call's invoice
+    // would be an orphan. Cancel it (best-effort) and report failure so the caller retries.
+    if (!current || (!current.payment && !current.feeQpayInvoiceId)) {
+      try {
+        const cancelled = await QPayService.cancelInvoice(inv.invoice_id);
+        if (!cancelled.ok && cancelled.reason !== "not_found") {
+          console.warn("[appointment-fee] could not cancel orphan invoice:", appointmentId, cancelled.reason);
+        }
+      } catch (e) {
+        console.warn("[appointment-fee] orphan invoice cancel threw:", appointmentId, e instanceof Error ? e.name : "UnknownError");
+      }
+      return { ok: false, required: true, error: FEE_CHECKOUT_ERROR_MESSAGE };
+    }
     return { ok: true, required: true };
   }
   return { ok: true, required: true };
@@ -188,6 +256,7 @@ export async function ensureAppointmentFeeCheckout(
     where: { id: appointmentId },
     select: {
       id: true,
+      status: true,
       accountId: true,
       tenant: { select: { name: true } },
       feeQpayInvoiceId: true,
@@ -199,6 +268,9 @@ export async function ensureAppointmentFeeCheckout(
   }
   if (appt.payment || appt.feeQpayInvoiceId) {
     return { ok: true, required: true }; // idempotent — аль хэдийн төлөгдсөн/QR бэлэн
+  }
+  if (!isFeeCheckoutLive(appt.status)) {
+    return { ok: false, required: true, error: FEE_CHECKOUT_DEAD_MESSAGE, code: APPOINTMENT_NOT_PAYABLE_CODE };
   }
 
   return requestFeeCheckout(
@@ -226,6 +298,7 @@ export async function retryAppointmentFeeCheckout(
     where: { id: appointmentId },
     select: {
       id: true,
+      status: true,
       accountId: true,
       tenant: { select: { name: true } },
       payment: { select: { id: true } },
@@ -237,6 +310,9 @@ export async function retryAppointmentFeeCheckout(
   }
   if (appt.payment) return { ok: true, required: true }; // аль хэдийн төлөгдсөн
   if (appt.feeQpayInvoiceId) return { ok: true, required: true };
+  if (!isFeeCheckoutLive(appt.status)) {
+    return { ok: false, required: true, error: FEE_CHECKOUT_DEAD_MESSAGE, code: APPOINTMENT_NOT_PAYABLE_CODE };
+  }
 
   // There is no separate persisted checkout-claim column in the current
   // schema. Do not hold a database row lock across QPay I/O: if the provider
@@ -284,11 +360,16 @@ export async function confirmAppointmentPayment(
       feeQpayInvoiceId: true,
       feeUnderpaidAmount: true,
       requestedAt: true,
-      payment: { select: { id: true } },
+      note: true,
+      payment: { select: { id: true, status: true } },
       account: { select: { name: true, phone: true } },
     },
   });
   if (!appt) return { ok: false, paid: false, message: "Цаг захиалга олдсонгүй." };
+  if (appt.payment?.status === "REFUNDED") {
+    // Буцаагдсан хураамжийг "төлөгдсөн" гэж үзэхгүй, шинээр invoice-д ч хүрэхгүй.
+    return { ok: true, paid: false, message: "Энэ хураамж буцаагдсан байна." };
+  }
   if (appt.payment) return { ok: true, paid: true }; // idempotent — аль хэдийн Invoice үүссэн
   if (!appt.feeQpayInvoiceId || !appt.accountId || !appt.feeAmount) {
     return { ok: false, paid: false, message: "QPay invoice байхгүй." };
@@ -299,7 +380,10 @@ export async function confirmAppointmentPayment(
     appt.feeQpayInvoiceId,
     expectedAmount,
   );
-  if ("error" in check) return { ok: false, paid: false, message: check.error };
+  if ("error" in check) {
+    console.error("[appointment-fee] QPay checkPayment failed:", appointmentId, check.error);
+    return { ok: false, paid: false, message: FEE_CHECK_ERROR_MESSAGE };
+  }
 
   if (!check.paid) {
     if (check.underpaidAmount != null) {
@@ -332,6 +416,7 @@ export async function confirmAppointmentPayment(
   }
 
   let capacityLostOnFullPayment = false;
+  let paidOnDeadBooking = false;
   try {
     const outcome = await recordLatePaymentUnderLock({ ...appt, accountId: appt.accountId! }, {
       kind: "paid",
@@ -340,6 +425,7 @@ export async function confirmAppointmentPayment(
       paidAt: check.paidAt ?? new Date(),
     });
     capacityLostOnFullPayment = outcome.capacityLost;
+    paidOnDeadBooking = outcome.deadBooking;
   } catch (e) {
     // Unique(appointmentId) зөрчил — webhook + polling зэрэг ирж өөр
     // transaction нь аль хэдийн үүсгэсэн. Idempotent-ээр амжилттай гэж үзнэ.
@@ -359,7 +445,7 @@ export async function confirmAppointmentPayment(
   // л илгээнэ (давхар мэдэгдэхгүй, дээрх P2002 замд орохгүй). Хугацаа
   // хэтэрч, цаг аль хэдийн эзлэгдсэн бол (capacityLostOnFullPayment) энэ
   // мэдэгдлийн оронд "цуцлагдсан" гэсэн doorstop-г доор буцаана.
-  if (!capacityLostOnFullPayment) {
+  if (!capacityLostOnFullPayment && !paidOnDeadBooking) {
     try {
       const who = appt.account?.name?.trim() || appt.account?.phone || "Хэрэглэгч";
       await notifyStaff({
@@ -378,6 +464,9 @@ export async function confirmAppointmentPayment(
 
   revalidatePath("/account");
   revalidatePath("/dashboard/appointments");
+  if (paidOnDeadBooking) {
+    return { ok: true, paid: true, message: DEAD_BOOKING_PAID_MESSAGE };
+  }
   if (capacityLostOnFullPayment) {
     return {
       ok: true,
@@ -417,6 +506,7 @@ async function recordLatePaymentUnderLock(
     feeAmount: Prisma.Decimal | null;
     feeCurrency: string | null;
     feeQpayInvoiceId: string | null;
+    note?: string | null;
   },
   write:
     | { kind: "underpaid"; underpaidAmount: number }
@@ -426,20 +516,32 @@ async function recordLatePaymentUnderLock(
         paymentType: string | null | undefined;
         paidAt: Date;
       },
-): Promise<{ capacityLost: boolean }> {
+): Promise<{ capacityLost: boolean; deadBooking: boolean }> {
   const { withBookingTransaction } = await import("@/lib/prisma");
   return withBookingTransaction(appt.tenantId, async (tx) => {
     await tx.$queryRaw<{ id: string }[]>`
       SELECT id FROM "Branch" WHERE id = ${appt.branchId} AND "tenantId" = ${appt.tenantId} FOR UPDATE
     `;
     const now = new Date();
+    // Re-read status/note under the lock: the appointment may have been
+    // cancelled/rejected/expired between the caller's read and this lock.
+    const live = await tx.appointment.findUnique({
+      where: { id: appt.id },
+      select: { status: true, note: true },
+    });
+    const currentStatus = live?.status ?? appt.status;
+    const currentNote = live ? live.note : (appt.note ?? null);
+    // Late payment on a booking that is no longer live (I1): record the money
+    // so it is not lost, but never revive or notify the booking.
+    const deadBooking = currentStatus === "CANCELLED" || currentStatus === "REJECTED";
     const wasExpired =
-      appt.status === "PENDING" &&
+      currentStatus === "PENDING" &&
       isPendingAppointmentPaymentExpired(
         { feeAmount: appt.feeAmount, feeUnderpaidAmount: null, payment: null, createdAt: appt.createdAt },
         now,
       );
     const capacityLost =
+      !deadBooking &&
       wasExpired &&
       !(await isSlotAvailable(
         tx,
@@ -461,10 +563,10 @@ async function recordLatePaymentUnderLock(
             }
           : { feeUnderpaidAmount: write.underpaidAmount, feeUnderpaidAt: now },
       });
-      return { capacityLost };
+      return { capacityLost, deadBooking };
     }
 
-    if (!appt.feeAmount) return { capacityLost: false };
+    if (!appt.feeAmount) return { capacityLost: false, deadBooking: false };
     await tx.appointmentPayment.create({
       data: {
         appointmentId: appt.id,
@@ -481,12 +583,29 @@ async function recordLatePaymentUnderLock(
     });
     await tx.appointment.update({
       where: { id: appt.id },
-      data: capacityLost
-        ? { feeUnderpaidAmount: null, feeUnderpaidAt: null, status: "CANCELLED", note: appendCapacityLostNote() }
-        : { feeUnderpaidAmount: null, feeUnderpaidAt: null },
+      data: deadBooking
+        ? {
+            // Status stays CANCELLED/REJECTED. The PAID AppointmentPayment row on
+            // a dead booking IS the refund-needed flag: it is listed in the
+            // super-admin booking-revenue "refund needed" panel, and the note
+            // below tells staff/support. No schema change.
+            feeUnderpaidAmount: null,
+            feeUnderpaidAt: null,
+            note: appendDeadBookingNote(currentNote),
+          }
+        : capacityLost
+          ? { feeUnderpaidAmount: null, feeUnderpaidAt: null, status: "CANCELLED", note: appendCapacityLostNote() }
+          : { feeUnderpaidAmount: null, feeUnderpaidAt: null },
     });
-    return { capacityLost };
+    return { capacityLost, deadBooking };
   });
+
+  function appendDeadBookingNote(existing: string | null): string {
+    const line =
+      "[Автомат] Цуцлагдсан/татгалзсан цагт хураамж төлөгдсөн. Буцаан олголт шаардлагатай.";
+    return existing ? `${existing}
+${line}` : line;
+  }
 
   function appendCapacityLostNote(): string {
     return "[Автомат] Хугацаа хэтэрсний дараа төлбөр ирсэн ч энэ цаг өөр захиалгад эзлэгдсэн тул цуцлагдав. Буцаан олголт/дахин товлолт шаардлагатай.";

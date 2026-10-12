@@ -5,6 +5,15 @@ import { requireAppointmentRefundPermission } from "@/lib/appointments/refund-pe
 import { logAudit } from "@/lib/audit";
 import { formatTugrik } from "@/lib/orders";
 import { prisma } from "@/lib/prisma";
+import {
+  claimAppointmentRefund,
+  finalizeAppointmentRefundWithRetry,
+  isDefiniteRefundRejection,
+  REFUND_STAFF_WAIT_MESSAGE,
+  REFUND_REJECTION_MESSAGE,
+  releaseAppointmentRefundClaim,
+  type AppointmentRefundDb,
+} from "@/lib/appointment-refund";
 import { QPayService } from "@/lib/qpay";
 
 /**
@@ -24,11 +33,13 @@ import { QPayService } from "@/lib/qpay";
  *
  * The persisted `AppointmentPayment` row (status, paymentType, qpayPaymentId)
  * is the only source of truth for whether/how a refund is possible — nothing
- * here is computed from a client-supplied scalar. The row is locked
- * (`FOR UPDATE`) and its status re-read inside the transaction immediately
- * before the write, so two concurrent refund requests for the same payment
- * cannot both observe "PAID" and both mutate: the second sees the first's
- * committed "REFUNDED" state and is rejected (double-refund rejection).
+ * here is computed from a client-supplied scalar. The row is CLAIMED
+ * with a conditional update (PAID -> refund-in-progress marker, see
+ * `lib/appointment-refund.ts`) before QPay is called, so two concurrent refund
+ * requests cannot both reach the provider; the loser is rejected. No DB
+ * transaction or row lock is held across the QPay HTTP call: claim -> provider
+ * -> finalize (REFUNDED + audit in one short tx), with the claim rolled back
+ * if the provider fails.
  */
 export async function POST(
   req: Request,
@@ -75,85 +86,99 @@ export async function POST(
   });
   if (!payment) return jsonError(404, "Төлбөр олдсонгүй.");
 
-  try {
-    const result = await prisma.$transaction(async (tx) => {
-      // Row lock: re-read the persisted payment status under FOR UPDATE
-      // immediately before deciding whether this refund may proceed, so a
-      // concurrent refund attempt on the same row serializes behind this
-      // one instead of racing on a pre-transaction read.
-      await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM "AppointmentPayment" WHERE id = ${payment.id} AND "tenantId" = ${auth.user.tenantId} FOR UPDATE
-      `;
-      const fresh = await tx.appointmentPayment.findFirst({
-        where: { id: payment.id, tenantId: auth.user.tenantId, appointmentId: appt.id },
-        select: {
-          id: true,
-          status: true,
-          amount: true,
-          currency: true,
-          paymentType: true,
-          qpayPaymentId: true,
-        },
-      });
-      if (!fresh) {
-        throw new AppointmentRefundError(404, "Төлбөр олдсонгүй.");
-      }
-      if (fresh.status !== "PAID") {
-        throw new AppointmentRefundError(
-          422,
-          fresh.status === "REFUNDED"
-            ? "Энэ төлбөр аль хэдийн буцаагдсан."
-            : "Зөвхөн төлөгдсөн төлбөрийг буцаана.",
-          fresh.status === "REFUNDED" ? "PAYMENT_ALREADY_REFUNDED" : "PAYMENT_NOT_PAID",
-        );
-      }
+  const db = prisma.appointmentPayment as unknown as AppointmentRefundDb;
 
-      let refundedVia: "QPAY" | "MANUAL" = "MANUAL";
-      if (fresh.paymentType === "CARD" && fresh.qpayPaymentId) {
-        const qpay = await QPayService.refundPayment(fresh.qpayPaymentId, note);
-        if ("error" in qpay) {
+  try {
+    // 1) Claim (conditional PAID -> refund-in-progress). No transaction and no
+    //    row lock is held across the QPay call below.
+    const claim = await claimAppointmentRefund(db, {
+      paymentId: payment.id,
+      tenantId: auth.user.tenantId,
+      allowReclaim: false, // a held claim is resolved by a super admin only
+    });
+    if (!claim.claimed) {
+      throw new AppointmentRefundError(
+        claim.reason === "NOT_FOUND" ? 404 : claim.reason === "IN_PROGRESS" ? 409 : 422,
+        claim.reason === "IN_PROGRESS" ? REFUND_STAFF_WAIT_MESSAGE : REFUND_REJECTION_MESSAGE[claim.reason],
+        claim.reason === "ALREADY_REFUNDED"
+          ? "PAYMENT_ALREADY_REFUNDED"
+          : claim.reason === "IN_PROGRESS"
+            ? "PAYMENT_REFUND_IN_PROGRESS"
+            : claim.reason === "NOT_PAID"
+              ? "PAYMENT_NOT_PAID"
+              : "APPOINTMENT_REFUND_REJECTED",
+      );
+    }
+    const fresh = claim.payment;
+    const token = claim.token;
+
+    // 2) Provider call (CARD only) outside any transaction.
+    let refundedVia: "QPAY" | "MANUAL" = "MANUAL";
+    if (fresh.paymentType === "CARD" && fresh.qpayPaymentId) {
+      const qpay = await QPayService.refundPayment(fresh.qpayPaymentId, note).catch(
+        (e: unknown) => ({ error: e instanceof Error ? e.name : "UnknownError" }),
+      );
+      if ("error" in qpay) {
+        console.error("[appointments/payment/refund] QPay refund failed:", fresh.id, qpay.error);
+        if (isDefiniteRefundRejection(qpay.error)) {
+          // Definite provider rejection (4xx): nothing refunded; roll the claim back.
+          await releaseAppointmentRefundClaim(db, fresh.id, token);
           throw new AppointmentRefundError(
             502,
-            `QPay-аар буцаах амжилтгүй: ${qpay.error}`,
+            "QPay буцаалтыг татгалзлаа. Мэдээллээ шалгаад дахин оролдоно уу.",
             "QPAY_ERROR",
           );
         }
-        refundedVia = "QPAY";
+        // Ambiguous: KEEP the claim; the refund may have gone through.
+        throw new AppointmentRefundError(502, REFUND_STAFF_WAIT_MESSAGE, "QPAY_REFUND_UNCERTAIN");
       }
+      refundedVia = "QPAY";
+    }
 
-      await tx.appointmentPayment.update({
-        where: { id: fresh.id },
-        data: {
+    // 3) Finalize on its own (+ one retry) so a failing audit/commit can never roll it back.
+    const refundNote = `[${[auth.user.firstName, auth.user.lastName].filter(Boolean).join(" ").trim() || auth.user.id}] ${note}`;
+    const finalized = await finalizeAppointmentRefundWithRetry(db, {
+      paymentId: fresh.id,
+      token,
+      refundNote,
+    });
+    if (!finalized) {
+      throw new AppointmentRefundError(
+        500,
+        "Буцаалтын төлөв хадгалагдсангүй. Төлбөрийн төлөвийг QPay дээр шалгана уу.",
+        "REFUND_FINALIZE_FAILED",
+      );
+    }
+
+    // Audit is best-effort after the money state is durable.
+    try {
+      await logAudit({
+        tenantId: auth.user.tenantId,
+        userId: auth.user.id,
+        branchId: appt.branchId,
+        entity: "Appointment",
+        entityId: appt.id,
+        action: "PAYMENT_CHANGE",
+        summary: `Цаг захиалгын хураамж буцаав (${refundedVia}) · ${formatTugrik(fresh.amount.toString())}`,
+        after: {
+          paymentId: fresh.id,
           status: "REFUNDED",
-          refundedAt: new Date(),
-          refundNote: `[${[auth.user.firstName, auth.user.lastName].filter(Boolean).join(" ").trim() || auth.user.id}] ${note}`,
+          refundedVia,
+          amount: fresh.amount.toString(),
+          currency: fresh.currency,
         },
       });
+    } catch (e) {
+      console.error("[appointments/payment/refund] audit failed for", fresh.id, e instanceof Error ? e.name : e);
+    }
 
-      await logAudit(
-        {
-          tenantId: auth.user.tenantId,
-          userId: auth.user.id,
-          branchId: appt.branchId,
-          entity: "Appointment",
-          entityId: appt.id,
-          action: "PAYMENT_CHANGE",
-          summary: `Цаг захиалгын хураамж буцаав (${refundedVia}) · ${formatTugrik(fresh.amount.toString())}`,
-          after: {
-            paymentId: fresh.id,
-            status: "REFUNDED",
-            refundedVia,
-            amount: fresh.amount.toString(),
-            currency: fresh.currency,
-          },
-        },
-        tx,
-      );
-
-      return { paymentId: fresh.id, refundedVia, amount: fresh.amount.toString(), currency: fresh.currency };
+    return jsonOk({
+      ok: true,
+      paymentId: fresh.id,
+      refundedVia,
+      amount: fresh.amount.toString(),
+      currency: fresh.currency,
     });
-
-    return jsonOk({ ok: true, ...result });
   } catch (error) {
     if (error instanceof AppointmentRefundError) {
       return jsonError(error.status, error.message, { code: error.code });

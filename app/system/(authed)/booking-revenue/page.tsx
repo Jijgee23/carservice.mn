@@ -6,7 +6,9 @@ import { formatTugrik } from "@/lib/orders";
 import { buildMeta, getPageInfo } from "@/lib/pagination";
 import { getPlatformSettings } from "@/lib/platform-settings";
 import { prisma } from "@/lib/prisma";
+import { REFUND_CLAIM_PREFIX, REFUND_CLAIM_STALE_MS } from "@/lib/appointment-refund";
 import { RefundButton } from "./refund-button";
+import { VerifyRefundButton } from "./verify-refund-button";
 
 export const metadata = {
   title: "Цаг захиалгын орлого",
@@ -21,7 +23,7 @@ export default async function BookingRevenuePage({
   const { page: pageParam } = await searchParams;
 
   const { page, pageSize, skip, take } = getPageInfo(pageParam);
-  const [settings, payments, total, paidAgg, refundedAgg, refundedCount, underpaid] =
+  const [settings, payments, total, paidAgg, refundedAgg, refundedCount, underpaid, deadBookingPaid, heldRefunds] =
     await Promise.all([
       getPlatformSettings(),
       // Мөр бүр аль хэдийн ТӨЛӨГДСӨН (Invoice зөвхөн PAID болсны дараа л
@@ -61,7 +63,42 @@ export default async function BookingRevenuePage({
           account: { select: { name: true, phone: true } },
         },
       }),
+      // Цуцлагдсан/татгалзсан цагт төлөгдсөн (PAID) хураамж — буцаалт
+      // шаардлагатай (I1: төлбөр цуцлалтын дараа ирсэн эсвэл цуцлахаас өмнө
+      // төлөгдсөн). Схем өөрчлөлтгүй: payment PAID + appointment CANCELLED/REJECTED.
+      prisma.appointmentPayment.findMany({
+        where: {
+          status: "PAID",
+          appointment: { status: { in: ["CANCELLED", "REJECTED"] } },
+        },
+        orderBy: { paidAt: "desc" },
+        take: 50,
+        select: {
+          id: true,
+          amount: true,
+          paymentType: true,
+          paidAt: true,
+          tenant: { select: { name: true } },
+          account: { select: { name: true, phone: true } },
+        },
+      }),
+      // Буцаалтын оролдлого тодорхойгүй дууссан (timeout/5xx) — QPay дээр шалгаж
+      // «Буцаасан гэж тэмдэглэх» шаардлагатай (refundNote түгжээний prefix-тэй).
+      prisma.appointmentPayment.findMany({
+        where: { status: "PAID", refundNote: { startsWith: REFUND_CLAIM_PREFIX } },
+        orderBy: { updatedAt: "desc" },
+        take: 50,
+        select: {
+          id: true,
+          amount: true,
+          paymentType: true,
+          updatedAt: true,
+          tenant: { select: { name: true } },
+          account: { select: { name: true, phone: true } },
+        },
+      }),
     ]);
+  const renderedAt = new Date().getTime();
   const meta = buildMeta(total, page, pageSize);
   const netRevenue = Number.parseFloat(paidAgg._sum.amount?.toString() ?? "0");
   const refundedTotal = Number.parseFloat(
@@ -117,6 +154,85 @@ export default async function BookingRevenuePage({
           </div>
         </div>
       </div>
+
+      {heldRefunds.length > 0 ? (
+        <div className="rounded-[10px] border border-amber-500/30 bg-[var(--oc-panel)] overflow-hidden mb-6">
+          <div className="px-5 py-3 border-b border-[var(--oc-line2)]">
+            <h2 className="text-sm font-semibold text-amber-300 light:text-amber-700">
+              Буцаалт шалгах шаардлагатай ({heldRefunds.length})
+            </h2>
+            <p className="text-xs text-[var(--oc-muted3)] mt-0.5">
+              Буцаалтын оролдлого тодорхойгүй дууссан. QPay дээр буцаалт
+              хийгдсэн эсэхийг шалгаад «Буцаасан гэж тэмдэглэх» дарна уу.
+            </p>
+          </div>
+          <div className="overflow-auto">
+            <table className="w-full min-w-[560px]">
+              <tbody className="divide-y divide-[var(--oc-line2)]">
+                {heldRefunds.map((p) => (
+                  <tr key={p.id} className="hover:bg-white/[0.02] transition-colors">
+                    <td className="px-5 py-2.5 text-sm text-[var(--oc-ink2)]">{p.tenant.name}</td>
+                    <td className="px-5 py-2.5 text-xs text-[var(--oc-muted)]">
+                      {p.account.name?.trim() || p.account.phone}
+                    </td>
+                    <td className="px-5 py-2.5 font-plex-mono text-xs text-[var(--oc-ink2)]">
+                      {formatTugrik(p.amount.toString())}
+                    </td>
+                    <td className="px-5 py-2.5 font-plex-mono text-xs text-[var(--oc-muted3)]">
+                      {p.updatedAt.toLocaleString("mn-MN", { hour12: false })}
+                    </td>
+                    <td className="px-5 py-2.5">
+                      {/* Claim younger than the stale window: the refund may still be in flight. */}
+                      {renderedAt - p.updatedAt.getTime() < REFUND_CLAIM_STALE_MS ? (
+                        <span className="text-xs text-[var(--oc-muted3)]">Явцад</span>
+                      ) : (
+                        <VerifyRefundButton paymentId={p.id} />
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {deadBookingPaid.length > 0 ? (
+        <div className="rounded-[10px] border border-red-500/25 bg-[var(--oc-panel)] overflow-hidden mb-6">
+          <div className="px-5 py-3 border-b border-[var(--oc-line2)]">
+            <h2 className="text-sm font-semibold text-red-400 light:text-red-700">
+              Буцаалт шаардлагатай ({deadBookingPaid.length})
+            </h2>
+            <p className="text-xs text-[var(--oc-muted3)] mt-0.5">
+              Цуцлагдсан/татгалзсан цагийн хураамж төлөгдсөн байна. Доорх
+              хүснэгтээс &quot;Буцаах&quot; үйлдлийг ашиглана уу.
+            </p>
+          </div>
+          <div className="overflow-auto">
+            <table className="w-full min-w-[560px]">
+              <tbody className="divide-y divide-[var(--oc-line2)]">
+                {deadBookingPaid.map((p) => (
+                  <tr key={p.id} className="hover:bg-white/[0.02] transition-colors">
+                    <td className="px-5 py-2.5 text-sm text-[var(--oc-ink2)]">{p.tenant.name}</td>
+                    <td className="px-5 py-2.5 text-xs text-[var(--oc-muted)]">
+                      {p.account.name?.trim() || p.account.phone}
+                    </td>
+                    <td className="px-5 py-2.5 font-plex-mono text-xs text-[var(--oc-ink2)]">
+                      {formatTugrik(p.amount.toString())}
+                    </td>
+                    <td className="px-5 py-2.5 font-plex-mono text-xs text-[var(--oc-muted3)]">
+                      {p.paidAt ? p.paidAt.toLocaleString("mn-MN", { hour12: false }) : "—"}
+                    </td>
+                    <td className="px-5 py-2.5">
+                      <RefundButton paymentId={p.id} paymentType={p.paymentType} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
 
       {underpaid.length > 0 ? (
         <div className="rounded-[10px] border border-[var(--oc-warn)]/20 bg-[var(--oc-panel)] overflow-hidden mb-6">

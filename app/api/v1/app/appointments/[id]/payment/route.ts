@@ -24,7 +24,7 @@ export async function GET(
       feeQrText: true,
       feeQpayUrls: true,
       feeUnderpaidAmount: true,
-      payment: { select: { amount: true, currency: true } },
+      payment: { select: { amount: true, currency: true, status: true } },
     },
   });
   if (!appt) return jsonError(404, "Цаг олдсонгүй.");

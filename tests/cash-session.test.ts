@@ -357,7 +357,7 @@ test("every cashTransaction create/createMany site is a known ledger write path 
 });
 
 test("every caller of postPaymentIncome runs it inside its own transaction client (tx), so the attach is atomic with the payment", async () => {
-  for (const f of ["lib/order-payments.ts", "lib/orders/order-payment-commands.ts"]) {
+  for (const f of ["lib/orders/qpay-credit.ts", "lib/orders/order-payment-commands.ts"]) {
     const text = await src(f);
     assert.match(text, /postPaymentIncome\(tx,/, f);
   }

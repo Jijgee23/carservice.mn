@@ -1,7 +1,7 @@
 import { jsonError, jsonOk, requireApiUser, requirePermission } from "@/lib/api";
 import { resolveWorkingBranch } from "@/lib/auth/api-branch";
 import { requireActiveSubscriptionApi } from "@/lib/subscription-server";
-import { retryAppointmentFeeCheckout } from "@/lib/appointment-payments";
+import { APPOINTMENT_NOT_PAYABLE_CODE, retryAppointmentFeeCheckout } from "@/lib/appointment-payments";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -43,6 +43,9 @@ export async function POST(
 
   const result = await retryAppointmentFeeCheckout(appt.id);
   if (!result.ok) {
+    if (result.code === APPOINTMENT_NOT_PAYABLE_CODE) {
+      return jsonError(409, result.error, { code: APPOINTMENT_NOT_PAYABLE_CODE });
+    }
     return jsonError(502, result.error ?? "QPay үйлчилгээ түр ажиллахгүй байна.", {
       code: "QPAY_ERROR",
     });

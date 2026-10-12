@@ -102,7 +102,7 @@ export async function GET(req: Request) {
       feeQrText: true,
       feeQpayUrls: true,
       feeUnderpaidAmount: true,
-      payment: { select: { amount: true, currency: true } },
+      payment: { select: { amount: true, currency: true, status: true } },
     },
   });
   // Цаг захиалгагүй (walk-in) захиалга — ажилтан утсаар/шууд ирсэн машинд
@@ -359,7 +359,7 @@ export async function POST(req: Request) {
         feeQrText: true,
         feeQpayUrls: true,
         feeUnderpaidAmount: true,
-        payment: { select: { amount: true, currency: true } },
+        payment: { select: { amount: true, currency: true, status: true } },
       },
     });
     if (withFee) payment = serializeAppointmentFee(withFee);

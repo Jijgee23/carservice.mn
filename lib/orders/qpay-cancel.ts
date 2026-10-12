@@ -43,16 +43,23 @@ export type QPayCancelOutcome =
   | "cancelled"
   /** Fully paid at QPay; `confirmPaid` ran. Do NOT cancel locally. */
   | "paid"
+  /** Fully paid at QPay but the confirm was BLOCKED (cancelled order / overpayment): the row is now FAILED, so it no longer blocks the caller's action. */
+  | "blocked"
   /** Partial QPay money on the invoice. Do NOT cancel locally. */
   | "partial"
   /** Could not verify/cancel at QPay. Do NOT cancel locally. */
   | "failed";
 
+/** Why a paid-at-QPay confirm was refused (mirrors QPayCreditBlockReason without importing the credit module). */
+export type QPayBlockedReason = "ORDER_CANCELLED" | "OVERPAYMENT";
+/** `"blocked"` = refused, reason unknown; `{ blocked }` = refused with the reason from the locked confirm. */
+export type QPayConfirmResult = boolean | "blocked" | { blocked: QPayBlockedReason };
+
 export type QPayCancelDeps = {
   checkPaymentExact(tenantId: string, invoiceId: string, expectedAmount: string): Promise<QPayExactCheckResult>;
   cancelInvoice(tenantId: string, invoiceId: string): Promise<QPayCancelInvoiceResult>;
-  /** Existing confirm path. Resolve true when the payment is PAID afterwards. */
-  confirmPaid(paymentId: string): Promise<boolean>;
+  /** Existing confirm path. Resolve true when the payment is PAID afterwards, "blocked" when crediting was refused (row FAILED, money flagged for manual refund). */
+  confirmPaid(paymentId: string): Promise<QPayConfirmResult>;
   audit(entry: {
     tenantId: string;
     userId: string | null;
@@ -64,7 +71,7 @@ export type QPayCancelDeps = {
   }): Promise<void>;
 };
 
-export function defaultQPayCancelDeps(confirmPaid: (paymentId: string) => Promise<boolean>): QPayCancelDeps {
+export function defaultQPayCancelDeps(confirmPaid: (paymentId: string) => Promise<QPayConfirmResult>): QPayCancelDeps {
   return {
     checkPaymentExact: (tenantId, invoiceId, expected) => TenantQPayService.checkPaymentExact(tenantId, invoiceId, expected),
     cancelInvoice: (tenantId, invoiceId) => TenantQPayService.cancelInvoice(tenantId, invoiceId),
@@ -99,9 +106,17 @@ async function verdictFor(deps: QPayCancelDeps, tenantId: string, payment: Pendi
 }
 
 /** Fully paid at QPay: run the existing confirm path. A false from it means the row is no longer PENDING here (raced); the money is still not ours to cancel. */
-async function settlePaid(deps: QPayCancelDeps, paymentId: string): Promise<QPayCancelOutcome> {
+async function settlePaid(deps: QPayCancelDeps, paymentId: string, onBlocked?: (reason: QPayBlockedReason | null) => void): Promise<QPayCancelOutcome> {
   try {
-    await deps.confirmPaid(paymentId);
+    const result = await deps.confirmPaid(paymentId);
+    if (result === "blocked") {
+      onBlocked?.(null);
+      return "blocked";
+    }
+    if (typeof result === "object") {
+      onBlocked?.(result.blocked);
+      return "blocked";
+    }
   } catch {
     // The invoice IS paid at QPay; whatever stopped the confirm, we must not cancel locally.
   }
@@ -113,7 +128,7 @@ async function settlePaid(deps: QPayCancelDeps, paymentId: string): Promise<QPay
  * spec). Call before any local cancel; never inside a DB transaction.
  */
 export async function cancelPendingQPayAtProvider(
-  input: { tenantId: string; userId: string | null; branchId?: string | null; payment: PendingQPayPayment },
+  input: { tenantId: string; userId: string | null; branchId?: string | null; payment: PendingQPayPayment; onBlocked?: (reason: QPayBlockedReason | null) => void },
   deps: QPayCancelDeps,
 ): Promise<QPayCancelOutcome> {
   const { tenantId, payment } = input;
@@ -124,7 +139,7 @@ export async function cancelPendingQPayAtProvider(
 
   // b. Already (fully) paid? Then confirm instead of cancelling.
   const first = await verdictFor(deps, tenantId, payment);
-  if (first === "paid") return settlePaid(deps, payment.id);
+  if (first === "paid") return settlePaid(deps, payment.id, input.onBlocked);
   // d. Partial money on the invoice: never cancel.
   if (first === "partial") return "partial";
   if (first === "error") {
@@ -140,7 +155,7 @@ export async function cancelPendingQPayAtProvider(
   }
   if (result.reason === "already_paid") {
     const again = await verdictFor(deps, tenantId, payment);
-    if (again === "paid") return settlePaid(deps, payment.id);
+    if (again === "paid") return settlePaid(deps, payment.id, input.onBlocked);
     if (again === "partial") return "partial";
     await auditFailure("already_paid_unverified");
     return "failed";
@@ -153,6 +168,10 @@ export type QPayCancelSweep = {
   /** Safe to cancel locally (provider cancelled, gone, or never had an invoice). */
   cancellable: string[];
   paid: string[];
+  /** Paid at QPay but not creditable (order cancelled / overpayment); the row is FAILED and flagged, so callers proceed. */
+  blocked: string[];
+  /** Reason per blocked payment id when the locked confirm reported one. */
+  blockedReasons?: Record<string, QPayBlockedReason>;
   partial: string[];
   failed: string[];
 };
@@ -162,11 +181,23 @@ export async function sweepPendingQPayAtProvider(
   input: { tenantId: string; userId: string | null; branchId?: string | null; payments: PendingQPayPayment[] },
   deps: QPayCancelDeps,
 ): Promise<QPayCancelSweep> {
-  const sweep: QPayCancelSweep = { cancellable: [], paid: [], partial: [], failed: [] };
+  const sweep: QPayCancelSweep = { cancellable: [], paid: [], blocked: [], partial: [], failed: [] };
   for (const payment of input.payments) {
-    const outcome = await cancelPendingQPayAtProvider({ tenantId: input.tenantId, userId: input.userId, branchId: input.branchId, payment }, deps);
+    const outcome = await cancelPendingQPayAtProvider(
+      {
+        tenantId: input.tenantId,
+        userId: input.userId,
+        branchId: input.branchId,
+        payment,
+        onBlocked: (reason) => {
+          if (reason) (sweep.blockedReasons ??= {})[payment.id] = reason;
+        },
+      },
+      deps,
+    );
     if (outcome === "no_invoice" || outcome === "cancelled") sweep.cancellable.push(payment.id);
     else if (outcome === "paid") sweep.paid.push(payment.id);
+    else if (outcome === "blocked") sweep.blocked.push(payment.id);
     else if (outcome === "partial") sweep.partial.push(payment.id);
     else sweep.failed.push(payment.id);
   }

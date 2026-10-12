@@ -327,17 +327,21 @@ test("every PAID / reverse path in the order-payment commands calls its ledger h
   assert.match(reverseAll, /voidPaymentIncome\(tx,[^)]*paid\.map/);
 
   const confirm = fnBody(commands, "export async function confirmOrderQPayPaymentCommand");
-  assert.match(confirm, /status: "PAID"[^}]*\} \}\);\s*\/\/ Cash ledger[^\n]*\n\s*await postPaymentIncome\(tx,/);
+  // QPay confirm credits only through the shared helper, which posts the income in the same tx right after the PAID update.
+  assert.match(confirm, /creditQPayPaymentInTx\(tx,/);
+  const credit = await src("lib/orders/qpay-credit.ts");
+  assert.ok(credit.indexOf('status: "PAID"') > -1 && credit.indexOf('status: "PAID"') < credit.indexOf("// Cash ledger"));
+  assert.match(credit, /\/\/ Cash ledger[^\n]*\n\s*await postPaymentIncome\(tx,/);
 
   // Every code path that sets OrderPayment.status = PAID, anywhere in lib/app, must be a known hooked site.
   const legacyQpay = await src("lib/order-payments.ts");
-  assert.match(fnBody(legacyQpay, "export async function confirmOrderQPayPayment"), /postPaymentIncome\(tx,/);
+  assert.match(fnBody(legacyQpay, "export async function confirmOrderQPayPayment"), /creditQPayPaymentInTx\(tx,/);
 });
 
 test("no other source file writes OrderPayment status PAID or reverses payments outside the hooked commands", async () => {
   const { readdir } = await import("node:fs/promises");
   // lib/cash/settlement.ts writes settlement payments + their ONE lump ledger entry in a single transaction (Phase C2).
-  const hooked = new Set(["lib/orders/order-payment-commands.ts", "lib/order-payments.ts", "lib/cash/settlement.ts"]);
+  const hooked = new Set(["lib/orders/order-payment-commands.ts", "lib/order-payments.ts", "lib/cash/settlement.ts", "lib/orders/qpay-credit.ts"]);
   const offenders: string[] = [];
   async function walk(dir: string) {
     for (const entry of await readdir(new URL(`../${dir}`, import.meta.url), { withFileTypes: true })) {

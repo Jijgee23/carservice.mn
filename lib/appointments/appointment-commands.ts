@@ -4,6 +4,7 @@ import { assertActiveSubscription } from "@/lib/subscription-server";
 import { isAppointmentOverdue, resolveCustomerForAccount } from "@/lib/appointments";
 import { ensureTenantVehicle } from "@/lib/vehicles";
 import { appointmentBookingPaymentStatus } from "@/lib/appointment-payment-status";
+import { cancelAppointmentFeeInvoiceById } from "@/lib/appointment-fee-invoice";
 import { createNotification } from "@/lib/notifications";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
@@ -147,7 +148,9 @@ export async function confirmAppointmentCommand(input: {
   const bookingPaymentStatus = appointmentBookingPaymentStatus(appt);
   if (bookingPaymentStatus !== "NOT_REQUIRED" && bookingPaymentStatus !== "PAID") {
     throw new AppointmentCommandError(
-      "Захиалгын хураамж бүрэн төлөгдөөгүй тул цагийг баталгаажуулах боломжгүй.",
+      bookingPaymentStatus === "REFUNDED"
+        ? "Захиалгын хураамж буцаагдсан тул цагийг баталгаажуулах боломжгүй."
+        : "Захиалгын хураамж бүрэн төлөгдөөгүй тул цагийг баталгаажуулах боломжгүй.",
       422,
       "APPOINTMENT_FEE_UNPAID",
     );
@@ -364,6 +367,8 @@ export async function rejectAppointmentCommand(input: {
     summary: "Цаг татгалзсан",
     after: { status: "REJECTED" },
   });
+  // Татгалзсан цагийн төлөгдөөгүй хураамжийн QR-г QPay дээр цуцална.
+  await cancelAppointmentFeeInvoiceById(appt.id);
 
   if (appt.accountId) {
     try {
@@ -519,6 +524,10 @@ export async function cancelAppointmentByAccountCommand(input: {
     },
     data: { status: "CANCELLED" },
   });
+  if (updated.count === 1) {
+    // Төлөгдөөгүй хураамжийн QR-г QPay дээр цуцална (best effort, never throws).
+    await cancelAppointmentFeeInvoiceById(appt.id);
+  }
 
   return { appointmentId: appt.id, cancelled: updated.count === 1 };
 }

@@ -9,6 +9,9 @@ import { prisma } from "@/lib/prisma";
 import { QPayService } from "@/lib/qpay";
 import { periodEndDate } from "@/lib/subscription";
 
+export const SUBSCRIPTION_CHECK_ERROR_MESSAGE =
+  "Төлбөр шалгахад алдаа гарлаа. Түр хүлээгээд дахин оролдоно уу.";
+
 export type ConfirmResult = { ok: boolean; paid: boolean; message?: string };
 
 /**
@@ -30,6 +33,12 @@ export async function activateSubscriptionPayment(
   const end = periodEndDate(opts.paidAt, payment.period);
 
   return prisma.$transaction(async (tx) => {
+    // Callback + web poll + SuperAdmin гар баталгаажуулалт зэрэг ирэхэд
+    // давхар Subscription үүсэхээс сэргийлж SubscriptionPayment мөрийг түгжинэ:
+    // хоёр дахь transaction эхнийхийг commit хийтэл хүлээгээд PAID-г харна.
+    await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "SubscriptionPayment" WHERE id = ${payment.id} FOR UPDATE
+    `;
     // Хэрэв өөр transaction-аар аль хэдийн PAID болсон бол давхар үүсгэхгүй.
     const fresh = await tx.subscriptionPayment.findUnique({
       where: { id: payment.id },
@@ -110,7 +119,11 @@ export async function confirmSubscriptionPayment(
   }
 
   const check = await QPayService.checkPayment(payment.qpayInvoiceId);
-  if ("error" in check) return { ok: false, paid: false, message: check.error };
+  if ("error" in check) {
+    // Provider text is logged, never returned to clients.
+    console.error("[subscription-payment] QPay checkPayment failed:", payment.id, check.error);
+    return { ok: false, paid: false, message: SUBSCRIPTION_CHECK_ERROR_MESSAGE };
+  }
   if (!check.paid) return { ok: true, paid: false };
 
   // Бодит төлсөн дүнг expected-тэй тулгана — хэсэгчилсэн төлбөрөөр багц
@@ -130,14 +143,12 @@ export async function confirmSubscriptionPayment(
       note: `QPay төлбөр #${payment.id}`,
     });
   } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError) {
-      return { ok: false, paid: false, message: e.message };
-    }
-    return {
-      ok: false,
-      paid: false,
-      message: e instanceof Error ? e.message : "Хадгалахад алдаа.",
-    };
+    console.error(
+      "[subscription-payment] activation failed:",
+      payment.id,
+      e instanceof Error ? e.message : e,
+    );
+    return { ok: false, paid: false, message: "Хадгалахад алдаа гарлаа. Дахин оролдоно уу." };
   }
 
   revalidatePath("/dashboard/settings/subscription");

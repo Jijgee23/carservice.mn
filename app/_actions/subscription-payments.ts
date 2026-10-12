@@ -95,7 +95,9 @@ export async function createSubscriptionPaymentAction(
       summary: `Багцын QPay invoice үүсгэхэд алдаа: ${price.plan}`,
       after: { paymentId: payment.id, plan: price.plan, status: "FAILED" },
     });
-    return { ok: false, message: inv.error };
+    // Provider text (status/body/config hints) stays server-side.
+    console.error("[subscription-payment] QPay createInvoice failed:", payment.id, inv.error);
+    return { ok: false, message: "QPay нэхэмжлэх үүсгэхэд алдаа гарлаа. Түр хүлээгээд дахин оролдоно уу." };
   }
 
   await prisma.subscriptionPayment.update({

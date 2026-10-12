@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cancelAppointmentFeeInvoicesBounded } from "@/lib/appointment-fee-invoice";
 import { logAudit } from "@/lib/audit";
 import { verifyCronSecret } from "@/lib/cron-auth";
 import { createNotification } from "@/lib/notifications";
@@ -52,6 +53,8 @@ async function run(req: Request) {
   });
 
   let notified = 0;
+  const cancelledIds: string[] = [];
+  try {
   for (const a of due) {
     // S17 Phase A: conditional update instead of a blind single-row write —
     // only proceed with the audit/notification side effects if THIS
@@ -72,15 +75,22 @@ async function run(req: Request) {
     }
     if (result.count !== 1) continue;
 
-    await logAudit({
-      tenantId: a.tenantId,
-      branchId: a.branchId,
-      entity: "Appointment",
-      entityId: a.id,
-      action: "STATUS_CHANGE",
-      summary: "Цаг → CANCELLED (хугацаа хэтэрснээр систем автоматаар цуцалсан)",
-      after: { status: "CANCELLED", reason: "expired" },
-    });
+    // QPay дээрх QR цуцлалтыг мөр бүрийг хүлээлгүй, доор хязгаартай зэрэгцээгээр хийнэ.
+    cancelledIds.push(a.id);
+
+    try {
+      await logAudit({
+        tenantId: a.tenantId,
+        branchId: a.branchId,
+        entity: "Appointment",
+        entityId: a.id,
+        action: "STATUS_CHANGE",
+        summary: "Цаг → CANCELLED (хугацаа хэтэрснээр систем автоматаар цуцалсан)",
+        after: { status: "CANCELLED", reason: "expired" },
+      });
+    } catch (e) {
+      console.error("[cron] expire-appointments audit failed:", a.id, e instanceof Error ? e.name : e);
+    }
 
     // Онлайн захиалга (Account-той) бол хэрэглэгчид мэдэгдэнэ.
     if (a.accountId) {
@@ -96,6 +106,12 @@ async function run(req: Request) {
         console.warn("[notify] expireAppointment:", e);
       }
     }
+  }
+  } finally {
+    // Хугацаа дууссан захиалгын төлөгдөөгүй хураамжийн QR-г QPay дээр цуцална
+    // (5 зэрэг, нийт хугацааны хязгаартай; хэзээ ч throw хийхгүй). Аль хэдийн
+    // CANCELLED болсон мөр бүрийн QR заавал цуцлагдана.
+    await cancelAppointmentFeeInvoicesBounded(cancelledIds, { concurrency: 5, budgetMs: 45_000 });
   }
 
   return NextResponse.json({

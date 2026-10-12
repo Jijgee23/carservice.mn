@@ -1,5 +1,6 @@
 import { jsonError, jsonOk } from "@/lib/api";
 import {
+  APPOINTMENT_NOT_PAYABLE_CODE,
   retryAppointmentFeeCheckout,
   serializeAppointmentFee,
 } from "@/lib/appointment-payments";
@@ -23,7 +24,12 @@ export async function POST(
   if (!appt) return jsonError(404, "Цаг олдсонгүй.");
 
   const result = await retryAppointmentFeeCheckout(appt.id);
-  if (!result.ok) return jsonError(502, result.error);
+  if (!result.ok) {
+    if (result.code === APPOINTMENT_NOT_PAYABLE_CODE) {
+      return jsonError(409, result.error, { code: APPOINTMENT_NOT_PAYABLE_CODE });
+    }
+    return jsonError(502, result.error);
+  }
 
   const withFee = await prisma.appointment.findUnique({
     where: { id: appt.id },
@@ -35,7 +41,7 @@ export async function POST(
       feeQrText: true,
       feeQpayUrls: true,
       feeUnderpaidAmount: true,
-      payment: { select: { amount: true, currency: true } },
+      payment: { select: { amount: true, currency: true, status: true } },
     },
   });
   return jsonOk({ payment: withFee ? serializeAppointmentFee(withFee) : null });

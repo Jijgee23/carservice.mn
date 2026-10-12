@@ -143,46 +143,45 @@ test("retry route requires an active subscription before mutating", () => {
 
 // --- Refund: row lock, fresh re-read, double-refund rejection --------------
 
-test("refund route locks the AppointmentPayment row (FOR UPDATE) before reading status", () => {
+test("refund route claims the row (conditional PAID claim) before reading/using status or calling QPay", () => {
   const src = refundSource();
-  const lockIdx = src.indexOf("FOR UPDATE");
-  const freshReadIdx = src.indexOf("tx.appointmentPayment.findFirst");
-  const statusCheckIdx = src.indexOf('fresh.status !== "PAID"');
-  assert.notEqual(lockIdx, -1, "must issue a row lock");
-  assert.notEqual(freshReadIdx, -1, "must re-read the row after locking");
-  assert.notEqual(statusCheckIdx, -1, "must branch on the freshly re-read status");
-  assert.ok(lockIdx < freshReadIdx, "lock must precede the fresh read");
-  assert.ok(freshReadIdx < statusCheckIdx, "fresh read must precede the status decision");
+  const claimIdx = src.indexOf("claimAppointmentRefund(");
+  const qpayIdx = src.indexOf("QPayService.refundPayment");
+  assert.notEqual(claimIdx, -1, "must claim before the provider call");
+  assert.ok(claimIdx < qpayIdx, "claim must precede the QPay call");
+  assert.doesNotMatch(src, /FOR UPDATE/, "no row lock may be held across the provider call");
 });
 
-test("refund route rejects a payment whose fresh status is already REFUNDED (double-refund rejection)", () => {
+test("refund route rejects an already-refunded payment (double-refund rejection) via the claim result", () => {
   const src = refundSource();
-  assert.match(src, /fresh\.status === "REFUNDED"/);
   assert.match(src, /"PAYMENT_ALREADY_REFUNDED"/);
+  assert.match(src, /"PAYMENT_NOT_PAID"/);
 });
 
-test("refund route only mutates a fresh status of PAID, never trusting the pre-transaction lookup's implied state", () => {
+test("refund route never branches on payment status from the pre-claim lookup", () => {
   const src = refundSource();
-  // The pre-transaction lookup only proves a payment row exists at all
-  // (404 vs not) — it must not itself be branched on for the PAID/REFUNDED
-  // decision; only `fresh` (read after the lock) may be.
   const pretxLookup = src.indexOf("prisma.appointmentPayment.findUnique");
-  const txStart = src.indexOf("prisma.$transaction(async (tx)");
+  const claimIdx = src.indexOf("claimAppointmentRefund(");
   assert.notEqual(pretxLookup, -1);
-  assert.notEqual(txStart, -1);
-  assert.ok(pretxLookup < txStart);
-  const pretxSlice = src.slice(pretxLookup, txStart);
-  assert.doesNotMatch(pretxSlice, /status/);
+  assert.ok(pretxLookup < claimIdx);
+  assert.doesNotMatch(src.slice(pretxLookup, claimIdx), /status/);
 });
 
-test("refund route updates the row to REFUNDED only inside the locked transaction", () => {
+test("refund route finalizes on its own after the provider call; audit is best-effort and cannot roll it back", () => {
   const src = refundSource();
-  const txStart = src.indexOf("prisma.$transaction(async (tx)");
-  const updateIdx = src.indexOf('tx.appointmentPayment.update');
-  const txEnd = src.lastIndexOf("});");
-  assert.notEqual(updateIdx, -1);
-  assert.ok(txStart < updateIdx && updateIdx < txEnd, "the write must happen inside the transaction");
-  assert.match(src.slice(updateIdx, updateIdx + 200), /status:\s*"REFUNDED"/);
+  const qpayIdx = src.indexOf("QPayService.refundPayment");
+  const finalizeIdx = src.indexOf("finalizeAppointmentRefundWithRetry(");
+  const auditIdx = src.indexOf("logAudit(");
+  assert.ok(qpayIdx < finalizeIdx && finalizeIdx < auditIdx, "provider -> finalize -> audit");
+  assert.doesNotMatch(src, /\$transaction/);
+  assert.doesNotMatch(src, /tx\.appointmentPayment\.update/);
+});
+
+test("refund route releases the claim only on a definite provider rejection, keeps it when ambiguous", () => {
+  const src = refundSource();
+  assert.match(src, /isDefiniteRefundRejection\(qpay\.error\)/);
+  assert.match(src, /releaseAppointmentRefundClaim\(db, fresh\.id, token\)/);
+  assert.match(src, /QPAY_REFUND_UNCERTAIN/);
 });
 
 test("refund route requires an active subscription before mutating", () => {

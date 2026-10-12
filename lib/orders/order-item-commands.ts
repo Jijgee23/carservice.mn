@@ -346,6 +346,16 @@ export async function addOrderItemCommand(input: {
   });
 }
 
+/**
+ * Total reduced (item price/qty/cancel): cancel pending QPay invoices that now exceed the remaining balance, at
+ * QPay first. Post-commit and best-effort (see sweepStaleOrderQPayCommand). Lazy import: payment commands import
+ * order commands, and the QPay client chain needs the full server env.
+ */
+async function sweepStaleQPayAfterTotalChange(actor: OrderCommandActor, orderId: string, scope: string | null | undefined): Promise<void> {
+  const { sweepStaleOrderQPayCommand } = await import("@/lib/orders/order-payment-commands");
+  await sweepStaleOrderQPayCommand({ actor: actor as Parameters<typeof sweepStaleOrderQPayCommand>[0]["actor"], orderId, scope });
+}
+
 export async function updateOrderItemCommand(input: {
   actor: OrderCommandActor;
   orderId: string;
@@ -357,7 +367,7 @@ export async function updateOrderItemCommand(input: {
   scope?: string | null;
 }) {
   const { actor, orderId, itemId, scope } = input;
-  return withOrderTransaction(actor.tenantId, orderId, { id: true, branchId: true, status: true, assignedToId: true }, async (tx, raw) => {
+  const result = await withOrderTransaction(actor.tenantId, orderId, { id: true, branchId: true, status: true, assignedToId: true }, async (tx, raw) => {
     const order = raw as ItemOrder | null;
     if (!order) throw new OrderCommandError("Засварын хуудас олдсонгүй.", 404, "ORDER_NOT_FOUND");
     assertOrderItemAccess(actor, order, scope);
@@ -391,6 +401,8 @@ export async function updateOrderItemCommand(input: {
     await recomputeOrderTotal(tx, orderId);
     return updated;
   });
+  await sweepStaleQPayAfterTotalChange(actor, orderId, scope);
+  return result;
 }
 
 /**
@@ -414,7 +426,7 @@ export async function patchOrderItemCommand(input: {
   const hasDetails = input.kind !== undefined || input.description !== undefined || input.quantity !== undefined;
   const hasPrice = input.unitPrice !== undefined;
   const hasStatus = input.nextStatus !== undefined;
-  return withOrderTransaction(actor.tenantId, orderId, { id: true, branchId: true, status: true, assignedToId: true }, async (tx, raw) => {
+  const result = await withOrderTransaction(actor.tenantId, orderId, { id: true, branchId: true, status: true, assignedToId: true }, async (tx, raw) => {
     const order = raw as ItemOrder | null;
     if (!order) throw new OrderCommandError("Засварын хуудас олдсонгүй.", 404, "ORDER_NOT_FOUND");
     if (!isOrderBranchInScope(actor, order.branchId, scope)) throw new OrderCommandError("Зөвхөн өөрийн салбарын засварын хуудсыг удирдана.", 404, "ORDER_OUT_OF_SCOPE");
@@ -487,11 +499,13 @@ export async function patchOrderItemCommand(input: {
     }
     return updated;
   });
+  if (hasDetails || hasPrice) await sweepStaleQPayAfterTotalChange(actor, orderId, scope); // status-only patches never change the total
+  return result;
 }
 
 export async function cancelOrderItemCommand(input: { actor: OrderCommandActor; orderId: string; itemId: string; scope?: string | null }) {
   const { actor, orderId, itemId, scope } = input;
-  return withOrderTransaction(actor.tenantId, orderId, { id: true, branchId: true, status: true, assignedToId: true }, async (tx, raw) => {
+  const result = await withOrderTransaction(actor.tenantId, orderId, { id: true, branchId: true, status: true, assignedToId: true }, async (tx, raw) => {
     const order = raw as ItemOrder | null;
     if (!order) throw new OrderCommandError("Засварын хуудас олдсонгүй.", 404, "ORDER_NOT_FOUND");
     assertOrderItemAccess(actor, order, scope);
@@ -510,6 +524,8 @@ export async function cancelOrderItemCommand(input: { actor: OrderCommandActor; 
     const total = await recomputeOrderTotal(tx, orderId);
     return { itemId, serviceId: item.serviceId, total };
   });
+  await sweepStaleQPayAfterTotalChange(actor, orderId, scope);
+  return result;
 }
 
 export async function changeOrderItemStatusCommand(input: { actor: OrderCommandActor; orderId: string; itemId: string; nextStatus: Exclude<ServiceItemStatus, "CANCELLED">; scope?: string | null }) {
@@ -546,7 +562,7 @@ export function assertOrderInProgressForItemStatus(status: OrderStatus): void {
 
 export async function changeOrderItemPriceCommand(input: { actor: OrderCommandActor; orderId: string; itemId: string; unitPrice: Prisma.Decimal; scope?: string | null }) {
   const { actor, orderId, itemId, unitPrice, scope } = input;
-  return withOrderTransaction(actor.tenantId, orderId, { id: true, branchId: true, status: true, assignedToId: true }, async (tx, raw) => {
+  const result = await withOrderTransaction(actor.tenantId, orderId, { id: true, branchId: true, status: true, assignedToId: true }, async (tx, raw) => {
     const order = raw as ItemOrder | null;
     if (!order) throw new OrderCommandError("Засварын хуудас олдсонгүй.", 404, "ORDER_NOT_FOUND");
     if (!canChangeOrderItemPrice(actor, order)) throw new OrderCommandError("Танд үйлчилгээний мөрийн үнэ өөрчлөх эрх байхгүй.", 403, "ITEM_PRICE_FORBIDDEN");
@@ -565,6 +581,8 @@ export async function changeOrderItemPriceCommand(input: { actor: OrderCommandAc
     await recomputeOrderTotal(tx, orderId);
     return updated;
   });
+  await sweepStaleQPayAfterTotalChange(actor, orderId, scope);
+  return result;
 }
 
 export async function listCancelledOrderItems(input: { actor: OrderCommandActor; orderId: string; page: number; pageSize: number; scope?: string | null }) {

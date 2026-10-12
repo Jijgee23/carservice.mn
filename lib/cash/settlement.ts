@@ -14,6 +14,7 @@ import { Prisma } from "@/app/generated/prisma/client";
 import { logAudit } from "@/lib/audit";
 import { BANK_REF_SELECT, PaymentAccountError, bankRef, resolvePaymentAccount } from "@/lib/payment-accounts";
 import { hasPermission } from "@/lib/auth/roles";
+import { bookingDateKey } from "@/lib/booking-time";
 import { ORDER_PAYMENT_METHOD_LABEL, POSTPAID_SETTLEMENT_FORBIDDEN_MESSAGE, formatTugrik } from "@/lib/orders";
 import { recomputeOrderPaymentTotals } from "@/lib/orders/order-payment-totals";
 import {
@@ -179,6 +180,20 @@ export function assertOccurredAfterCompletion(allocations: ReadonlyArray<Pick<Se
       throw new CashError(`Огноо захиалга #${allocation.orderNumber}-ийн дууссан огнооноос өмнө байж болохгүй.`, 422, "CASH_DATE_INVALID", { occurredAt: "Захиалга дууссанаас өмнөх огноо." });
     }
   }
+}
+
+/**
+ * A date-only backdate parses to 12:00 local, which can fall before an order that completed LATER THAT SAME DAY. That is
+ * not a real error (the user only picked a day), so such a value is raised to the latest same-day completion instead of
+ * being rejected by `assertOccurredAfterCompletion`. An earlier DAY than the completion still fails there.
+ */
+export function alignOccurredToCompletion(allocations: ReadonlyArray<{ completedAt: Date | null }>, occurredAt: Date): Date {
+  let aligned = occurredAt;
+  for (const allocation of allocations) {
+    const completedAt = allocation.completedAt;
+    if (completedAt && completedAt.getTime() > aligned.getTime() && bookingDateKey(completedAt) === bookingDateKey(occurredAt)) aligned = completedAt;
+  }
+  return aligned;
 }
 
 export function parseOrderIds(value: unknown): string[] {
@@ -492,6 +507,7 @@ export async function providerCancelSettlementQPay(
         // Existing confirm path (lazy: server-only module).
         const { confirmOrderQPayPayment } = await import("@/lib/order-payments");
         const r = await confirmOrderQPayPayment(input.tenantId, input.actorId, paymentId);
+        if (r.ok && !r.paid && r.blocked) return "blocked" as const;
         return r.ok && r.paid;
       }),
   );
@@ -524,7 +540,8 @@ export async function runCreateSettlement(txIn: unknown, input: ParsedCreate): P
 
   const { allocations, total } = allocateSettlement(input.orderIds, orders, paidByOrder, { branchId: input.branchId, customerId: input.customerId });
   assertExpectedAmount(total, input.expectedAmount);
-  assertOccurredAfterCompletion(allocations, input.occurredAt);
+  const occurredAt = alignOccurredToCompletion(allocations, input.occurredAt);
+  assertOccurredAfterCompletion(allocations, occurredAt);
 
   let bankId: string | null = null;
   try {
@@ -550,7 +567,7 @@ export async function runCreateSettlement(txIn: unknown, input: ParsedCreate): P
   await tx.orderPayment.updateMany({ where: { tenantId, orderId: { in: input.orderIds }, method: "QPAY", status: "PENDING" }, data: { status: "CANCELLED" } });
   for (const allocation of allocations) {
     await tx.orderPayment.create({
-      data: { tenantId, orderId: allocation.orderId, amount: allocation.amount, method: input.method, status: "PAID", paidAt: input.occurredAt, bankId, settlementId: settlement.id },
+      data: { tenantId, orderId: allocation.orderId, amount: allocation.amount, method: input.method, status: "PAID", paidAt: occurredAt, bankId, settlementId: settlement.id },
       select: { id: true },
     });
     await recomputeOrderPaymentTotals(tx, tenantId, { id: allocation.orderId, totalAmount: allocation.orderTotal });
@@ -568,7 +585,7 @@ export async function runCreateSettlement(txIn: unknown, input: ParsedCreate): P
       amount: total,
       method: input.method,
       bankId,
-      occurredAt: input.occurredAt,
+      occurredAt,
       note: input.note,
       customerId: input.customerId,
       settlementId: settlement.id,

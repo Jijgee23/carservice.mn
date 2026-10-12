@@ -15,10 +15,12 @@ import { paidLedger, recomputeOrderPaymentTotals } from "@/lib/orders/order-paym
 export { recomputeOrderPaymentTotals };
 import { prisma, type PrismaTransactionClient } from "@/lib/prisma";
 import { TenantQPayService } from "@/lib/qpay-tenant";
+import { QPAY_IN_TX_FETCH_TIMEOUT_MS, withQPayTimeout } from "@/lib/qpay-core";
 import { createNotification } from "@/lib/notifications";
 import { BANK_REF_SELECT, bankRef, PaymentAccountError, resolvePaymentAccount } from "@/lib/payment-accounts";
 import { assertCashSessionOpen, assertEntryNotInClosedSession, CASH_SESSION_CLOSED_CODE, CASH_SESSION_CLOSED_MESSAGE, CASH_SESSION_ENTRY_LOCKED_CODE, CASH_SESSION_ENTRY_LOCKED_MESSAGE, findLockedPaymentIds } from "@/lib/cash/session-attach";
 import { postPaymentIncome, voidPaymentIncome } from "@/lib/cash/sync";
+import { creditQPayPaymentInTx, qpayCreditBlockMessage } from "@/lib/orders/qpay-credit";
 import {
   defaultQPayCancelDeps,
   QPAY_CANCEL_FAILED_MESSAGE,
@@ -117,6 +119,23 @@ const PAYMENT_ORDER_SELECT = {
   customer: { select: { fullName: true, phone: true } },
 } satisfies Prisma.ServiceOrderSelect;
 
+export const ORDER_CANCELLED_PAYMENT_MESSAGE = "Цуцлагдсан засварын хуудсанд төлбөр бүртгэх боломжгүй.";
+
+/** New money (cash/card/transfer payment or QPay invoice) is never recorded against a CANCELLED order: 409 ORDER_CANCELLED. */
+export function assertOrderOpenForPayment(order: Pick<LockedPaymentOrder, "status">) {
+  if (order.status === "CANCELLED") throw new OrderPaymentCommandError(ORDER_CANCELLED_PAYMENT_MESSAGE, 409, "ORDER_CANCELLED");
+}
+
+/** resolvePaymentAccount with PaymentAccountError mapped to the command error (shared by the pre-step validate and the tx). */
+async function resolveAccountOrThrow(tx: PrismaTransactionClient, tenantId: string, method: AnyOrderPaymentMethod, bank: string | null | undefined) {
+  try {
+    return await resolvePaymentAccount(tx, tenantId, method, bank);
+  } catch (error) {
+    if (error instanceof PaymentAccountError) throw new OrderPaymentCommandError(error.message, error.status, error.code, { bank: error.message });
+    throw error;
+  }
+}
+
 export function assertPaymentAccess(
   actor: OrderPaymentCommandActor,
   order: Pick<LockedPaymentOrder, "branchId" | "assignedToId" | "status" | "isPostpaid" | "isInternal">,
@@ -188,7 +207,15 @@ const PENDING_QPAY_SELECT = { id: true, orderId: true, amount: true, qpayInvoice
 function qpayCancelDepsFor(actor: OrderPaymentCommandActor, orderId: string, scope: OrderCommandScope) {
   return defaultQPayCancelDeps(async (paymentId) => {
     // siblings "keep": a confirm triggered from inside a provider sweep must not itself cancel other pending invoices.
-    const result = await confirmOrderQPayPaymentCommand({ actor, orderId, paymentId, scope, siblings: "keep" });
+    let result;
+    try {
+      result = await confirmOrderQPayPaymentCommand({ actor, orderId, paymentId, scope, siblings: "keep" });
+    } catch (e) {
+      // Blocked credit (cancelled order / overpayment): the row is FAILED now, so the sweep must not report "paid".
+      if (e instanceof OrderPaymentCommandError && e.code === "QPAY_ORDER_CANCELLED") return { blocked: "ORDER_CANCELLED" as const };
+      if (e instanceof OrderPaymentCommandError && e.code === "QPAY_OVERPAYMENT") return { blocked: "OVERPAYMENT" as const };
+      throw e;
+    }
     if (!result.paid) return false;
     if (result.newlyPaid) await notifyOrderPaymentReceived({ tenantId: actor.tenantId, orderId: result.orderId, amount: result.amount, accountId: result.accountId, appointmentId: result.appointmentId });
     return true;
@@ -233,7 +260,7 @@ async function providerCancelPendingQPay(input: {
     });
     return { branchId: order.branchId, pending: input.selectPending ? input.selectPending(pending) : pending };
   });
-  if (preflight.pending.length === 0) return { cancellable: [], paid: [], partial: [], failed: [] };
+  if (preflight.pending.length === 0) return { cancellable: [], paid: [], blocked: [], partial: [], failed: [] };
   return sweepPendingQPayAtProvider(
     { tenantId: input.actor.tenantId, userId: input.actor.id, branchId: preflight.branchId, payments: preflight.pending },
     qpayCancelDepsFor(input.actor, input.orderId, input.scope),
@@ -322,6 +349,11 @@ export async function createOrderPaymentCommand(input: {
   amount: Prisma.Decimal | null;
   bank?: string | null;
   scope?: OrderCommandScope;
+  /**
+   * Cash tender above the balance is applied up to the balance with change. Deliberately web-only (the dashboard
+   * server action passes true, cashier flow); the /payments and /payment API routes stay strict and answer 422
+   * PAYMENT_OVERPAYMENT (spec: 2026-10-01 QA low-severity #26).
+   */
   allowCashChange?: boolean;
   /** Optional description (trimmed, max 1000) stored on the auto-posted income CashTransaction.note. */
   note?: string | null;
@@ -338,6 +370,7 @@ export async function createOrderPaymentCommand(input: {
     orderId: input.orderId,
     scope: input.scope,
     validate: async (tx, order) => {
+      assertOrderOpenForPayment(order); // before any provider-side QPay cancel
       await assertOrderRegisterOpen(tx, input.actor.tenantId, order.branchId); // before any provider-side QPay cancel
       const ledger = await paidLedger(tx, input.actor.tenantId, order.id);
       const remaining = (order.totalAmount ?? new Prisma.Decimal(0)).minus(ledger.paid);
@@ -345,6 +378,8 @@ export async function createOrderPaymentCommand(input: {
       if (!applyTender(input.method, input.amount ?? remaining, remaining, input.allowCashChange ?? false)) {
         throw new OrderPaymentCommandError(`Дүн үлдэгдэл (${formatTugrik(remaining.toString())})-ээс их байж болохгүй.`, 422, "PAYMENT_OVERPAYMENT", { amount: "Үлдэгдлээс их байна." });
       }
+      // The account is validated BEFORE the provider cancel too, so a rejected account never kills a live QR.
+      await resolveAccountOrThrow(tx, input.actor.tenantId, input.method, input.bank);
     },
   });
   assertSweepAllowsLocalCancel(providerSweep);
@@ -352,6 +387,7 @@ export async function createOrderPaymentCommand(input: {
     const order = raw as LockedPaymentOrder | null;
     if (!order) throw new OrderPaymentCommandError("Засварын хуудас олдсонгүй.", 404, "ORDER_NOT_FOUND");
     assertPaymentAccess(input.actor, order, input.scope);
+    assertOrderOpenForPayment(order);
     await assertOrderRegisterOpen(tx, input.actor.tenantId, order.branchId);
     const ledger = await paidLedger(tx, input.actor.tenantId, order.id);
     const total = order.totalAmount ?? new Prisma.Decimal(0);
@@ -363,13 +399,7 @@ export async function createOrderPaymentCommand(input: {
     }
     const amount = tender.applied;
     const paidAt = new Date();
-    let account: Awaited<ReturnType<typeof resolvePaymentAccount>> = null;
-    try {
-      account = await resolvePaymentAccount(tx, input.actor.tenantId, input.method, input.bank);
-    } catch (error) {
-      if (error instanceof PaymentAccountError) throw new OrderPaymentCommandError(error.message, error.status, error.code, { bank: error.message });
-      throw error;
-    }
+    const account = await resolveAccountOrThrow(tx, input.actor.tenantId, input.method, input.bank);
     const bankId = account?.id ?? null;
     const payment = await tx.orderPayment.create({
       data: { tenantId: input.actor.tenantId, orderId: order.id, amount, method: input.method, status: "PAID", paidAt, bankId },
@@ -475,7 +505,8 @@ export async function reverseAllOrderPaymentsCommand(input: {
     validate: async (tx, order) => {
       await assertOrderRegisterOpen(tx, input.actor.tenantId, order.branchId); // before any provider-side QPay cancel
       // One locked payment rejects the whole call (nothing is reversed, no provider-side cancel).
-      const paidIds = await tx.orderPayment.findMany({ where: { tenantId: input.actor.tenantId, orderId: order.id, status: "PAID" }, select: { id: true } });
+      const paidIds = await tx.orderPayment.findMany({ where: { tenantId: input.actor.tenantId, orderId: order.id, status: "PAID" }, select: { id: true, settlementId: true } });
+      assertNotSettlementPayment(paidIds); // before any provider-side QPay cancel
       await assertPaymentsNotInClosedSession(tx, input.actor.tenantId, paidIds.map((p) => p.id));
     },
   });
@@ -522,6 +553,7 @@ export async function createOrderQPayInvoiceCommand(input: { actor: OrderPayment
     orderId: input.orderId,
     scope: input.scope,
     validate: async (tx, order) => {
+      assertOrderOpenForPayment(order); // before any provider-side QPay cancel
       await assertOrderRegisterOpen(tx, input.actor.tenantId, order.branchId); // before any provider-side QPay cancel
       const ledger = await paidLedger(tx, input.actor.tenantId, order.id);
       const remaining = (order.totalAmount ?? new Prisma.Decimal(0)).minus(ledger.paid);
@@ -536,6 +568,7 @@ export async function createOrderQPayInvoiceCommand(input: { actor: OrderPayment
     const order = raw as LockedPaymentOrder | null;
     if (!order) throw new OrderPaymentCommandError("Засварын хуудас олдсонгүй.", 404, "ORDER_NOT_FOUND");
     assertPaymentAccess(input.actor, order, input.scope);
+    assertOrderOpenForPayment(order);
     await assertOrderRegisterOpen(tx, input.actor.tenantId, order.branchId);
     const ledger = await paidLedger(tx, input.actor.tenantId, order.id);
     const total = order.totalAmount ?? new Prisma.Decimal(0);
@@ -546,7 +579,7 @@ export async function createOrderQPayInvoiceCommand(input: { actor: OrderPayment
     if (pending && pending.amount.equals(invoiceAmount) && pending.qpayInvoiceId) {
       let urls = Array.isArray(pending.qpayUrls) ? pending.qpayUrls : [];
       if (urls.length === 0) {
-        urls = (await TenantQPayService.getInvoiceUrls(input.actor.tenantId, pending.qpayInvoiceId)) ?? [];
+        urls = (await withQPayTimeout(QPAY_IN_TX_FETCH_TIMEOUT_MS, () => TenantQPayService.getInvoiceUrls(input.actor.tenantId, pending.qpayInvoiceId!))) ?? [];
         if (urls.length > 0) await tx.orderPayment.update({ where: { id: pending.id }, data: { qpayUrls: urls } });
       }
       return { id: pending.id, amount: pending.amount.toString(), qrImage: pending.qrImage ?? null, qrText: pending.qrText ?? null, urls };
@@ -557,17 +590,22 @@ export async function createOrderQPayInvoiceCommand(input: { actor: OrderPayment
     }
     if (pending) await tx.orderPayment.updateMany({ where: { id: pending.id, tenantId: input.actor.tenantId, status: "PENDING" }, data: { status: "CANCELLED" } });
     const payment = await tx.orderPayment.create({ data: { tenantId: input.actor.tenantId, orderId: order.id, amount: invoiceAmount, method: "QPAY", status: "PENDING" }, select: { id: true, amount: true, qpayInvoiceId: true, qrImage: true, qrText: true, qpayUrls: true } });
-    // Keep the provider side effect under the same order-row lock as the
-    // local pending row. This prevents a concurrent manual payment or cancel
-    // from making the provider invoice unattachable before this transaction
-    // commits. The provider call is bounded by the transaction timeout.
-    const invoice = await TenantQPayService.createInvoice({ tenantId: input.actor.tenantId, senderInvoiceNo: payment.id, invoiceReceiverCode: order.customer.fullName || order.customer.phone, invoiceDescription: `Засварын хуудас #${order.number}`, amount: decimalToQPayAmount(invoiceAmount) });
+    // Deliberately NOT moved out of the tx: the provider invoice must be created under the same
+    // order-row lock as the local pending row, otherwise a concurrent manual payment/cancel could
+    // slip between "pending row exists" and "invoice attached" and leave a live invoice that no
+    // local row guards (the exact overpayment race this lock closes). The tx timeout is 15s, so every
+    // QPay call in here runs with a 4s per-call limit (QPAY_IN_TX_FETCH_TIMEOUT_MS; token + invoice + urls
+    // <= 12s). A timed-out create returns QPAY_ERROR and rolls the local pending row back.
+    const invoice = await withQPayTimeout(QPAY_IN_TX_FETCH_TIMEOUT_MS, () => TenantQPayService.createInvoice({ tenantId: input.actor.tenantId, senderInvoiceNo: payment.id, invoiceReceiverCode: order.customer.fullName || order.customer.phone, invoiceDescription: `Засварын хуудас #${order.number}`, amount: decimalToQPayAmount(invoiceAmount) }));
     if ("error" in invoice) {
       console.warn("[orders/qpay] invoice creation failed");
+      // QPay can only cancel by invoice_id (no lookup by sender_invoice_no), so a create that timed out after QPay
+      // accepted it cannot be cancelled here. Record the possible orphan (outside the tx, which is about to roll back).
+      await logAudit({ tenantId: input.actor.tenantId, userId: input.actor.id, branchId: order.branchId, entity: "ServiceOrder", entityId: order.id, action: "PAYMENT_CHANGE", summary: `QPay нэхэмжлэх үүсгэх алдаа (QPay талд үлдсэн байж болзошгүй) · sender_invoice_no ${payment.id}`, after: { senderInvoiceNo: payment.id, amount: invoiceAmount.toString() } }).catch(() => undefined);
       throw new OrderPaymentCommandError("QPay үйлчилгээ түр ажиллахгүй байна. Дахин оролдоно уу.", 502, "QPAY_ERROR");
     }
     let urls = Array.isArray(invoice.urls) ? invoice.urls : [];
-    if (urls.length === 0) urls = (await TenantQPayService.getInvoiceUrls(input.actor.tenantId, invoice.invoice_id)) ?? [];
+    if (urls.length === 0) urls = (await withQPayTimeout(QPAY_IN_TX_FETCH_TIMEOUT_MS, () => TenantQPayService.getInvoiceUrls(input.actor.tenantId, invoice.invoice_id))) ?? [];
     const updated = await tx.orderPayment.update({ where: { id: payment.id }, data: { qpayInvoiceId: invoice.invoice_id, qrText: invoice.qr_text, qrImage: invoice.qr_image, qpayUrls: urls.length > 0 ? urls : Prisma.JsonNull }, select: { id: true, amount: true, qrImage: true, qrText: true } });
     await logAudit({ tenantId: input.actor.tenantId, userId: input.actor.id, branchId: order.branchId, entity: "ServiceOrder", entityId: order.id, action: "PAYMENT_CHANGE", summary: `QPay QR үүсгэв · ${formatTugrik(invoiceAmount.toString())}`, after: { paymentId: payment.id, amount: invoiceAmount.toString() } }, tx);
     return { id: updated.id, amount: updated.amount.toString(), qrImage: updated.qrImage ?? null, qrText: updated.qrText ?? null, urls };
@@ -637,23 +675,67 @@ export async function confirmOrderQPayPaymentCommand(input: {
     if (fresh.method !== "QPAY") throw new OrderPaymentCommandError("Энэ нь QPay төлбөр биш байна.", 422, "QPAY_PAYMENT_REQUIRED");
     if (fresh.status === "PAID") {
       await cancelPendingQPay(tx, input.actor.tenantId, order.id, finalSiblingsCancellable);
-      return { already: true, amount: fresh.amount };
+      return { blocked: null, already: true, amount: fresh.amount };
     }
     if (fresh.status !== "PENDING") throw new OrderPaymentCommandError("Энэ QPay төлбөр хүлээгдэж буй төлөвт биш байна.", 409, "QPAY_PAYMENT_RACE");
-    const qpayPaidAt = check.paidAt ?? new Date();
-    await tx.orderPayment.update({ where: { id: fresh.id }, data: { status: "PAID", paidAt: qpayPaidAt, qpayPaymentId: check.paymentId } });
-    // Cash ledger: QPay payment became PAID -> income entry, same transaction.
-    await postPaymentIncome(tx, {
+    // Shared with the legacy confirm (lib/orders/qpay-credit.ts): a cancelled order / overpay is not credited,
+    // the row moves to FAILED (not left PENDING, which would block every sweep) and is flagged once in the audit log.
+    const credit = await creditQPayPaymentInTx(tx, {
       tenantId: input.actor.tenantId,
       actorId: input.actor.id,
-      payment: { id: fresh.id, orderId: order.id, amount: fresh.amount, method: fresh.method, bankId: null, paidAt: qpayPaidAt },
+      order,
+      payment: fresh,
+      qpayPaymentId: check.paymentId,
+      paidAt: check.paidAt ?? new Date(),
     });
     await cancelPendingQPay(tx, input.actor.tenantId, order.id, finalSiblingsCancellable);
-    const totals = await recomputeOrderPaymentTotals(tx, input.actor.tenantId, order);
-    await logAudit({ tenantId: input.actor.tenantId, userId: input.actor.id, branchId: order.branchId, entity: "ServiceOrder", entityId: order.id, action: "PAYMENT_CHANGE", summary: `QPay PAID · ${formatTugrik(fresh.amount.toString())} → ${totals.status}`, after: { paymentId: fresh.id, qpayPaymentId: check.paymentId, paidAmount: totals.paid.toString(), paymentStatus: totals.status } }, tx);
-    return { already: false, amount: fresh.amount };
+    if (!credit.credited) return { blocked: credit.reason, already: false, amount: fresh.amount };
+    return { blocked: null, already: false, amount: fresh.amount };
   });
+  if (result.blocked) {
+    throw result.blocked === "ORDER_CANCELLED"
+      ? new OrderPaymentCommandError(qpayCreditBlockMessage("ORDER_CANCELLED"), 409, "QPAY_ORDER_CANCELLED")
+      : new OrderPaymentCommandError(qpayCreditBlockMessage("OVERPAYMENT"), 409, "QPAY_OVERPAYMENT");
+  }
   return { paid: true, newlyPaid: !result.already, orderId: resolvedOrderId, paymentId: input.paymentId, amount: result.amount.toString(), accountId: preflight.order.appointment?.accountId ?? null, appointmentId: preflight.order.appointment?.id ?? null };
+}
+
+/**
+ * Post-commit sweep after an order was cancelled or its total was reduced: pending QPay invoices that would now
+ * overpay (amount > remaining; every invoice when the order is CANCELLED) are cancelled at QPay first, then
+ * locally. Best-effort and never throws: the order change already committed, and a customer who still pays a
+ * stale QR is caught by the remaining/CANCELLED guard in `confirmOrderQPayPaymentCommand` (not credited, flagged).
+ * It runs after the commit (not inside the order tx) because provider calls must stay outside any transaction.
+ */
+export async function sweepStaleOrderQPayCommand(input: { actor: OrderPaymentCommandActor; orderId: string; scope?: OrderCommandScope }): Promise<void> {
+  try {
+    // Cheap pre-check: no pending QPay row means nothing to sweep, so skip the locked preflight transaction.
+    const pendingCount = await prisma.orderPayment.count({ where: { orderId: input.orderId, tenantId: input.actor.tenantId, method: "QPAY", status: "PENDING" } });
+    if (pendingCount === 0) return;
+    const state = { remaining: null as Prisma.Decimal | null };
+    const sweep = await providerCancelPendingQPay({
+      actor: input.actor,
+      orderId: input.orderId,
+      scope: input.scope,
+      validate: async (tx, order) => {
+        if (order.status === "CANCELLED") {
+          state.remaining = new Prisma.Decimal(0);
+          return;
+        }
+        const ledger = await paidLedger(tx, input.actor.tenantId, order.id);
+        state.remaining = (order.totalAmount ?? new Prisma.Decimal(0)).minus(ledger.paid);
+      },
+      selectPending: (rows) => rows.filter((row) => state.remaining !== null && (state.remaining.lte(0) || row.amount.gt(state.remaining))),
+    });
+    if (sweep.cancellable.length === 0) return;
+    await withOrderTransaction(input.actor.tenantId, input.orderId, PAYMENT_ORDER_SELECT, async (tx, raw) => {
+      const order = raw as LockedPaymentOrder | null;
+      if (!order) return;
+      await cancelPendingQPay(tx, input.actor.tenantId, order.id, sweep.cancellable);
+    });
+  } catch (error) {
+    console.warn("[orders/qpay] stale invoice sweep failed:", error instanceof Error ? error.name : "UnknownError");
+  }
 }
 
 export async function cancelOrderQPayPaymentCommand(input: { actor: OrderPaymentCommandActor; orderId?: string; paymentId: string; scope?: OrderCommandScope }) {
@@ -665,7 +747,11 @@ export async function cancelOrderQPayPaymentCommand(input: { actor: OrderPayment
     if (!order) throw new OrderPaymentCommandError("Засварын хуудас олдсонгүй.", 404, "ORDER_NOT_FOUND");
     assertPaymentAccess(input.actor, order, input.scope);
     const payment = await tx.orderPayment.findFirst({ where: { id: input.paymentId, tenantId: input.actor.tenantId, orderId: order.id, status: "PENDING", method: "QPAY" }, select: PENDING_QPAY_SELECT });
-    if (!payment) throw new OrderPaymentCommandError("Хүлээгдэж буй QPay төлбөр олдсонгүй.", 404, "PAYMENT_NOT_FOUND");
+    if (!payment) {
+      const existing = await tx.orderPayment.findFirst({ where: { id: input.paymentId, tenantId: input.actor.tenantId, orderId: order.id, method: "QPAY" }, select: { id: true } });
+      if (existing) throw new OrderPaymentCommandError("Энэ QPay төлбөр хүлээгдэж буй төлөвт биш байна.", 409, "QPAY_PAYMENT_NOT_PENDING");
+      throw new OrderPaymentCommandError("Хүлээгдэж буй QPay төлбөр олдсонгүй.", 404, "PAYMENT_NOT_FOUND");
+    }
     return { branchId: order.branchId, payment };
   });
   const sweep = await sweepPendingQPayAtProvider(
@@ -673,6 +759,11 @@ export async function cancelOrderQPayPaymentCommand(input: { actor: OrderPayment
     qpayCancelDepsFor(input.actor, resolvedOrderId, input.scope),
   );
   assertSweepAllowsLocalCancel(sweep, { paidCode: "QPAY_INVOICE_PAID", paidMessage: "Энэ QPay нэхэмжлэх төлөгдсөн байна. Төлбөрийг бүртгэлээ шалгана уу." });
+  if (sweep.blocked.length > 0) {
+    // The QR was paid at QPay but could not be credited (row is FAILED now): not a race. Reason comes from the locked confirm.
+    const reason = sweep.blockedReasons?.[preflight.payment.id] ?? "OVERPAYMENT";
+    throw new OrderPaymentCommandError(qpayCreditBlockMessage(reason), 409, reason === "ORDER_CANCELLED" ? "QPAY_ORDER_CANCELLED" : "QPAY_OVERPAYMENT");
+  }
   return withOrderTransaction(input.actor.tenantId, resolvedOrderId, PAYMENT_ORDER_SELECT, async (tx, raw) => {
     const order = raw as LockedPaymentOrder | null;
     if (!order) throw new OrderPaymentCommandError("Засварын хуудас олдсонгүй.", 404, "ORDER_NOT_FOUND");

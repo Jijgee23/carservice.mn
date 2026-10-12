@@ -1,3 +1,4 @@
+import { cancelAppointmentFeeInvoiceById } from "@/lib/appointment-fee-invoice";
 import { getFirebaseTokensForAccount } from "@/lib/devices";
 import { prisma } from "@/lib/prisma";
 import { notifyStaff } from "@/lib/notifications";
@@ -46,7 +47,7 @@ export async function deleteAccount(accountId: string): Promise<void> {
 
   const now = new Date();
 
-  const { cancelledGroups } = await prisma.$transaction(async (tx) => {
+  const { cancelledGroups, cancelledIds } = await prisma.$transaction(async (tx) => {
     // Account устгагдахаас ӨМНӨ, ижил transaction дотор: капасити эзэлсээр
     // байгаа ирээдүйн PENDING/CONFIRMED захиалгуудыг цуцална — эс тэгвэл
     // branch-schedule-loader статусаар л тоолдог тул (accountId харгалзахгүй)
@@ -100,10 +101,20 @@ export async function deleteAccount(accountId: string): Promise<void> {
     await tx.accountVehicle.deleteMany({ where: { accountId } });
     await tx.account.update({ where: { id: accountId }, data: accountTombstone(accountId, now) });
 
-    return { cancelledGroups: Array.from(groups.values()) };
+    return {
+      cancelledGroups: Array.from(groups.values()),
+      cancelledIds: cancellable.map((a) => a.id),
+    };
   });
 
   await notifyAccountClosed(tokens, "deleted");
+
+  // Cancel the live QPay booking-fee QR of each cancelled appointment (best effort,
+  // after the tx committed; never throws). Without this the QR stays payable on a
+  // dead booking whose accountId is already nulled. Known limit: if QPay reports the
+  // invoice already paid, confirm cannot record it (no account any more) and only a
+  // warning is logged, so that money needs manual reconciliation.
+  await Promise.allSettled(cancelledIds.map((id) => cancelAppointmentFeeInvoiceById(id)));
 
   // Transaction амжилттай commit хийсний ДАРАА, best-effort — мэдэгдэл
   // илгээх алдаа account устгалтад ямар ч байдлаар нөлөөлөх ёсгүй.

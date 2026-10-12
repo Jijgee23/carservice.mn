@@ -138,6 +138,11 @@ function QRPanel({ pending }: { pending: PendingOrderPayment }) {
         }, 1500);
       } else if (!res.ok && res.message) {
         setMsg(res.message);
+        // Dead QR (paid-but-blocked / no longer pending): refresh so the panel drops it.
+        if (res.refresh) {
+          stopRef.current = true;
+          router.refresh();
+        }
       } else {
         setMsg("Төлбөр төлөгдөөгүй байна. QR-аа уншуулсны дараа дахин шалгана уу.");
       }

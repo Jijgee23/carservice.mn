@@ -12,6 +12,7 @@ import {
   markAppointmentNoShowCommand,
   setAppointmentAssigneeCommand,
 } from "@/lib/appointments/appointment-commands";
+import { cancelAppointmentFeeInvoiceById } from "@/lib/appointment-fee-invoice";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { appointmentBookingPaymentStatus } from "@/lib/appointment-payment-status";
@@ -278,6 +279,9 @@ export async function PATCH(
     });
     if (cancelled.count !== 1) {
       return jsonError(409, `${appt.status} → ${newStatus} шилжилт боломжгүй.`);
+    }
+    if (newStatus === "CANCELLED") {
+      await cancelAppointmentFeeInvoiceById(appt.id);
     }
     await logAudit({
       tenantId: appt.tenantId,

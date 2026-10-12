@@ -341,16 +341,19 @@ test("a CANCELLED QPay payment can never become PAID or post a ledger entry (leg
   assert.ok(legacy.indexOf('payment.status !== "PENDING"') > -1 && legacy.indexOf('payment.status !== "PENDING"') < legacy.indexOf("checkPayment"));
   // locked, conditional PENDING -> PAID transition; ledger hook only after a successful transition
   assert.match(legacy, /withOrderTransaction\(tenantId, payment\.orderId/);
-  assert.match(legacy, /updateMany\(\{\s*where: \{ id: payment\.id, tenantId, status: "PENDING" \}/);
-  assert.match(legacy, /if \(moved\.count === 0\) return false;/);
-  assert.ok(legacy.indexOf("moved.count === 0") < legacy.indexOf("postPaymentIncome(tx,"));
-  assert.match(legacy, /recomputeOrderPaymentTotals\(tx,/);
-  assert.doesNotMatch(legacy, /prevPaid/);
+  // legacy re-reads the row under the lock and only a still-PENDING one reaches the shared credit helper
+  assert.match(legacy, /if \(fresh\.status !== "PENDING"\) return "gone"/);
+  assert.ok(legacy.indexOf('fresh.status !== "PENDING"') < legacy.indexOf("creditQPayPaymentInTx(tx,"));
+  const credit = await src("lib/orders/qpay-credit.ts");
+  assert.match(credit, /updateMany\(\{\s*where: \{ id: payment\.id, tenantId, status: "PENDING" \}/);
+  assert.match(credit, /if \(moved\.count === 0\) throw/);
+  assert.ok(credit.indexOf("moved.count === 0") < credit.indexOf("postPaymentIncome(tx,"));
+  assert.match(credit, /recomputeOrderPaymentTotals\(tx,/);
+  assert.doesNotMatch(credit, /prevPaid/);
   // command path: PENDING-only guard under the order lock precedes the PAID update + ledger hook
   const confirm = fnBody(await src("lib/orders/order-payment-commands.ts"), "export async function confirmOrderQPayPaymentCommand");
   const guard = confirm.lastIndexOf('fresh.status !== "PENDING"');
-  assert.ok(guard > -1 && guard < confirm.indexOf('data: { status: "PAID", paidAt: qpayPaidAt'));
-  assert.ok(confirm.indexOf('data: { status: "PAID", paidAt: qpayPaidAt') < confirm.lastIndexOf("postPaymentIncome(tx,"));
+  assert.ok(guard > -1 && guard < confirm.indexOf("creditQPayPaymentInTx(tx,"));
 });
 
 test("settlement create cancels pending QPay invoices of the settled orders (so they cannot be revived)", async () => {

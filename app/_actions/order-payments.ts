@@ -68,11 +68,22 @@ export async function createOrderQPayInvoiceAction(
   }
 }
 
+/** Codes after which the shown QR is dead (row FAILED/not pending) and the page must refresh to drop it. */
+const QPAY_DEAD_QR_CODES: readonly string[] = ["QPAY_OVERPAYMENT", "QPAY_ORDER_CANCELLED", "QPAY_PAYMENT_NOT_PENDING"];
+
+async function orderIdOfPayment(paymentId: string, tenantId: string): Promise<string | null> {
+  if (!paymentId) return null;
+  const row = await prisma.orderPayment.findFirst({ where: { id: paymentId, tenantId }, select: { orderId: true } });
+  return row?.orderId ?? null;
+}
+
 export async function checkOrderQPayPaymentAction(
   formData: FormData,
-): Promise<{ ok: boolean; paid: boolean; message?: string }> {
+): Promise<{ ok: boolean; paid: boolean; message?: string; refresh?: boolean }> {
+  let tenantId = "";
   try {
     const user = await requireUser();
+    tenantId = user.tenantId;
     if (!canEdit(user, "payments")) return { ok: false, paid: false, message: "Эрх байхгүй." };
     await assertActiveSubscription(user.tenantId);
     const paymentId = s(formData, "paymentId");
@@ -85,15 +96,25 @@ export async function checkOrderQPayPaymentAction(
     return { ok: true, paid: true };
   } catch (error) {
     unstable_rethrow(error);
-    return { ok: false, paid: false, message: messageFrom(error, "Төлбөр шалгахад алдаа гарлаа.") };
+    const refresh = error instanceof OrderPaymentCommandError && QPAY_DEAD_QR_CODES.includes(error.code);
+    if (refresh) {
+      const deadOrderId = await orderIdOfPayment(s(formData, "paymentId"), tenantId).catch(() => null);
+      if (deadOrderId) {
+        revalidatePath(`/dashboard/orders/${deadOrderId}`);
+        revalidateCashPaths();
+      }
+    }
+    return { ok: false, paid: false, refresh, message: messageFrom(error, "Төлбөр шалгахад алдаа гарлаа.") };
   }
 }
 
 export async function cancelOrderQPayPaymentAction(
   formData: FormData,
 ): Promise<{ ok: boolean; message?: string; refresh?: boolean }> {
+  let tenantId = "";
   try {
     const user = await requireUser();
+    tenantId = user.tenantId;
     if (!canDelete(user, "payments")) return { ok: false, message: "Эрх хүрэлцэхгүй." };
     await assertActiveSubscription(user.tenantId);
     const paymentId = s(formData, "paymentId");
@@ -105,7 +126,14 @@ export async function cancelOrderQPayPaymentAction(
   } catch (error) {
     unstable_rethrow(error);
     // QPAY_INVOICE_PAID: the invoice was paid and has been recorded — the page must refresh to show it.
-    const refresh = error instanceof OrderPaymentCommandError && (error.code === "QPAY_INVOICE_PAID");
+    const refresh = error instanceof OrderPaymentCommandError && (error.code === "QPAY_INVOICE_PAID" || QPAY_DEAD_QR_CODES.includes(error.code));
+    if (refresh) {
+      const deadOrderId = await orderIdOfPayment(s(formData, "paymentId"), tenantId).catch(() => null);
+      if (deadOrderId) {
+        revalidatePath(`/dashboard/orders/${deadOrderId}`);
+        revalidateCashPaths();
+      }
+    }
     return { ok: false, refresh, message: messageFrom(error, "QPay нэхэмжлэх цуцлахад алдаа гарлаа.") };
   }
 }

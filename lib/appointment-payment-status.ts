@@ -8,7 +8,8 @@ export type AppointmentBookingPaymentStatus =
   | "PENDING"
   | "UNDERPAID"
   | "FAILED"
-  | "PAID";
+  | "PAID"
+  | "REFUNDED";
 
 export function appointmentBookingPaymentStatus(input: {
   feeAmount: unknown;
@@ -18,6 +19,8 @@ export function appointmentBookingPaymentStatus(input: {
 }): AppointmentBookingPaymentStatus {
   if (input.feeAmount == null) return "NOT_REQUIRED";
   if (input.payment?.status === "PAID") return "PAID";
+  // Буцаагдсан хураамж: PENDING/FAILED биш — тусдаа төлөв (Retry/Refund санал болгохгүй).
+  if (input.payment?.status === "REFUNDED") return "REFUNDED";
   if (input.feeUnderpaidAmount != null) return "UNDERPAID";
   if (input.feeQpayInvoiceId) return "PENDING";
   return "FAILED";
@@ -32,6 +35,7 @@ export const APPOINTMENT_BOOKING_PAYMENT_LABEL: Record<
   UNDERPAID: "Дутуу төлсөн",
   FAILED: "Төлбөрийн invoice алдаатай",
   PAID: "Төлбөр төлөгдсөн",
+  REFUNDED: "Төлбөр буцаагдсан",
 };
 
 // Global fixed window: an online booking fee unpaid this long after the
@@ -60,6 +64,9 @@ export function isPendingAppointmentPaymentExpired(
   if (input.feeAmount == null) return false;
   if (input.feeUnderpaidAmount != null) return false;
   if (input.payment?.status === "PAID") return false;
+  // Буцаагдсан (гэхдээ цуцлагдаагүй) захиалга цагаа хэвээр хадгална — мөнгө нэг
+  // удаа орсон тул TTL-ээр суллахгүй; ажилтан гараар шийднэ.
+  if (input.payment?.status === "REFUNDED") return false;
   const ttlMs = PENDING_APPOINTMENT_PAYMENT_TTL_MINUTES * 60000;
   return now.getTime() - input.createdAt.getTime() > ttlMs;
 }
@@ -73,4 +80,5 @@ export const APPOINTMENT_BOOKING_PAYMENT_BADGE: Record<
   UNDERPAID: "bg-orange-500/10 text-orange-300 border-orange-500/25 light:text-orange-700 light:bg-orange-100 light:border-orange-300",
   FAILED: "bg-red-500/10 text-red-300 border-red-500/25 light:text-red-700 light:bg-red-100 light:border-red-300",
   PAID: "bg-emerald-500/10 text-emerald-300 border-emerald-500/25 light:text-emerald-700 light:bg-emerald-100 light:border-emerald-300",
+  REFUNDED: "bg-[var(--oc-panel2)] text-[var(--oc-muted3)] border-[var(--oc-line)]",
 };

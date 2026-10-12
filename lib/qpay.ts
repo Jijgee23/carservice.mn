@@ -51,6 +51,9 @@ export const QPayService = {
   checkPayment: (invoiceId: string, expectedAmount?: number) =>
     client.checkPayment(undefined, invoiceId, expectedAmount),
 
+  /** Төлөгдөөгүй invoice-ийг QPay дээр цуцлах (DELETE invoice/{id}); хэзээ ч throw хийхгүй. */
+  cancelInvoice: (invoiceId: string) => client.cancelInvoice(undefined, invoiceId),
+
   /** Гүйлгээ цуцлах ("card reversal" — ихэвчлэн тухайн өдөрт нь, capture-аас өмнө). */
   cancelPayment: (paymentId: string, note?: string) =>
     client.cancelPayment(undefined, paymentId, note),

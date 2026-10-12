@@ -9,12 +9,36 @@
  * tenant-д `string` (tenantId).
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { Prisma } from "@/app/generated/prisma/client";
+import { QPAY_NOT_SENT_PREFIX } from "@/lib/appointment-refund";
 
 const QPAY_URL =
   process.env.QPAY_MERCHANT_URL ?? "https://merchant.qpay.mn/v2/";
 const TOKEN_EXPIRY_BUFFER_MS = 30_000;
+/** Every QPay HTTP call is bounded: a hung provider must not hold a request open. */
+export const QPAY_FETCH_TIMEOUT_MS = 15_000;
+/**
+ * Per-call budget for provider calls made INSIDE a DB transaction (tx timeout is 15s, and one invoice create can
+ * need a token fetch + the invoice call + a urls fetch), so each call gets a lower limit via `withQPayTimeout`.
+ */
+export const QPAY_IN_TX_FETCH_TIMEOUT_MS = 4_000;
+
+const qpayTimeoutScope = new AsyncLocalStorage<number>();
+
+/** Run `fn` with a per-fetch timeout override for every QPay call made inside it. */
+export function withQPayTimeout<T>(timeoutMs: number, fn: () => Promise<T>): Promise<T> {
+  return qpayTimeoutScope.run(timeoutMs, fn);
+}
+
+function qpayFetch(url: string, init: RequestInit): Promise<Response> {
+  return fetch(url, { ...init, signal: init.signal ?? AbortSignal.timeout(qpayTimeoutScope.getStore() ?? QPAY_FETCH_TIMEOUT_MS) });
+}
+
+function failureName(error: unknown): string {
+  return error instanceof Error ? error.name : "UnknownError";
+}
 
 export type QPayBankUrl = {
   name: string;
@@ -166,34 +190,43 @@ export function createQPayClient<Id, Settings extends QPayTokenFields = QPayToke
     password: string,
   ): Promise<TokenResult> {
     const basic = Buffer.from(`${username}:${password}`).toString("base64");
-    const res = await fetch(`${QPAY_URL}auth/token`, {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${basic}`,
-        "Content-Type": "application/json",
-      },
-    });
-    if (!res.ok) {
-      return {
-        error:
-          "QPay токен авах явцад алдаа гарлаа. Тохиргоо болон холболтоо шалгана уу.",
-      };
+    const failed = {
+      error: "QPay токен авах явцад алдаа гарлаа. Тохиргоо болон холболтоо шалгана уу.",
+    };
+    let body: Parameters<typeof saveTokens>[1];
+    try {
+      const res = await qpayFetch(`${QPAY_URL}auth/token`, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${basic}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (!res.ok) return failed;
+      body = await res.json();
+    } catch {
+      return failed;
     }
-    return saveTokens(id, await res.json());
+    return saveTokens(id, body);
   }
 
   async function refreshAccessToken(id: Id, refreshTkn: string): Promise<TokenResult> {
-    const res = await fetch(`${QPAY_URL}auth/refresh`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${refreshTkn}`,
-        "Content-Type": "application/json",
-      },
-    });
-    if (!res.ok) {
-      return { error: "QPay токен шинэчлэх явцад алдаа гарлаа." };
+    const failed = { error: "QPay токен шинэчлэх явцад алдаа гарлаа." };
+    let body: Parameters<typeof saveTokens>[1];
+    try {
+      const res = await qpayFetch(`${QPAY_URL}auth/refresh`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${refreshTkn}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (!res.ok) return failed;
+      body = await res.json();
+    } catch {
+      return failed;
     }
-    return saveTokens(id, await res.json());
+    return saveTokens(id, body);
   }
 
   async function getAccessToken(id: Id): Promise<TokenResult> {
@@ -254,7 +287,9 @@ export function createQPayClient<Id, Settings extends QPayTokenFields = QPayToke
     const settings = await store.getSettings(args.id);
     if (!settings) return { error: store.messages.notConfigured };
 
-    const res = await fetch(`${QPAY_URL}invoice`, {
+    let res: Response;
+    try {
+      res = await qpayFetch(`${QPAY_URL}invoice`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${tokenResult.accessToken}`,
@@ -270,12 +305,19 @@ export function createQPayClient<Id, Settings extends QPayTokenFields = QPayToke
         allow_partial: false,
         allow_exceed: false,
       }),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      return { error: `QPay invoice үүсгэхэд алдаа: ${res.status} ${text}` };
+      });
+    } catch (error) {
+      return { error: `QPay invoice үүсгэхэд алдаа: ${failureName(error)}` };
     }
-    return (await res.json()) as QPayInvoiceCreated;
+    try {
+      if (!res.ok) {
+        const text = await res.text();
+        return { error: `QPay invoice үүсгэхэд алдаа: ${res.status} ${text}` };
+      }
+      return (await res.json()) as QPayInvoiceCreated;
+    } catch (error) {
+      return { error: `QPay invoice үүсгэхэд алдаа: ${failureName(error)}` };
+    }
   }
 
   /**
@@ -288,16 +330,20 @@ export function createQPayClient<Id, Settings extends QPayTokenFields = QPayToke
     const tokenResult = await getAccessToken(id);
     if ("error" in tokenResult) return null;
 
-    const res = await fetch(`${QPAY_URL}invoice/${invoiceId}`, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${tokenResult.accessToken}`,
-        "Content-Type": "application/json",
-      },
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { urls?: QPayBankUrl[] };
-    return Array.isArray(data.urls) ? data.urls : null;
+    try {
+      const res = await qpayFetch(`${QPAY_URL}invoice/${invoiceId}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${tokenResult.accessToken}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { urls?: QPayBankUrl[] };
+      return Array.isArray(data.urls) ? data.urls : null;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -332,21 +378,25 @@ export function createQPayClient<Id, Settings extends QPayTokenFields = QPayToke
     const tokenResult = await getAccessToken(id);
     if ("error" in tokenResult) return { error: tokenResult.error };
 
-    const res = await fetch(`${QPAY_URL}payment/check`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${tokenResult.accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        object_type: "INVOICE",
-        object_id: invoiceId,
-        offset: { page_number: 1, page_limit: 100 },
-      }),
-    });
-    if (!res.ok) return { error: `QPay шалгалт алдаа: ${res.status}` };
-
-    const data = (await res.json()) as QPayCheckResponse;
+    let data: QPayCheckResponse;
+    try {
+      const res = await qpayFetch(`${QPAY_URL}payment/check`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${tokenResult.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          object_type: "INVOICE",
+          object_id: invoiceId,
+          offset: { page_number: 1, page_limit: 100 },
+        }),
+      });
+      if (!res.ok) return { error: `QPay шалгалт алдаа: ${res.status}` };
+      data = (await res.json()) as QPayCheckResponse;
+    } catch (error) {
+      return { error: `QPay шалгалт алдаа: ${failureName(error)}` };
+    }
     const paidRow = data.rows?.find((r) => r.payment_status === "PAID") ?? null;
     const paidAmountText = String(data.paid_amount ?? "0").trim();
     if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(paidAmountText)) {
@@ -417,27 +467,32 @@ export function createQPayClient<Id, Settings extends QPayTokenFields = QPayToke
   ): Promise<{ ok: true } | { error: string }> {
     if (!paymentId) return { error: "payment_id шаардлагатай." };
     const tokenResult = await getAccessToken(id);
-    if ("error" in tokenResult) return { error: tokenResult.error };
+    // Pre-send failure (token/config): nothing reached QPay, tagged so callers can treat it as definite.
+    if ("error" in tokenResult) return { error: `${QPAY_NOT_SENT_PREFIX}${tokenResult.error}` };
     const settings = await store.getSettings(id);
 
-    const res = await fetch(`${QPAY_URL}payment/${action}/${paymentId}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${tokenResult.accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        callback_url: settings?.callbackUrl ?? undefined,
-        note: note ?? undefined,
-      }),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      return {
-        error: `QPay ${action === "cancel" ? "цуцлахад" : "буцаахад"} алдаа: ${res.status} ${text}`,
-      };
+    try {
+      const res = await qpayFetch(`${QPAY_URL}payment/${action}/${paymentId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${tokenResult.accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          callback_url: settings?.callbackUrl ?? undefined,
+          note: note ?? undefined,
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        return {
+          error: `QPay ${action === "cancel" ? "цуцлахад" : "буцаахад"} алдаа: ${res.status} ${text}`,
+        };
+      }
+      return { ok: true };
+    } catch (error) {
+      return { error: `QPay ${action === "cancel" ? "цуцлахад" : "буцаахад"} алдаа: ${failureName(error)}` };
     }
-    return { ok: true };
   }
 
   /**
@@ -466,7 +521,7 @@ export function createQPayClient<Id, Settings extends QPayTokenFields = QPayToke
       if ("error" in tokenResult) {
         return { ok: false, reason: "http_error", message: tokenResult.error };
       }
-      const res = await fetch(`${QPAY_URL}invoice/${encodeURIComponent(invoiceId)}`, {
+      const res = await qpayFetch(`${QPAY_URL}invoice/${encodeURIComponent(invoiceId)}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${tokenResult.accessToken}`,

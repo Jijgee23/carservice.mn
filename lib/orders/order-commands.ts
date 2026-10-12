@@ -611,6 +611,12 @@ export async function applyOrderPatchCommand(input: {
     },
   );
 
+  if (result.statusChanged && result.toStatus === "CANCELLED") {
+    // Cancelled order must not keep a payable QPay QR: cancel pending invoices at QPay, then locally (post-commit, best-effort;
+    // a late payment is refused by the confirm guard). Lazy import: payment commands import this module.
+    const { sweepStaleOrderQPayCommand } = await import("@/lib/orders/order-payment-commands");
+    await sweepStaleOrderQPayCommand({ actor: actor as Parameters<typeof sweepStaleOrderQPayCommand>[0]["actor"], orderId, scope });
+  }
   if (result.statusChanged && result.toStatus === "COMPLETED") await notifyOrderStatusChange(orderId, "order_completed");
   else if (result.statusChanged && result.toStatus === "CANCELLED") await notifyOrderStatusChange(orderId, "order_cancelled");
   else if (result.statusChanged && result.toStatus === "IN_PROGRESS") await notifyOrderStatusChange(orderId, "order_in_progress");
@@ -677,6 +683,7 @@ export async function deleteOrderCommand(input: {
         // Existing confirm path (loaded lazily: it is a server-only module).
         const { confirmOrderQPayPayment } = await import("@/lib/order-payments");
         const r = await confirmOrderQPayPayment(actor.tenantId, actor.id, paymentId);
+        if (r.ok && !r.paid && r.blocked) return "blocked" as const;
         return r.ok && r.paid;
       }),
     );
@@ -710,6 +717,12 @@ export async function deleteOrderCommand(input: {
         select: { id: true },
       });
       if (unhandledQPay) throw new OrderCommandError("QPay нэхэмжлэхийн төлөв өөрчлөгдлөө. Дахин оролдоно уу.", 409, "QPAY_PENDING_CHANGED");
+      // FAILED QPay rows holding a qpayPaymentId are paid-at-QPay money that was never credited (cancelled order /
+      // overpay). They are deleted with the order, so record them in the delete audit to keep the refund traceable.
+      const blockedQPayRows = await tx.orderPayment.findMany({
+        where: { orderId, tenantId: actor.tenantId, method: "QPAY", status: "FAILED", qpayPaymentId: { not: null } },
+        select: { id: true, amount: true, qpayInvoiceId: true, qpayPaymentId: true },
+      });
       await tx.orderPayment.deleteMany({
         where: { orderId, tenantId: actor.tenantId, status: { not: "PAID" } },
       });
@@ -753,7 +766,15 @@ export async function deleteOrderCommand(input: {
           entity: "ServiceOrder",
           entityId: orderId,
           action: "DELETE",
-          summary: `#${order.number}`,
+          summary: blockedQPayRows.length > 0 ? `#${order.number} · QPay дээр буцаалт шаардлагатай (${blockedQPayRows.length})` : `#${order.number}`,
+          ...(blockedQPayRows.length > 0
+            ? {
+                after: {
+                  qpayRefundRequired: "QPay дээр буцаалт шаардлагатай",
+                  payments: blockedQPayRows.map((row) => ({ id: row.id, amount: row.amount.toString(), qpayInvoiceId: row.qpayInvoiceId, qpayPaymentId: row.qpayPaymentId })),
+                },
+              }
+            : {}),
         },
         tx,
       );

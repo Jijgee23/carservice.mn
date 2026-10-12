@@ -30,7 +30,7 @@ function fakeDeps(script: { checks: Check[]; cancels?: Cancel[]; confirmResult?:
       assert.ok(next, "unexpected cancel call");
       return next;
     },
-    async confirmPaid(id: string) {
+    async confirmPaid(id: string): Promise<boolean | "blocked"> {
       calls.push(`confirm:${id}`);
       return script.confirmResult ?? true;
     },
@@ -121,7 +121,7 @@ test("sweep: classifies every payment; only no_invoice/cancelled are cancellable
     cancels: [{ ok: true }, { ok: false, reason: "http_error" }],
   });
   const sweep = await sweepPendingQPayAtProvider({ tenantId: "t", userId: "u", payments: [pay({ id: "a" }), pay({ id: "b" }), pay({ id: "c" }), pay({ id: "d" }), pay({ id: "e", qpayInvoiceId: null })] }, f.deps);
-  assert.deepEqual(sweep, { cancellable: ["a", "e"], paid: ["b"], partial: ["c"], failed: ["d"] });
+  assert.deepEqual(sweep, { cancellable: ["a", "e"], paid: ["b"], blocked: [], partial: ["c"], failed: ["d"] });
 });
 
 test("QPay core: DELETE failure classification (404 / INVOICE_NOTFOUND = gone, INVOICE_PAID = paid, rest = http_error)", async () => {
@@ -222,11 +222,9 @@ test("structural: every local QPay cancel path runs the provider pre-step first"
   const del = fn(orderCommands, "export async function deleteOrderCommand");
   assert.ok(del.indexOf("sweepPendingQPayAtProvider(") >= 0 && del.indexOf("sweepPendingQPayAtProvider(") < del.indexOf("orderPayment.deleteMany"));
 
+  // The legacy createOrReuseOrderQPayInvoice / cancelOrderQPayInvoice were dead code and are deleted.
   const legacy = await src("lib/order-payments.ts");
-  const reuse = fn(legacy, "export async function createOrReuseOrderQPayInvoice");
-  assert.ok(reuse.indexOf("providerCancelLegacy(") >= 0 && reuse.indexOf("providerCancelLegacy(") < reuse.indexOf('status: "CANCELLED"'));
-  const cancelLegacy = fn(legacy, "export async function cancelOrderQPayInvoice");
-  assert.ok(cancelLegacy.indexOf("providerCancelLegacy(") >= 0 && cancelLegacy.indexOf("providerCancelLegacy(") < cancelLegacy.indexOf('status: "CANCELLED"'));
+  assert.doesNotMatch(legacy, /createOrReuseOrderQPayInvoice|cancelOrderQPayInvoice|providerCancelLegacy/);
 });
 
 test("structural: provider cancel never runs inside a DB transaction (helper has no tx, no OrderPayment writes)", async () => {
@@ -236,4 +234,38 @@ test("structural: provider cancel never runs inside a DB transaction (helper has
   // inside providerCancelPendingQPay the tx callback ends before the sweep is awaited
   const fn = cmds.slice(cmds.indexOf("async function providerCancelPendingQPay("), cmds.indexOf("export type RecordedOrderPayment"));
   assert.ok(fn.indexOf("sweepPendingQPayAtProvider(") > fn.indexOf("return { branchId: order.branchId"));
+});
+
+test("helper: a confirm BLOCKED by the credit step reports blocked (not paid), and the sweep lists it separately", async () => {
+  const { cancelPendingQPayAtProvider, sweepPendingQPayAtProvider } = await import("../lib/orders/qpay-cancel");
+  const f = fakeDeps({ checks: [{ paid: true, underpaidAmount: null }] });
+  f.deps.confirmPaid = async () => "blocked";
+  assert.equal(await cancelPendingQPayAtProvider({ tenantId: "t", userId: "u", payment: pay() }, f.deps), "blocked");
+  const g = fakeDeps({ checks: [{ paid: true, underpaidAmount: null }] });
+  g.deps.confirmPaid = async () => "blocked";
+  const sweep = await sweepPendingQPayAtProvider({ tenantId: "t", userId: "u", payments: [pay({ id: "x" })] }, g.deps);
+  assert.deepEqual(sweep, { cancellable: [], paid: [], blocked: ["x"], partial: [], failed: [] });
+});
+
+test("callers: a blocked sweep outcome never raises the paid 409 (the row is FAILED, the user's action proceeds)", async () => {
+  const cmd = await src("lib/orders/order-payment-commands.ts");
+  assert.match(cmd, /e\.code === "QPAY_ORDER_CANCELLED"\) return \{ blocked: "ORDER_CANCELLED" as const \}/);
+  assert.match(cmd, /e\.code === "QPAY_OVERPAYMENT"\) return \{ blocked: "OVERPAYMENT" as const \}/);
+  const legacy = await src("lib/order-payments.ts");
+  assert.match(legacy, /message: qpayCreditBlockMessage\(outcome\), blocked: true/);
+  for (const rel of ["lib/cash/settlement.ts", "lib/orders/order-commands.ts"]) {
+    assert.match(await src(rel), /r\.blocked\) return "blocked"/, rel);
+  }
+  assert.doesNotMatch(cmd.slice(cmd.indexOf("function assertSweepAllowsLocalCancel")).slice(0, 700), /sweep\.blocked/);
+});
+
+test("booking-revenue: audit failure after REFUNDED is swallowed; fresh claims show Явцад; account closure cancels fee invoices with allSettled", async () => {
+  const action = await src("app/_actions/booking-revenue.ts");
+  const verify = action.slice(action.indexOf("export async function markAppointmentRefundVerifiedAction"));
+  assert.match(verify, /try \{\s*await logAudit[\s\S]*?\} catch \(error\) \{\s*console\.error/);
+  const page = await src("app/system/(authed)/booking-revenue/page.tsx");
+  assert.match(page, /REFUND_CLAIM_STALE_MS/);
+  assert.match(page, /Явцад/);
+  const closure = await src("lib/account-closure/customer.ts");
+  assert.match(closure, /Promise\.allSettled\(cancelledIds\.map\(/);
 });
