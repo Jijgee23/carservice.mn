@@ -541,7 +541,7 @@ Res: 200 { "branchId": "...", "open": true | false }
 404 { "code": "CASH_SESSION_NOT_FOUND" }`}</Code>
         </Endpoint>
 
-        <Endpoint method="POST" path="/api/v1/cash/sessions/[id]/close" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage", "Багц идэвхтэй байх шаардлагатай"]} title="«Касс хаах»: тоолсон мөнгөө оруулж ээлжийг хаах (expectedCash, difference хөлдөнө).">
+        <Endpoint method="POST" path="/api/v1/cash/sessions/[id]/close" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage", "Багц идэвхтэй байх шаардлагатай"]} title="«Касс хаах»: бодит тоолсон мөнгөө оруулж ээлжийг хаах (expectedCash, difference хөлдөнө).">
           <Code>{`Req:  { "countedCash": "148000", "methodCounts": [{ "method": "CARD", "bank": "KHAN", "counted": "120000" }], "note": "..." }
       // countedCash ≥ 0 (бэлэн мөнгө). methodCounts заавал биш: бэлэн бус бүлэг (CARD/BANK_TRANSFER банкаар) тус бүрийн тоолсон дүн;
       // counted хоосон/null = тоолоогүй. QPAY тооллогогүй (counted = expected). Ээлжид байхгүй бүлэг/CASH/сөрөг дүн → 422 CASH_FIELD_INVALID.
@@ -561,7 +561,7 @@ Res: 200 { "range": { "from", "to", "label", "key" }, "summary": {
   "expenseByType": [{ ...ижил, systemKey "INTERNAL_REPAIR" = дотоод засварын зардал }],
   "expenseByMethod": [{ "method", "methodLabel", "total", "count" }],
   "netByMethod": [{ "method", "methodLabel", "income", "expense", "net" }],   // net = орлого − зарлага
-  "netCash": "...",                                                            // бэлэн мөнгөний цэвэр хөдөлгөөн (CASH мөрийн net)
+  "netCash": "...",                                                            // бэлэн мөнгөний цэвэр гүйлгээ (CASH мөрийн net)
   "postpaid": { "workDone": { "total", "count" },            // хугацаанд дууссан дараа төлбөрт (дотоод биш) захиалгын нийт дүн
                 "collected": { "total", "settlements": { "total", "count" }, "directPayments": { "total", "count" } },
                 "outstanding": { "total", "asOf": "ISO" } },  // авлага үлдэгдэл — ХУГАЦААНЫ ЭЦСИЙН байдлаар (өнөөдрөөр биш); дараа төлбөрт эсэхээс үл хамааран бүх дууссан (дотоод биш) захиалгын төлөгдөөгүй үлдэгдэл (QA #11)

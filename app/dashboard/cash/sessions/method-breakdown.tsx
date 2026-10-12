@@ -68,7 +68,7 @@ export function SessionMethodBreakdown({ session }: { session: Session }) {
       <div className="px-5 py-3 border-b border-[var(--oc-line)]">
         <h2 className="font-semibold text-[var(--oc-ink)]">Төлбөрийн аргаар</h2>
         <p className="text-xs text-[var(--oc-muted3)] mt-1">
-          Бэлэн мөнгөний тооцоололд эхний үлдэгдэл орно. Бусад аргын тооцоолсон дүн нь цэвэр дүн; тоолсон дүн заавал биш.
+          Бэлэн мөнгөний тооцоололд эхний үлдэгдэл орно. Бусад аргын хүлээгдэх дүн нь цэвэр дүн; бодит (тоолсон) дүн заавал биш.
         </p>
       </div>
       <div className="overflow-auto">
@@ -79,8 +79,8 @@ export function SessionMethodBreakdown({ session }: { session: Session }) {
               <th className={`${th} text-right`}>Орлого</th>
               <th className={`${th} text-right`}>Зарлага</th>
               <th className={`${th} text-right`}>Цэвэр</th>
-              <th className={`${th} text-right`}>{closed ? "Тооцоолсон (хаахад)" : "Тооцоолсон"}</th>
-              <th className={`${th} text-right`}>Тоолсон</th>
+              <th className={`${th} text-right`}>{closed ? "Хүлээгдэх (хаахад)" : "Хүлээгдэх"}</th>
+              <th className={`${th} text-right`}>Бодит</th>
               <th className={`${th} text-right`}>Зөрүү</th>
               <th className={`${th} text-right`}>Бичлэг</th>
             </tr>

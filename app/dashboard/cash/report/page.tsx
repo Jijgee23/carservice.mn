@@ -121,7 +121,7 @@ export default async function CashReportPage({ searchParams }: { searchParams: P
     <>
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">Мөнгөн гүйлгээний тайлан</h1>
-        <p className="text-sm text-[var(--oc-muted3)] mt-1">{range.label} · цуцлагдсан бичлэгийг оруулаагүй.</p>
+        <p className="text-sm text-[var(--oc-muted3)] mt-1">{range.label} · хүчингүй бичлэгийг оруулаагүй.</p>
       </div>
       <div className="flex flex-wrap items-center gap-2 mb-6">
         <DateRangeFilter fromParam="from" toParam="to" />
@@ -180,11 +180,11 @@ export default async function CashReportPage({ searchParams }: { searchParams: P
           <div className="mt-1 text-xl font-semibold tabular-nums text-[var(--oc-ink)]">{formatTugrik(s.totals.expense)}</div>
         </div>
         <div className={card}>
-          <div className="text-xs text-[var(--oc-muted3)]">Цэвэр дүн</div>
+          <div className="text-xs text-[var(--oc-muted3)]">Цэвэр ашиг</div>
           <div className={`mt-1 text-xl font-semibold tabular-nums ${signedClass(s.totals.net)}`}>{fmtSigned(s.totals.net)}</div>
         </div>
         <div className={card}>
-          <div className="text-xs text-[var(--oc-muted3)]">Бэлэн мөнгөний цэвэр хөдөлгөөн</div>
+          <div className="text-xs text-[var(--oc-muted3)]">Бэлэн мөнгөний цэвэр гүйлгээ</div>
           <div className={`mt-1 text-xl font-semibold tabular-nums ${signedClass(s.netCash)}`}>{fmtSigned(s.netCash)}</div>
         </div>
       </div>
@@ -254,7 +254,7 @@ export default async function CashReportPage({ searchParams }: { searchParams: P
           </table>
         </Section>
 
-        <Section title="Цэвэр дүн — төлбөрийн аргаар" hint="Орлого − зарлага. Бэлэн мөнгөний цэвэр дүн нь кассын хүлээгдэж буй хөдөлгөөн.">
+        <Section title="Цэвэр дүн — төлбөрийн аргаар" hint="Орлого − зарлага. Бэлэн мөнгөний цэвэр гүйлгээ нь кассын хүлээгдэж буй хөдөлгөөн.">
           <table className="w-full">
             <thead>
               <tr className="border-b border-[var(--oc-line)]">
@@ -317,10 +317,10 @@ export default async function CashReportPage({ searchParams }: { searchParams: P
                     <th className={thR}>Эхний</th>
                     <th className={thR}>Бэлэн орлого</th>
                     <th className={thR}>Бэлэн зарлага</th>
-                    <th className={thR}>Тооцоолсон</th>
-                    <th className={thR}>Тоолсон</th>
+                    <th className={thR}>Хүлээгдэх</th>
+                    <th className={thR}>Бодит</th>
                     <th className={thR}>Зөрүү</th>
-                    <th className={thR}>Хаасны дараах цуцлалт</th>
+                    <th className={thR}>Хаасны дараа хүчингүй болсон</th>
                   </tr>
                 </thead>
                 <tbody>

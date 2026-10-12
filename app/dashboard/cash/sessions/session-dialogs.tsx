@@ -112,7 +112,7 @@ function CloseFormLoader({ sessionId, onDone }: { sessionId: string; onDone: () 
         }
       })
       .catch(() => {
-        if (!cancelled) setError("Тооцоолсон дүнг ачаалахад алдаа гарлаа.");
+        if (!cancelled) setError("Хүлээгдэх дүнг ачаалахад алдаа гарлаа.");
       });
     return () => {
       cancelled = true;
@@ -142,7 +142,7 @@ function CloseFormLoader({ sessionId, onDone }: { sessionId: string; onDone: () 
       </div>
     );
   }
-  return <p className="p-5 text-sm text-[var(--oc-muted3)]">Тооцоолсон дүнг ачаалж байна...</p>;
+  return <p className="p-5 text-sm text-[var(--oc-muted3)]">Хүлээгдэх дүнг ачаалж байна...</p>;
 }
 
 function CloseForm({
@@ -189,7 +189,7 @@ function CloseForm({
       <input type="hidden" name="countedCash" value={counted.replace(/,/g, "")} />
       <FormError message={state && !state.ok && Object.keys(fieldErrors).length === 0 ? state.message : undefined} />
       <div className="rounded-lg border border-[var(--oc-line)] bg-[var(--oc-panel2)] px-4 py-3 flex items-center justify-between text-sm">
-        <span className="text-[var(--oc-muted3)]">Тооцоолсон үлдэгдэл</span>
+        <span className="text-[var(--oc-muted3)]">Хүлээгдэх үлдэгдэл</span>
         <span className="font-semibold tabular-nums text-[var(--oc-ink)]">{formatTugrik(expectedCash)}</span>
       </div>
       <Field label="Тоолсон бэлэн мөнгө (₮)" htmlFor="session-close-counted" required error={fieldErrors.countedCash}>
@@ -228,7 +228,7 @@ function CloseForm({
               <div key={k} className="rounded-lg border border-[var(--oc-line)] bg-[var(--oc-panel2)] px-4 py-3 grid grid-cols-[1fr_auto] gap-x-3 gap-y-2 items-center text-sm">
                 <div>
                   <div className="text-[var(--oc-ink)]">{methodRowLabel(g)}</div>
-                  <div className="text-xs text-[var(--oc-muted3)]">Тооцоолсон {formatTugrik(String(expected / 100))}</div>
+                  <div className="text-xs text-[var(--oc-muted3)]">Хүлээгдэх {formatTugrik(String(expected / 100))}</div>
                 </div>
                 {isQpay ? (
                   <span className="text-xs text-[var(--oc-muted3)]">Системээр баталгаажсан</span>

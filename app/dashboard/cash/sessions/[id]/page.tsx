@@ -147,14 +147,14 @@ export default async function CashSessionDetailPage({ params }: { params: Promis
           {stat("Эхний үлдэгдэл", formatTugrik(s.openingCash))}
           {stat("Бэлэн орлого (одоогийн)", formatTugrik(s.cashIn))}
           {stat("Бэлэн зарлага (одоогийн)", formatTugrik(s.cashOut))}
-          {stat(closed ? "Тооцоолсон (хаахад)" : "Тооцоолсон үлдэгдэл", formatTugrik(s.expectedCash))}
-          {closed ? stat("Тоолсон", formatTugrik(s.countedCash)) : null}
+          {stat(closed ? "Хүлээгдэх (хаахад)" : "Хүлээгдэх үлдэгдэл", formatTugrik(s.expectedCash))}
+          {closed ? stat("Бодит", formatTugrik(s.countedCash)) : null}
           {closed ? stat("Зөрүү", `${diffNum > 0 ? "+" : ""}${formatTugrik(s.difference)}`, diffClass) : null}
         </div>
       </div>
       {closed ? (
         <p className="text-xs text-[var(--oc-muted3)] -mt-3">
-          Тооцоолсон дүн, тоолсон дүн, зөрүү нь хаах үеийн тогтсон утга. Орлого/зарлагын нийлбэр одоогийн (хүчингүйг хасаад) байдлаар.
+          Хүлээгдэх дүн, бодит (тоолсон) дүн, зөрүү нь хаах үеийн тогтсон утга. Орлого/зарлагын нийлбэр одоогийн (хүчингүйг хасаад) байдлаар.
         </p>
       ) : null}
 
@@ -166,7 +166,7 @@ export default async function CashSessionDetailPage({ params }: { params: Promis
             <h2 className="font-semibold text-[var(--oc-ink)]">Хаасны дараа хүчингүй болсон ({postCloseVoids.count})</h2>
             <p className="text-xs text-[var(--oc-muted3)] mt-1">
               Орлого {formatTugrik(postCloseVoids.incomeAmount)} · Зарлага {formatTugrik(postCloseVoids.expenseAmount)} · Цэвэр{" "}
-              {formatTugrik(postCloseVoids.netAmount)}. Хаасан ээлжийн тооцоолсон дүнд өөрчлөлт орохгүй.
+              {formatTugrik(postCloseVoids.netAmount)}. Хаасан ээлжийн хүлээгдэх дүнд өөрчлөлт орохгүй.
             </p>
           </div>
           <EntriesTable entries={postCloseVoids.entries} showVoid />

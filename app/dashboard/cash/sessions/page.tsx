@@ -178,7 +178,7 @@ export default async function CashSessionsPage({ searchParams }: { searchParams:
                       <dd className="tabular-nums text-[var(--oc-ink)]">{formatTugrik(s.cashOut)}</dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-[var(--oc-muted3)]">Тооцоолсон үлдэгдэл</dt>
+                      <dt className="text-xs text-[var(--oc-muted3)]">Хүлээгдэх үлдэгдэл</dt>
                       <dd className="tabular-nums font-semibold text-[var(--oc-ink)]">{formatTugrik(s.expectedCash)}</dd>
                     </div>
                   </dl>
@@ -255,11 +255,11 @@ export default async function CashSessionsPage({ searchParams }: { searchParams:
             <table className="w-full min-w-[1100px]">
               <thead>
                 <tr className="border-b border-[var(--oc-line)]">
-                  {["Нээсэн", "Хаасан", "Салбар", "Нээсэн ажилтан", "Эхний", "Нийт орлого", "Тооцоолсон", "Тоолсон", "Зөрүү", "Төлөв", ""].map((h, i) => (
+                  {["Нээсэн", "Хаасан", "Салбар", "Нээсэн ажилтан", "Эхний", "Нийт орлого", "Хүлээгдэх", "Бодит", "Зөрүү", "Төлөв", ""].map((h, i) => (
                     <th
                       key={`${h}-${i}`}
                       className={`font-plex-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--oc-muted3)] font-medium px-4 py-3 ${
-                        ["Эхний", "Нийт орлого", "Тооцоолсон", "Тоолсон", "Зөрүү"].includes(h) ? "text-right" : "text-left"
+                        ["Эхний", "Нийт орлого", "Хүлээгдэх", "Бодит", "Зөрүү"].includes(h) ? "text-right" : "text-left"
                       }`}
                     >
                       {h}

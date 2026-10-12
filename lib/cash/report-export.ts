@@ -22,8 +22,8 @@ export async function buildCashSummaryWorkbook(summary: CashSummary) {
     { label: "Хугацаа", value: `${bookingDateKey(new Date(summary.range.from))} – ${bookingDateKey(new Date(summary.range.to))}` },
     { label: "Нийт орлого", value: num(summary.totals.income) },
     { label: "Нийт зарлага", value: num(summary.totals.expense) },
-    { label: "Цэвэр дүн", value: num(summary.totals.net) },
-    { label: "Бэлэн мөнгөний цэвэр хөдөлгөөн", value: num(summary.netCash) },
+    { label: "Цэвэр ашиг", value: num(summary.totals.net) },
+    { label: "Бэлэн мөнгөний цэвэр гүйлгээ", value: num(summary.netCash) },
     { label: "Дотоод зардал", value: num(summary.internalCost.total) },
   ]);
 
@@ -75,7 +75,7 @@ export async function buildCashSummaryWorkbook(summary: CashSummary) {
     { header: "Нийт орлого", key: "totalIncome", width: 16 },
     { header: "Нийт зарлага", key: "totalExpense", width: 16 },
     { header: "Байх ёстой", key: "expected", width: 16 },
-    { header: "Тоолсон", key: "counted", width: 16 },
+    { header: "Бодит", key: "counted", width: 16 },
     { header: "Зөрүү", key: "difference", width: 14 },
     { header: "Хаасны дараах хүчингүй (цэвэр)", key: "postClose", width: 24 },
   ], [
@@ -121,8 +121,8 @@ export async function buildCashSummaryWorkbook(summary: CashSummary) {
     { header: "Орлого", key: "income", width: 16 },
     { header: "Зарлага", key: "expense", width: 16 },
     { header: "Цэвэр", key: "net", width: 16 },
-    { header: "Тооцоолсон", key: "expected", width: 16 },
-    { header: "Тоолсон", key: "counted", width: 16 },
+    { header: "Хүлээгдэх", key: "expected", width: 16 },
+    { header: "Бодит", key: "counted", width: 16 },
     { header: "Зөрүү", key: "difference", width: 14 },
     { header: "Бичлэг", key: "count", width: 8 },
   ], summary.sessions.items.flatMap((s) =>

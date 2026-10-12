@@ -321,7 +321,7 @@ test("session byMethod: live per-method rows for open, frozen counts for closed,
   const wb = new Workbook();
   await wb.xlsx.load(buf as unknown as ArrayBuffer);
   const ws = wb.getWorksheet("Ээлж — аргаар")!;
-  assert.deepEqual((ws.getRow(1).values as unknown[]).slice(1), ["Нээсэн", "Салбар", "Төлөв", "Арга", "Банк", "Орлого", "Зарлага", "Цэвэр", "Тооцоолсон", "Тоолсон", "Зөрүү", "Бичлэг"]);
+  assert.deepEqual((ws.getRow(1).values as unknown[]).slice(1), ["Нээсэн", "Салбар", "Төлөв", "Арга", "Банк", "Орлого", "Зарлага", "Цэвэр", "Хүлээгдэх", "Бодит", "Зөрүү", "Бичлэг"]);
   assert.equal(ws.rowCount, 7); // header + 3 closed + 3 open
   const card = (ws.getRow(3).values as unknown[]).slice(1);
   assert.deepEqual(card.slice(2), ["Хаагдсан", "Карт", "Хаан банк", 30000, 0, 30000, 30000, 29000, -1000, 1]);

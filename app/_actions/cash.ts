@@ -236,7 +236,7 @@ export async function getCloseSessionFiguresAction(sessionId: string): Promise<C
     return { ok: true, ...figures };
   } catch (error) {
     unstable_rethrow(error);
-    return failureMessage(error, "Тооцоолсон дүнг ачаалахад алдаа гарлаа.");
+    return failureMessage(error, "Хүлээгдэх дүнг ачаалахад алдаа гарлаа.");
   }
 }
 
