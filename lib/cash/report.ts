@@ -3,7 +3,7 @@
 // aggregate (groupBy/aggregate), tenant- and branch-scoped; voided entries are always excluded and taxIncluded is
 // never summed. Money leaves as Decimal strings.
 import { Prisma } from "@/app/generated/prisma/client";
-import { INACTIVE_SUFFIX, TEST_BADGE } from "@/lib/payment-accounts";
+import { paymentAccountLabel } from "@/lib/payment-accounts";
 import { hasPermission } from "@/lib/auth/roles";
 import { ORDER_PAYMENT_METHOD_LABEL } from "@/lib/orders";
 import { prisma } from "@/lib/prisma";
@@ -172,7 +172,7 @@ export async function buildCashSummary(input: {
       },
     }),
     // Labels via the join so a rename shows on history (one tenant-scoped query).
-    db.paymentAccount.findMany({ where: { tenantId }, select: { id: true, name: true, isTest: true, isActive: true } }),
+    db.paymentAccount.findMany({ where: { tenantId }, select: { id: true, name: true, type: true, accountNumber: true, terminalId: true, isTest: true, isActive: true } }),
   ]);
 
   const accountById = new Map(accounts.map((a) => [a.id, a]));
@@ -180,7 +180,7 @@ export async function buildCashSummary(input: {
     if (!id) return { label: UNKNOWN_BANK_LABEL, isTest: false };
     const a = accountById.get(id);
     if (!a) return { label: id, isTest: false };
-    return { label: `${a.name}${a.isActive ? "" : INACTIVE_SUFFIX}${a.isTest ? ` (${TEST_BADGE})` : ""}`, isTest: a.isTest };
+    return { label: paymentAccountLabel(a), isTest: a.isTest };
   };
   const typeById = new Map(types.map((t) => [t.id, t]));
   const sum = (g: { _sum?: { amount?: { toString(): string } | null } | null }) => dec(g._sum?.amount);

@@ -183,7 +183,7 @@ test("Review focus 4/5: renamed/test/inactive accounts relabel via the join; nul
   const card = s.incomeByMethod.find((r) => r.method === "CARD")!;
   assert.deepEqual(card.banks.map((b) => [b.bank, b.bankLabel, b.bankIsTest, b.total]), [
     ["pa2", "Хуучин (идэвхгүй)", false, "50"],
-    ["pa1", "Шинэ нэр (Туршилт)", true, "3000"],
+    ["pa1", "Шинэ нэр · Туршилт", true, "3000"],
     [null, "Банк тодорхойгүй", false, "100"],
   ]);
 });

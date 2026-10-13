@@ -50,7 +50,16 @@ function EntriesTable({ entries, showVoid }: { entries: DetailEntry[]; showVoid?
             <tr key={e.id}>
               <td className="px-4 py-2.5 font-plex-mono text-xs text-[var(--oc-muted2)] whitespace-nowrap">{fmtDateTime(e.occurredAt)}</td>
               <td className="px-4 py-2.5 text-sm text-[var(--oc-ink2)]">{e.type.name}</td>
-              <td className="px-4 py-2.5 text-sm text-[var(--oc-ink2)]">{ORDER_PAYMENT_METHOD_LABEL[e.method] ?? e.method}</td>
+              <td className="px-4 py-2.5 text-sm text-[var(--oc-ink2)]">
+                {ORDER_PAYMENT_METHOD_LABEL[e.method] ?? e.method}
+                {e.bankLabel ? (
+                  <div className="text-xs text-[var(--oc-muted3)] whitespace-nowrap">
+                    {e.bankLabel}
+                    {e.bankHint ? ` ${e.bankHint}` : ""}
+                    {e.bankIsTest ? " · Туршилт" : ""}
+                  </div>
+                ) : null}
+              </td>
               <td className="px-4 py-2.5 text-sm text-[var(--oc-ink2)]">{e.direction === "INCOME" ? "Орлого" : "Зарлага"}</td>
               <td className="px-4 py-2.5 text-right text-sm tabular-nums text-[var(--oc-ink)] whitespace-nowrap">
                 {e.direction === "EXPENSE" ? "−" : ""}

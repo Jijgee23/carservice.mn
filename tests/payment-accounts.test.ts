@@ -88,7 +88,7 @@ test("Review focus 2: legacy code resolves per type; a tenant without that legac
 
 test("bankRef serializes an account, tolerates null, flags inactive in the label", async () => {
   const { bankRef, INACTIVE_SUFFIX, TEST_BADGE } = await import("../lib/payment-accounts");
-  assert.deepEqual(bankRef(null), { bankId: null, bank: null, bankLabel: null, bankType: null, bankIsTest: false });
+  assert.deepEqual(bankRef(null), { bankId: null, bank: null, bankLabel: null, bankHint: null, bankType: null, bankIsTest: false });
   const live = bankRef({ id: "p1", name: "Голомт POS", type: "POS", isTest: true, isActive: true, legacyCode: null });
   assert.equal(live.bankLabel, "Голомт POS");
   assert.equal(live.bankType, "POS");
@@ -102,7 +102,7 @@ test("bankRef serializes an account, tolerates null, flags inactive in the label
 test("loadPaymentAccountLabels maps id -> label incl. inactive suffix, one query", async () => {
   const { loadPaymentAccountLabels } = await import("../lib/payment-accounts");
   let calls = 0;
-  const client = { paymentAccount: { findMany: async () => { calls += 1; return [{ id: "a1", name: "Хаан", isTest: false, isActive: true }, { id: "a2", name: "Хуучин", isTest: false, isActive: false }]; } } };
+  const client = { paymentAccount: { findMany: async () => { calls += 1; return [{ id: "a1", name: "Хаан", type: "BANK_ACCOUNT", accountNumber: null, terminalId: null, isTest: false, isActive: true }, { id: "a2", name: "Хуучин", type: "BANK_ACCOUNT", accountNumber: null, terminalId: null, isTest: false, isActive: false }]; } } };
   const map = await loadPaymentAccountLabels(client as never, "t1", ["a1", "a2", "a1", ""]);
   assert.equal(map.get("a1"), "Хаан");
   assert.equal(map.get("a2"), "Хуучин (идэвхгүй)");
@@ -110,4 +110,20 @@ test("loadPaymentAccountLabels maps id -> label incl. inactive suffix, one query
   const none = await loadPaymentAccountLabels(client as never, "t1", []);
   assert.equal(none.size, 0);
   assert.equal(calls, 1, "no query for an empty id list");
+});
+
+test("paymentAccountHint / paymentAccountLabel tell same-named accounts apart, last 4 only", async () => {
+  const { paymentAccountHint, paymentAccountLabel, bankRef } = await import("../lib/payment-accounts");
+  assert.equal(paymentAccountHint({ type: "BANK_ACCOUNT", accountNumber: "5000 1234 5678" }), "··5678");
+  assert.equal(paymentAccountHint({ type: "POS", accountNumber: "123456789", terminalId: " 0042 " }), "TID 0042");
+  assert.equal(paymentAccountHint({ type: "POS", accountNumber: "123456789", terminalId: null }), "··6789");
+  assert.equal(paymentAccountHint({ type: "BANK_ACCOUNT", accountNumber: null }), null);
+  assert.equal(
+    paymentAccountLabel({ name: "Голомт банк", type: "POS", terminalId: "0042", accountNumber: null, isTest: true, isActive: false }),
+    "Голомт банк TID 0042 · Туршилт (идэвхгүй)",
+  );
+  const ref = bankRef({ id: "a1", name: "Хаан", type: "BANK_ACCOUNT", isTest: false, isActive: true, legacyCode: null, accountNumber: "5000123456" });
+  assert.equal(ref.bankLabel, "Хаан");
+  assert.equal(ref.bankHint, "··3456");
+  assert.equal(bankRef(null).bankHint, null);
 });

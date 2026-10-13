@@ -351,6 +351,12 @@ export default async function OrderDetailPage({
           >
             {ORDER_STATUS_LABEL[status]}
           </span>
+          <Link
+            href={`/dashboard/orders/${order.id}/print`}
+            className="rounded-lg border border-[var(--oc-line)] px-3 py-1.5 text-sm text-[var(--oc-ink2)] hover:text-[var(--oc-ink)] hover:border-[var(--oc-line2)] transition-colors"
+          >
+            Хэвлэх
+          </Link>
         </div>
       </div>
 

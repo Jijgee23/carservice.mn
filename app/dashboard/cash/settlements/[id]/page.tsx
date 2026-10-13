@@ -61,7 +61,15 @@ export default async function SettlementDetailPage({ params }: { params: Promise
               {settlement.branch.name} · {fmtDateTime(settlement.occurredAt)}
             </p>
           </div>
-          {canVoid ? <SettlementVoidButton settlementId={settlement.id} sessionOpen={sessionOpen} locked={settlement.locked} /> : null}
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/dashboard/cash/settlements/${settlement.id}/print`}
+              className="rounded-lg border border-[var(--oc-line)] px-3 py-2 text-sm text-[var(--oc-ink2)] hover:text-[var(--oc-ink)] hover:border-[var(--oc-line2)] transition-colors"
+            >
+              Хэвлэх
+            </Link>
+            {canVoid ? <SettlementVoidButton settlementId={settlement.id} sessionOpen={sessionOpen} locked={settlement.locked} /> : null}
+          </div>
         </div>
       </div>
 

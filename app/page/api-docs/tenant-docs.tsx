@@ -350,7 +350,7 @@ Res:  200 { "order": {...} }
           <Code>{`Res: 200 { "payments": [{ "id": "...", "amount": "50000", "method": "CASH|CARD|BANK_TRANSFER|QPAY|OTHER", "status": "PAID|PENDING|CANCELLED|FAILED",
                          "paidAt": "ISO" | null, "createdAt": "ISO",
                          "bankId": "..." | null, "bank": "KHAN" | null, "bankLabel": "Хаан банк" | null,   // bankId = төлбөрийн сонголтын id; bank = хуучин код (хуучин бус данс → null)
-                         "bankType": "BANK_ACCOUNT" | "POS" | null, "bankIsTest": false,
+                         "bankHint": "··1234" | "TID …" | null, "bankType": "BANK_ACCOUNT" | "POS" | null, "bankIsTest": false,
                          "locked": false,                                  // true = төлбөрийн кассын бичлэг ХААГДСАН ээлжид: буцаах боломжгүй (409 CASH_SESSION_ENTRY_LOCKED); UI товчийг идэвхгүй болгоно
                          "settlementId": "..." | null }] }   // settlementId != null = «Нэгдсэн тооцоо»-ны төлбөр: тусад нь буцаах боломжгүй (422 SETTLEMENT_PAYMENT_LOCKED)
 403 { "error": "Танд энэ төлбөрийг харах эрх байхгүй.", "code": "ORDER_VIEW_FORBIDDEN" }
@@ -419,7 +419,7 @@ Res: 200 {
     "type": { "id", "name": "Засварын орлого", "systemKey": "ORDER_PAYMENT" | "POSTPAID_SETTLEMENT" | "INTERNAL_REPAIR" | null, "isSystem": true },
     "branch": { "id", "name" },
     "amount": "50000", "method": "CASH", "methodLabel": "Бэлэн",
-    "bankId": "..." | null, "bank": "KHAN" | null, "bankLabel": "Хаан банк" | null, "bankType": "BANK_ACCOUNT" | "POS" | null, "bankIsTest": false,   // bank = хуучин код (эсвэл null)
+    "bankId": "..." | null, "bank": "KHAN" | null, "bankLabel": "Хаан банк" | null, "bankHint": "··1234" | "TID …" | null, "bankType": "BANK_ACCOUNT" | "POS" | null, "bankIsTest": false,   // bank = хуучин код (эсвэл null)
     "occurredAt": "ISO", "note": "..." | null, "attachmentPath": "/uploads/cash/{tenantId}/..." | null,
     "taxIncluded": "5000" | null,            // «Татвар (туршилт)» — зөвхөн зарлага, ямар ч нийлбэрт орохгүй
     "customer": { "id", "name" } | null, "counterparty": "..." | null,
@@ -481,7 +481,7 @@ Res: 200 { "orders": [{ "id", "number", "plate": "..." | null, "completedAt": "I
       // Дүн = сонгосон захиалга бүрийн үлдэгдлийн нийлбэр (хэсэгчилсэн тооцоо байхгүй). Захиалга бүрт нэг PAID төлбөр (settlementId-тай) үүснэ.
 Res:  201 { "settlement": {
   "id", "branch": { "id", "name" }, "customer": { "id", "name" }, "amount": "250000",
-  "method": "BANK_TRANSFER", "methodLabel": "Дансаар", "bankId": "..." | null, "bank": "KHAN" | null, "bankLabel": "..." | null, "bankType": "BANK_ACCOUNT" | "POS" | null, "bankIsTest": false,
+  "method": "BANK_TRANSFER", "methodLabel": "Дансаар", "bankId": "..." | null, "bank": "KHAN" | null, "bankLabel": "..." | null, "bankHint": "··1234" | "TID …" | null, "bankType": "BANK_ACCOUNT" | "POS" | null, "bankIsTest": false,
   "occurredAt": "ISO", "note": "..." | null, "orderCount": 2, "entryId": "...",
   "locked": false,   // true = нэгдсэн бичлэг хаагдсан ээлжид: цуцлах боломжгүй (409 CASH_SESSION_ENTRY_LOCKED)
   "createdAt": "ISO", "createdBy": { "id", "name" }, "voidedAt": "ISO" | null, "voidedBy": {...} | null, "voidReason": "..." | null,

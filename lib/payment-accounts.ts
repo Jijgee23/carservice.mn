@@ -123,7 +123,7 @@ export async function resolvePaymentAccount(
   return { id: row.id, type: row.type as PaymentAccountTypeValue, name: row.name, isTest: row.isTest, legacyCode: row.legacyCode };
 }
 
-export const BANK_REF_SELECT = { id: true, name: true, type: true, isTest: true, isActive: true, legacyCode: true } as const;
+export const BANK_REF_SELECT = { id: true, name: true, type: true, isTest: true, isActive: true, legacyCode: true, accountNumber: true, terminalId: true } as const;
 
 export type BankRefSource = {
   id: string;
@@ -132,17 +132,39 @@ export type BankRefSource = {
   isTest: boolean;
   isActive: boolean;
   legacyCode: string | null;
+  accountNumber?: string | null;
+  terminalId?: string | null;
 } | null | undefined;
+
+type AccountHintSource = { type: string; accountNumber?: string | null; terminalId?: string | null };
+
+/**
+ * Short identifier that tells same-named accounts apart: POS -> «TID …» (falls back to the account number),
+ * account -> last 4 characters of the number only («··1234») — the full number is never shown here.
+ */
+export function paymentAccountHint(account: AccountHintSource): string | null {
+  const tid = account.terminalId?.trim();
+  if (account.type === "POS" && tid) return `TID ${tid}`;
+  const number = account.accountNumber?.replace(/\s+/g, "") ?? "";
+  return number ? `··${number.slice(-4)}` : null;
+}
+
+/** Full display label: «Нэр ··1234 · Туршилт (идэвхгүй)». Used where accounts are listed side by side (shift, report). */
+export function paymentAccountLabel(account: AccountHintSource & { name: string; isTest: boolean; isActive: boolean }): string {
+  const hint = paymentAccountHint(account);
+  return `${account.name}${hint ? ` ${hint}` : ""}${account.isTest ? ` · ${TEST_BADGE}` : ""}${account.isActive ? "" : INACTIVE_SUFFIX}`;
+}
 
 /** The bank fields every payment / ledger / settlement payload carries. `bank` is the legacy code (or null). */
 export function bankRef(account: BankRefSource) {
   if (!account) {
-    return { bankId: null as string | null, bank: null as string | null, bankLabel: null as string | null, bankType: null as PaymentAccountTypeValue | null, bankIsTest: false };
+    return { bankId: null as string | null, bank: null as string | null, bankLabel: null as string | null, bankHint: null as string | null, bankType: null as PaymentAccountTypeValue | null, bankIsTest: false };
   }
   return {
     bankId: account.id as string | null,
     bank: account.legacyCode as string | null,
     bankLabel: (account.isActive ? account.name : `${account.name}${INACTIVE_SUFFIX}`) as string | null,
+    bankHint: paymentAccountHint(account),
     bankType: account.type as PaymentAccountTypeValue | null,
     bankIsTest: account.isTest,
   };
@@ -152,15 +174,18 @@ export type LabelReader = {
   paymentAccount: { findMany(args: never): Promise<unknown> };
 };
 
-/** id -> display name (inactive accounts get the suffix). One tenant-scoped query; none for an empty list. */
+/** id -> display label (see paymentAccountLabel). One tenant-scoped query; none for an empty list. */
 export async function loadPaymentAccountLabels(client: LabelReader, tenantId: string, ids: readonly string[]): Promise<Map<string, string>> {
   const unique = [...new Set(ids.filter((id) => id))];
   const out = new Map<string, string>();
   if (unique.length === 0) return out;
   const reader = client.paymentAccount as unknown as {
-    findMany(args: unknown): Promise<Array<{ id: string; name: string; isTest: boolean; isActive: boolean }>>;
+    findMany(args: unknown): Promise<Array<{ id: string; name: string; type: string; accountNumber: string | null; terminalId: string | null; isTest: boolean; isActive: boolean }>>;
   };
-  const rows = await reader.findMany({ where: { tenantId, id: { in: unique } }, select: { id: true, name: true, isTest: true, isActive: true } });
-  for (const r of rows) out.set(r.id, r.isActive ? r.name : `${r.name}${INACTIVE_SUFFIX}`);
+  const rows = await reader.findMany({
+    where: { tenantId, id: { in: unique } },
+    select: { id: true, name: true, type: true, accountNumber: true, terminalId: true, isTest: true, isActive: true },
+  });
+  for (const r of rows) out.set(r.id, paymentAccountLabel(r));
   return out;
 }
