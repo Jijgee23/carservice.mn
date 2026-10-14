@@ -104,7 +104,7 @@ export async function saveTenantQPayAction(
     after: { username, invoiceCode, enabled },
   });
 
-  revalidatePath("/dashboard/settings/qpay");
+  revalidatePath("/dashboard/payment_methods");
   return { ok: true, message: "Хадгалагдлаа." };
 }
 
@@ -121,5 +121,35 @@ export async function deleteTenantQPayAction(): Promise<void> {
     action: "DELETE",
     summary: "QPay тохиргоо устгав",
   });
-  revalidatePath("/dashboard/settings/qpay");
+  revalidatePath("/dashboard/payment_methods");
+}
+
+/** «Төлбөрийн аргууд» хүснэгтийн QPay мөрийн идэвхтэй/идэвхгүй switch. Тохиргоо байхгүй бол өөрчлөхгүй. */
+export async function setTenantQPayEnabledAction(enabled: boolean): Promise<TenantQPayActionState> {
+  let user;
+  try {
+    user = await authorizeOwner();
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
+  }
+  const existing = await prisma.tenantQPaySettings.findUnique({
+    where: { tenantId: user.tenantId },
+    select: { enabled: true },
+  });
+  if (!existing) return { ok: false, message: "QPay тохиргоо хийгдээгүй байна." };
+  if (existing.enabled !== enabled) {
+    await prisma.tenantQPaySettings.update({ where: { tenantId: user.tenantId }, data: { enabled } });
+    await logAudit({
+      tenantId: user.tenantId,
+      userId: user.id,
+      entity: "Tenant",
+      entityId: user.tenantId,
+      action: "UPDATE",
+      summary: enabled ? "QPay идэвхжүүлэв" : "QPay идэвхгүй болгов",
+      before: { enabled: existing.enabled },
+      after: { enabled },
+    });
+  }
+  revalidatePath("/dashboard/payment_methods");
+  return { ok: true };
 }

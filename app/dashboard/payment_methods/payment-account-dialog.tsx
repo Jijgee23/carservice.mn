@@ -9,16 +9,19 @@ import {
 import { Btn, FormError } from "@/app/_components/landing-ops-ui";
 import { useRetainedFormAction } from "@/app/dashboard/cash/use-retained-form-action";
 import { DialogShell } from "@/app/dashboard/_components/pos-simulator";
-import { BANK_NAME_SUGGESTIONS, TEST_BADGE, type PaymentAccountTypeValue } from "@/lib/payment-accounts";
+import {
+  BANK_NAME_SUGGESTIONS,
+  PAYMENT_ACCOUNT_TYPE_LABEL,
+  PAYMENT_ACCOUNT_TYPES,
+  TEST_BADGE,
+  type PaymentAccountTypeValue,
+} from "@/lib/payment-accounts";
 import type { PaymentAccountDto } from "@/lib/payment-account-service";
 
 const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oc-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-transparent";
 
-const TYPE_OPTIONS: { value: PaymentAccountTypeValue; label: string }[] = [
-  { value: "BANK_ACCOUNT", label: "Данс" },
-  { value: "POS", label: "POS" },
-];
+const ALL_TYPE_OPTIONS = PAYMENT_ACCOUNT_TYPES.map((value) => ({ value, label: PAYMENT_ACCOUNT_TYPE_LABEL[value] }));
 
 /**
  * `account` = edit mode; null = create mode, starting on `defaultType`. The body mounts only while open, so form
@@ -37,13 +40,13 @@ export function PaymentAccountDialog({
   onClose: () => void;
   onSaved?: (type: PaymentAccountTypeValue) => void;
 }) {
-  const title = account ? "Төлбөрийн сонголт засах" : "Төлбөрийн сонголт нэмэх";
+  const title = account ? "Төлбөрийн арга засах" : "Төлбөрийн арга нэмэх";
   return (
     <DialogShell open={open} onClose={onClose} label={title} className="w-[min(94vw,26rem)] max-h-[90vh]">
       <DialogBody
         key={account?.id ?? `new-${defaultType}`}
         account={account}
-        defaultType={defaultType}
+        defaultType={defaultType === "CASH" ? "BANK_ACCOUNT" : defaultType}
         title={title}
         onClose={onClose}
         onSaved={onSaved}
@@ -66,6 +69,8 @@ function DialogBody({
   onSaved?: (type: PaymentAccountTypeValue) => void;
 }) {
   const editing = account !== null;
+  // «Бэлэн» is automatic: never offered when adding; editing it (name only) shows just its own type.
+  const typeOptions = ALL_TYPE_OPTIONS.filter((o) => (account?.type === "CASH" ? o.value === "CASH" : o.value !== "CASH"));
   const [type, setType] = useState<PaymentAccountTypeValue>(account?.type ?? defaultType);
   // onSubmit + transition (not <form action>) so React 19 does not reset typed values on a failed result.
   const { state, pending, onSubmit } = useRetainedFormAction<PaymentAccountActionState>(
@@ -96,11 +101,14 @@ function DialogBody({
         {account ? <input type="hidden" name="id" value={account.id} /> : null}
         {account && type === "POS" ? <input type="hidden" name="isTestPresent" value="1" /> : null}
         <FormError message={state && !state.ok ? state.message : undefined} />
+        {fieldErrors?.type ? <p className="text-xs text-red-400 light:text-red-600">{fieldErrors.type}</p> : null}
 
         <fieldset className="flex flex-col gap-1.5" disabled={editing}>
           <legend className="text-sm font-medium text-[var(--oc-ink2)] mb-1.5">Төрөл</legend>
-          <div className="grid grid-cols-2 gap-1 rounded-lg border border-[var(--oc-line)] p-1">
-            {TYPE_OPTIONS.map((o) => (
+          <div
+            className={`grid ${typeOptions.length === 1 ? "grid-cols-1" : "grid-cols-2"} gap-1 rounded-lg border border-[var(--oc-line)] p-1`}
+          >
+            {typeOptions.map((o) => (
               <label
                 key={o.value}
                 className={`text-center text-sm rounded-md py-1.5 transition-colors ${type === o.value
@@ -128,7 +136,8 @@ function DialogBody({
             {...errorProps("pa-name", fieldErrors?.name)}
             name="name"
             type="text"
-            list="bank-names"
+            list={type === "CASH" ? undefined : "bank-names"}
+            placeholder={type === "CASH" ? "Жишээ: Бэлэн, Касс 1" : undefined}
             required
             maxLength={80}
             defaultValue={account?.name ?? ""}
@@ -142,19 +151,21 @@ function DialogBody({
           </datalist>
         </Field>
 
-        <Field id="pa-number" label="Дансны дугаар" error={fieldErrors?.accountNumber}>
-          <input
-            id="pa-number"
-            {...errorProps("pa-number", fieldErrors?.accountNumber)}
-            name="accountNumber"
-            type="text"
-            inputMode="numeric"
-            required
-            defaultValue={account?.accountNumber ?? ""}
-            autoComplete="off"
-            className="compact-input w-full tabular-nums"
-          />
-        </Field>
+        {type === "CASH" ? null : (
+          <Field id="pa-number" label="Дансны дугаар" error={fieldErrors?.accountNumber}>
+            <input
+              id="pa-number"
+              {...errorProps("pa-number", fieldErrors?.accountNumber)}
+              name="accountNumber"
+              type="text"
+              inputMode="numeric"
+              required
+              defaultValue={account?.accountNumber ?? ""}
+              autoComplete="off"
+              className="compact-input w-full tabular-nums"
+            />
+          </Field>
+        )}
 
         {type === "POS" ? (
           <>

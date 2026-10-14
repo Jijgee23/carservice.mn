@@ -1,9 +1,10 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DateRangeFilter, FilterSelect } from "@/app/_components/list-filters";
 import { btnClass } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
 import { hasPermission } from "@/lib/auth/roles";
-import { buildCashSummary, type CashReportTypeRow } from "@/lib/cash/report";
+import { buildCashSummary, type CashReportFlowFigures, type CashReportMethodDetailRow, type CashReportTypeRow } from "@/lib/cash/report";
 import { effectiveBranchScope } from "@/lib/cash/scope";
 import { formatTugrik } from "@/lib/orders";
 import { prisma } from "@/lib/prisma";
@@ -90,6 +91,102 @@ function TypeTable({ rows, total }: { rows: CashReportTypeRow[]; total: string }
   );
 }
 
+/** Income / expense / net cells shared by a method row and its account rows. */
+function FlowCells({ f, strong = false }: { f: CashReportFlowFigures; strong?: boolean }) {
+  const w = strong ? "font-medium" : "";
+  return (
+    <>
+      <td className={tdR}>{f.incomeCount || "—"}</td>
+      <td className={`${tdR} ${w}`}>{f.incomeCount ? formatTugrik(f.income) : "—"}</td>
+      <td className={tdR}>{f.expenseCount || "—"}</td>
+      <td className={`${tdR} ${w}`}>{f.expenseCount ? formatTugrik(f.expense) : "—"}</td>
+      <td className={`${tdR} ${w} ${signedClass(f.net)}`}>{f.incomeCount || f.expenseCount ? fmtSigned(f.net) : "—"}</td>
+    </>
+  );
+}
+
+/**
+ * «Төлбөрийн аргаар — дэлгэрэнгүй»: per method income + expense + net and income share; transfer / card split per
+ * payment account. Every line opens «Орлого, зарлага» filtered to that method (and account) for the same period.
+ */
+function MethodDetailTable({
+  rows,
+  totals,
+  listHref,
+}: {
+  rows: CashReportMethodDetailRow[];
+  totals: { income: string; expense: string; net: string };
+  listHref: (method: string, bank?: string | null) => string;
+}) {
+  const linkCls = "hover:text-[var(--oc-accent)] hover:underline underline-offset-2";
+  const incomeCount = rows.reduce((n, r) => n + r.incomeCount, 0);
+  const expenseCount = rows.reduce((n, r) => n + r.expenseCount, 0);
+  return (
+    <table className="w-full min-w-[760px]">
+      <thead>
+        <tr className="border-b border-[var(--oc-line)]">
+          <th className={th}>Арга / данс</th>
+          <th className={thR}>Орлого (тоо)</th>
+          <th className={thR}>Орлого</th>
+          <th className={thR}>Зарлага (тоо)</th>
+          <th className={thR}>Зарлага</th>
+          <th className={thR}>Цэвэр</th>
+          <th className={`${th} w-40`}>Орлогын хувь</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.flatMap((m) => {
+          const idle = m.incomeCount === 0 && m.expenseCount === 0;
+          return [
+            <tr key={m.method} className={`border-b border-[var(--oc-line)] ${idle ? "opacity-50" : ""}`}>
+              <td className={`${td} font-medium text-[var(--oc-ink)]`}>
+                {idle ? m.methodLabel : (
+                  <Link href={listHref(m.method)} className={linkCls}>
+                    {m.methodLabel}
+                  </Link>
+                )}
+              </td>
+              <FlowCells f={m} strong />
+              <td className={td}>
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 flex-1 rounded-full bg-[var(--oc-line)] overflow-hidden" aria-hidden>
+                    <div className="h-full rounded-full bg-[var(--oc-accent)]" style={{ width: `${Math.min(100, Number(m.incomeShare))}%` }} />
+                  </div>
+                  <span className="w-12 text-right text-xs tabular-nums text-[var(--oc-muted3)]">{m.incomeShare}%</span>
+                </div>
+              </td>
+            </tr>,
+            ...m.accounts.map((a) => (
+              <tr key={`${m.method}:${a.bank ?? "none"}`} className="border-b border-[var(--oc-line)]">
+                <td className={`${td} pl-8`}>
+                  {a.bank ? (
+                    <Link href={listHref(m.method, a.bank)} className={linkCls}>
+                      {a.bankLabel}
+                    </Link>
+                  ) : (
+                    <span className="text-[var(--oc-muted3)]">{a.bankLabel}</span>
+                  )}
+                </td>
+                <FlowCells f={a} />
+                <td className={td} />
+              </tr>
+            )),
+          ];
+        })}
+        <tr>
+          <td className={`${td} font-semibold`}>Нийт</td>
+          <td className={tdR}>{incomeCount}</td>
+          <td className={`${tdR} font-semibold`}>{formatTugrik(totals.income)}</td>
+          <td className={tdR}>{expenseCount}</td>
+          <td className={`${tdR} font-semibold`}>{formatTugrik(totals.expense)}</td>
+          <td className={`${tdR} font-semibold ${signedClass(totals.net)}`}>{fmtSigned(totals.net)}</td>
+          <td className={td} />
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
 export default async function CashReportPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const user = await requireUser();
   if (!hasPermission(user, "cash.manage")) redirect("/dashboard");
@@ -116,6 +213,13 @@ export default async function CashReportPage({ searchParams }: { searchParams: P
   const exportQs = new URLSearchParams({ from: fmt(range.from), to: fmt(range.to) });
   if (branchId) exportQs.set("branchId", branchId);
   const exportHref = `/dashboard/cash/report/export?${exportQs.toString()}`;
+  // Drill-down into «Орлого, зарлага» for the same period / branch (voided entries stay hidden there too).
+  const listHref = (method: string, bank?: string | null) => {
+    const qs = new URLSearchParams({ dateFrom: fmt(range.from), dateTo: fmt(range.to), method });
+    if (bank) qs.set("bank", bank);
+    if (branchId) qs.set("branchId", branchId);
+    return `/dashboard/cash/transactions?${qs.toString()}`;
+  };
 
   const header = (
     <>
@@ -191,34 +295,11 @@ export default async function CashReportPage({ searchParams }: { searchParams: P
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="lg:col-span-2">
-          <Section title="Орлого — төлбөрийн аргаар">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-[var(--oc-line)]">
-                  <th className={th}>Арга / банк</th>
-                  <th className={thR}>Тоо</th>
-                  <th className={thR}>Нийт</th>
-                </tr>
-              </thead>
-              <tbody>
-                {s.incomeByMethod.flatMap((m) => [
-                  <tr key={m.method} className="border-b border-[var(--oc-line)]">
-                    <td className={`${td} font-medium`}>{m.methodLabel}</td>
-                    <td className={tdR}>{m.count}</td>
-                    <td className={`${tdR} font-medium`}>{formatTugrik(m.total)}</td>
-                  </tr>,
-                  ...m.banks.map((b) => (
-                    <tr key={`${m.method}:${b.bank ?? "none"}`} className="border-b border-[var(--oc-line)]">
-                      <td className={`${td} pl-8`}>
-                        {b.bankLabel}
-                      </td>
-                      <td className={tdR}>{b.count}</td>
-                      <td className={tdR}>{formatTugrik(b.total)}</td>
-                    </tr>
-                  )),
-                ])}
-              </tbody>
-            </table>
+          <Section
+            title="Төлбөрийн аргаар — дэлгэрэнгүй"
+            hint="Арга бүрийн орлого, зарлага, цэвэр дүн; дансаар болон картаар — төлбөрийн арга (данс, POS) тус бүрээр. Мөр дээр дарж гүйлгээг харна."
+          >
+            <MethodDetailTable rows={s.byMethodDetail} totals={s.totals} listHref={listHref} />
           </Section>
         </div>
 
@@ -228,50 +309,6 @@ export default async function CashReportPage({ searchParams }: { searchParams: P
 
         <Section title="Зарлага — ангиллаар" hint="Дотоод засварын зардал тусдаа мөр.">
           <TypeTable rows={s.expenseByType} total={s.totals.expense} />
-        </Section>
-
-        <Section title="Зарлага — төлбөрийн аргаар">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-[var(--oc-line)]">
-                <th className={th}>Арга</th>
-                <th className={thR}>Тоо</th>
-                <th className={thR}>Дүн</th>
-              </tr>
-            </thead>
-            <tbody>
-              {s.expenseByMethod.map((r) => (
-                <tr key={r.method} className="border-b border-[var(--oc-line)] last:border-0">
-                  <td className={td}>{r.methodLabel}</td>
-                  <td className={tdR}>{r.count}</td>
-                  <td className={tdR}>{formatTugrik(r.total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Section>
-
-        <Section title="Цэвэр дүн — төлбөрийн аргаар" hint="Орлого − зарлага. Бэлэн мөнгөний цэвэр гүйлгээ нь кассын хүлээгдэж буй хөдөлгөөн.">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-[var(--oc-line)]">
-                <th className={th}>Арга</th>
-                <th className={thR}>Орлого</th>
-                <th className={thR}>Зарлага</th>
-                <th className={thR}>Цэвэр</th>
-              </tr>
-            </thead>
-            <tbody>
-              {s.netByMethod.map((r) => (
-                <tr key={r.method} className="border-b border-[var(--oc-line)] last:border-0">
-                  <td className={td}>{r.methodLabel}</td>
-                  <td className={tdR}>{formatTugrik(r.income)}</td>
-                  <td className={tdR}>{formatTugrik(r.expense)}</td>
-                  <td className={`${tdR} ${signedClass(r.net)}`}>{fmtSigned(r.net)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </Section>
 
         <Section title="Дараа тооцоо" hint={`Үлдэгдэл нь ${fmtDateTime(s.postpaid.outstanding.asOf)} байдлаарх.`}>

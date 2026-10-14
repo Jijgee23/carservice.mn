@@ -41,7 +41,8 @@ export const settings: ManualSection = {
       whenToUse: "Засварын хуудасны төлбөрийг QR-аар (QPay-ээр) авахыг хүсвэл байгууллагынхаа өөрийн QPay мерчант эрхийг холбоход.",
       prerequisites: ["QPay-аас олгосон хэрэглэгчийн нэр, нууц үг, invoice код байх"],
       steps: [
-        { title: "/dashboard/settings/qpay хуудсанд орно" },
+        { title: "Касс ба Санхүү → «Төлбөрийн аргууд» (/dashboard/payment_methods) хуудсанд орно" },
+        { title: "Хүснэгтийн QPay мөрийн «Тохируулах» (эсвэл «Засах») товчийг дарна" },
         { title: "QPay-ийн хэрэглэгчийн нэр, нууц үг, invoice код, callback URL-ээ оруулна" },
         { title: "\"Идэвхтэй\" болгож хадгална" },
       ],

@@ -350,7 +350,7 @@ Res:  200 { "order": {...} }
           <Code>{`Res: 200 { "payments": [{ "id": "...", "amount": "50000", "method": "CASH|CARD|BANK_TRANSFER|QPAY|OTHER", "status": "PAID|PENDING|CANCELLED|FAILED",
                          "paidAt": "ISO" | null, "createdAt": "ISO",
                          "bankId": "..." | null, "bank": "KHAN" | null, "bankLabel": "Хаан банк" | null,   // bankId = төлбөрийн сонголтын id; bank = хуучин код (хуучин бус данс → null)
-                         "bankHint": "··1234" | "TID …" | null, "bankType": "BANK_ACCOUNT" | "POS" | null, "bankIsTest": false,
+                         "bankHint": "5012341234" | "TID …" | null, "bankType": "CASH" | "BANK_ACCOUNT" | "POS" | null, "bankIsTest": false,
                          "locked": false,                                  // true = төлбөрийн кассын бичлэг ХААГДСАН ээлжид: буцаах боломжгүй (409 CASH_SESSION_ENTRY_LOCKED); UI товчийг идэвхгүй болгоно
                          "settlementId": "..." | null }] }   // settlementId != null = «Нэгдсэн тооцоо»-ны төлбөр: тусад нь буцаах боломжгүй (422 SETTLEMENT_PAYMENT_LOCKED)
 403 { "error": "Танд энэ төлбөрийг харах эрх байхгүй.", "code": "ORDER_VIEW_FORBIDDEN" }
@@ -372,38 +372,41 @@ Res:  201 { "payment": { ...дээрх payment бүтэц }, "order": { "paidAmo
       // CASH_SESSION_ENTRY_LOCKED: хаагдсан кассын ээлжид хамаарах төлбөрийг (аль ч арга) буцаах боломжгүй — 409 { "code": "CASH_SESSION_ENTRY_LOCKED", "error": "Хаагдсан ээлжийн гүйлгээг буцаах боломжгүй." } (POST /payments/[paymentId]/reverse, PATCH /payment {paymentStatus:"UNPAID"} бүгдийг буцаах). Бүгдийг буцаахад нэг ч түгжигдсэн төлбөр байвал бүхэлд нь татгалзана. Ээлжгүй (хуучин) бичлэг нээлттэй ээлжид буцаагдсаар байна. Иймээс хаагдсан ээлжид төлөгдсөн захиалгыг цуцлах, мөрийг засах/цуцлахад 422 { "code": "PAID_PAYMENT_LOCKED" } буцна («Төлбөр нь хаагдсан ээлжид бүртгэгдсэн тул захиалгыг цуцлах боломжгүй.» / «...мөрийг засах, цуцлах боломжгүй.») — энэ үед PAID_PAYMENT_EXISTS («эхлээд төлбөрийг буцаа») биш; payment.locked = true байгааг UI-д ашиглана.`}</Code>
         </Endpoint>
 
-        <Endpoint method="GET" path="/api/v1/banks" auth="bearer" bearerLabel={BEARER} title="Тенантын идэвхтэй төлбөрийн сонголтууд (данс, POS) — төлбөрийн сонгогчид. Дугаар далдлагдсан.">
-          <Code>{`Res: 200 { "accounts": [{ "id": "...", "type": "BANK_ACCOUNT" | "POS", "method": "BANK_TRANSFER" | "CARD", "name": "Хаан банк",
-                          "accountNumberMasked": "••••1234", "terminalId": "..." | null, "merchantId": "..." | null, "isTest": false }],
+        <Endpoint method="GET" path="/api/v1/banks" auth="bearer" bearerLabel={BEARER} title="Тенантын идэвхтэй төлбөрийн аргууд (бэлэн, данс, POS) — төлбөрийн сонгогчид. Дансны дугаар бүтнээрээ.">
+          <Code>{`Res: 200 { "accounts": [{ "id": "...", "type": "CASH" | "BANK_ACCOUNT" | "POS", "method": "CASH" | "BANK_TRANSFER" | "CARD", "name": "Хаан банк",
+                          "accountNumber": "5012341234" | null, "accountNumberMasked": "••••1234", "terminalId": "..." | null, "merchantId": "..." | null, "isTest": false }],
            // Хуучин аппуудад зориулсан нийцтэй талбарууд:
            "banks": [{ "code": "KHAN", "label": "Хаан банк" }, ...11 банк],
            "enabledBanks": ["KHAN", "GOLOMT"],   // тенантын идэвхтэй ХУУЧИН дансны (BANK_ACCOUNT) кодууд
            "configured": true }                    // enabledBanks.length > 0
-      // Шинэ апп зөвхөн accounts-ийг ашиглана: method=BANK_TRANSFER → type=BANK_ACCOUNT, method=CARD → type=POS. isTest=true → «Туршилт» тэмдэг.
+      // Шинэ апп зөвхөн accounts-ийг ашиглана: method=CASH → type=CASH, method=BANK_TRANSFER → type=BANK_ACCOUNT, method=CARD → type=POS. isTest=true → «Туршилт» тэмдэг.
+      // CASH (Бэлэн) мөр тенант бүрт автоматаар нэг (дансны дугааргүй, үргэлж идэвхтэй). Төлбөрт bank заавал биш: түүний id-г эсвэл bank-гүй илгээнэ.
+      // accountNumberMasked нь хуучин аппуудад зориулж үлдсэн; дугаарыг бүтнээр харуулна.
       // Шинэ тенант өгөгдмөлөөр данс/POS-гүй (хоосон accounts) — Банк хуудаснаас бүртгэнэ. Идэвхгүй болсон данс түүхэн бичлэгт label-ээ хадгална.`}</Code>
         </Endpoint>
 
-        <Endpoint method="GET" path="/api/v1/payment-accounts" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage"]} title="Төлбөрийн сонголтуудын удирдлагын жагсаалт (бүтэн дансны дугаартай). includeInactive=1 → идэвхгүйг оролцуулна.">
+        <Endpoint method="GET" path="/api/v1/payment-accounts" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage"]} title="Төлбөрийн аргуудын удирдлагын жагсаалт. includeInactive=1 → идэвхгүйг оролцуулна.">
           <Code>{`Query: includeInactive=1   // заавал биш
-Res: 200 { "accounts": [{ "id": "...", "type": "BANK_ACCOUNT" | "POS", "method": "BANK_TRANSFER" | "CARD", "name": "Хаан банк",
+Res: 200 { "accounts": [{ "id": "...", "type": "CASH" | "BANK_ACCOUNT" | "POS", "method": "CASH" | "BANK_TRANSFER" | "CARD", "name": "Хаан банк",
                           "accountNumber": "5012345678" | null, "accountNumberMasked": "••••5678",
                           "terminalId": "..." | null, "merchantId": "..." | null, "isTest": false, "isActive": true }] }
 403 { "error": "Танд кассыг удирдах эрх байхгүй.", "code": "CASH_MANAGE_FORBIDDEN" }`}</Code>
         </Endpoint>
 
-        <Endpoint method="POST" path="/api/v1/payment-accounts" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage", "Багц идэвхтэй байх шаардлагатай"]} title="Төлбөрийн сонголт (данс эсвэл POS) нэмэх.">
-          <Code>{`Req:  { "type": "BANK_ACCOUNT" | "POS", "name": "Хаан банк", "accountNumber": "5012 3456-78",   // тоо болгон цэвэрлэгдэнэ, 6–20 орон, (тенант, төрөл)-д давтагдахгүй
+        <Endpoint method="POST" path="/api/v1/payment-accounts" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage", "Багц идэвхтэй байх шаардлагатай"]} title="Төлбөрийн арга (бэлэн, данс эсвэл POS) нэмэх.">
+          <Code>{`Req:  { "type": "CASH" | "BANK_ACCOUNT" | "POS", "name": "Хаан банк", "accountNumber": "5012 3456-78",   // тоо болгон цэвэрлэгдэнэ, 6–20 орон, (тенант, төрөл)-д давтагдахгүй; CASH-д илгээхгүй (422)
         "terminalId": "T0001", "merchantId": "M0001", "isTest": true }                // terminalId/merchantId ≤32 үсэг/тоо, isTest — зөвхөн POS
 Res:  201 { "account": { ...дээрх бүтэц } }
 403 CASH_MANAGE_FORBIDDEN
 409 { "error": "Энэ дансны дугаар аль хэдийн бүртгэгдсэн байна.", "code": "PAYMENT_ACCOUNT_DUPLICATE", "fieldErrors": { "accountNumber": "..." } }
+422 PAYMENT_ACCOUNT_INVALID { "fieldErrors": { "type": "..." } }   // type=CASH: «Бэлэн» тенант бүрт автоматаар нэг л байдаг — нэмэхгүй
 422 { "error": "...", "code": "PAYMENT_ACCOUNT_INVALID", "fieldErrors": { "<талбар>": "..." } }`}</Code>
         </Endpoint>
 
-        <Endpoint method="PATCH" path="/api/v1/payment-accounts/[id]" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage", "Багц идэвхтэй байх шаардлагатай"]} title="Төлбөрийн сонголт засах / идэвхгүй болгох. Устгахгүй; type өөрчлөгдөхгүй.">
+        <Endpoint method="PATCH" path="/api/v1/payment-accounts/[id]" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage", "Багц идэвхтэй байх шаардлагатай"]} title="Төлбөрийн арга засах / идэвхгүй болгох. Устгахгүй; type өөрчлөгдөхгүй.">
           <Code>{`Req:  { "name"?, "accountNumber"?, "terminalId"?, "merchantId"?, "isTest"?, "isActive"? }   // type илгээвэл 422
 Res:  200 { "account": { ...дээрх бүтэц } }
-      // Нэр өөрчилбөл түүхэн төлбөр, тайланд шинэ нэр харагдана. isActive=false → сонгогчоос алга болно, хуучин бичлэг « (идэвхгүй)» гэж харагдана.
+      // Нэр өөрчилбөл түүхэн төлбөр, тайланд шинэ нэр харагдана. isActive=false → сонгогчоос алга болно, хуучин бичлэг « (идэвхгүй)» гэж харагдана. CASH (Бэлэн): isActive=false, accountNumber илгээвэл 422 — зөвхөн нэр засна.
 403 CASH_MANAGE_FORBIDDEN
 404 { "code": "PAYMENT_ACCOUNT_NOT_FOUND" }
 409 { "code": "PAYMENT_ACCOUNT_DUPLICATE" }  422 { "code": "PAYMENT_ACCOUNT_INVALID", "fieldErrors": {...} }`}</Code>
@@ -419,7 +422,7 @@ Res: 200 {
     "type": { "id", "name": "Засварын орлого", "systemKey": "ORDER_PAYMENT" | "POSTPAID_SETTLEMENT" | "INTERNAL_REPAIR" | null, "isSystem": true },
     "branch": { "id", "name" },
     "amount": "50000", "method": "CASH", "methodLabel": "Бэлэн",
-    "bankId": "..." | null, "bank": "KHAN" | null, "bankLabel": "Хаан банк" | null, "bankHint": "··1234" | "TID …" | null, "bankType": "BANK_ACCOUNT" | "POS" | null, "bankIsTest": false,   // bank = хуучин код (эсвэл null)
+    "bankId": "..." | null, "bank": "KHAN" | null, "bankLabel": "Хаан банк" | null, "bankHint": "5012341234" | "TID …" | null, "bankType": "CASH" | "BANK_ACCOUNT" | "POS" | null, "bankIsTest": false,   // bank = хуучин код (эсвэл null)
     "occurredAt": "ISO", "note": "..." | null, "attachmentPath": "/uploads/cash/{tenantId}/..." | null,
     "taxIncluded": "5000" | null,            // «Татвар (туршилт)» — зөвхөн зарлага, ямар ч нийлбэрт орохгүй
     "customer": { "id", "name" } | null, "counterparty": "..." | null,
@@ -481,7 +484,7 @@ Res: 200 { "orders": [{ "id", "number", "plate": "..." | null, "completedAt": "I
       // Дүн = сонгосон захиалга бүрийн үлдэгдлийн нийлбэр (хэсэгчилсэн тооцоо байхгүй). Захиалга бүрт нэг PAID төлбөр (settlementId-тай) үүснэ.
 Res:  201 { "settlement": {
   "id", "branch": { "id", "name" }, "customer": { "id", "name" }, "amount": "250000",
-  "method": "BANK_TRANSFER", "methodLabel": "Дансаар", "bankId": "..." | null, "bank": "KHAN" | null, "bankLabel": "..." | null, "bankHint": "··1234" | "TID …" | null, "bankType": "BANK_ACCOUNT" | "POS" | null, "bankIsTest": false,
+  "method": "BANK_TRANSFER", "methodLabel": "Дансаар", "bankId": "..." | null, "bank": "KHAN" | null, "bankLabel": "..." | null, "bankHint": "5012341234" | "TID …" | null, "bankType": "CASH" | "BANK_ACCOUNT" | "POS" | null, "bankIsTest": false,
   "occurredAt": "ISO", "note": "..." | null, "orderCount": 2, "entryId": "...",
   "locked": false,   // true = нэгдсэн бичлэг хаагдсан ээлжид: цуцлах боломжгүй (409 CASH_SESSION_ENTRY_LOCKED)
   "createdAt": "ISO", "createdBy": { "id", "name" }, "voidedAt": "ISO" | null, "voidedBy": {...} | null, "voidReason": "..." | null,

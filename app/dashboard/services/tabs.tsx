@@ -7,6 +7,7 @@ const tabs = [
   { href: "/dashboard/services/labor", label: "Ажил" },
   { href: "/dashboard/services/diagnostics", label: "Оношилгоо" },
   { href: "/dashboard/services/goods", label: "Сэлбэг / Бараа" },
+  { href: "/dashboard/services/stock-counts", label: "Тооллого" },
 ];
 
 export function ServicesTabs() {

@@ -6,7 +6,7 @@ import { Btn, Field } from "@/app/_components/landing-ops-ui";
 import { bookingDateKey } from "@/lib/booking-time";
 import { formatTugrik } from "@/lib/orders";
 import type { PayableOrderRow } from "@/lib/orders/order-payment-search";
-import { PaymentMethodPanel, type PaymentAccountOption, type PaymentChoice } from "../_components/payment-method-modal";
+import { PaymentMethodPanel, choiceBankValue, type PaymentAccountOption, type PaymentChoice } from "../_components/payment-method-modal";
 import { NoOpenSessionNotice } from "./session-warning";
 
 function fmtDate(iso: string): string {
@@ -120,7 +120,7 @@ export function OrderPaymentTab({
     fd.set("orderId", picked.id);
     fd.set("method", choice.method);
     fd.set("amount", amount);
-    if (choice.method === "BANK_TRANSFER" || choice.method === "CARD") fd.set("bank", choice.bank);
+    if (choiceBankValue(choice)) fd.set("bank", choiceBankValue(choice));
     if (note.trim()) fd.set("note", note.trim());
     const res = await recordOrderPaymentAction(null, fd);
     if (res?.ok) {

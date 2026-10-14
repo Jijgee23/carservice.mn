@@ -7,7 +7,7 @@ process.env.SESSION_SECRET ??= "unit-test-placeholder-secret-value-not-real-00";
 
 const code = (c: string) => (e: unknown) => (e as { code?: string }).code === c;
 
-type Row = { id: string; tenantId: string; type: "BANK_ACCOUNT" | "POS"; name: string; isTest: boolean; isActive: boolean; legacyCode: string | null };
+type Row = { id: string; tenantId: string; type: "CASH" | "BANK_ACCOUNT" | "POS"; name: string; isTest: boolean; isActive: boolean; legacyCode: string | null };
 function db(rows: Row[]) {
   return {
     paymentAccount: {
@@ -24,6 +24,8 @@ const rows: Row[] = [
   { id: "a1", tenantId: "t1", type: "BANK_ACCOUNT", name: "Хаан банк", isTest: false, isActive: true, legacyCode: null },
   { id: "p1", tenantId: "t1", type: "POS", name: "Голомт POS", isTest: true, isActive: true, legacyCode: null },
   { id: "a2", tenantId: "t1", type: "BANK_ACCOUNT", name: "Хуучин", isTest: false, isActive: false, legacyCode: null },
+  { id: "c1", tenantId: "t1", type: "CASH", name: "Касс 1", isTest: false, isActive: true, legacyCode: null },
+  { id: "c2", tenantId: "t1", type: "CASH", name: "Касс 2", isTest: false, isActive: false, legacyCode: null },
   { id: "x1", tenantId: "t2", type: "BANK_ACCOUNT", name: "Бусад тенант", isTest: false, isActive: true, legacyCode: null },
   { id: "l1", tenantId: "t1", type: "BANK_ACCOUNT", name: "Хаан банк", isTest: false, isActive: true, legacyCode: "KHAN" },
 ];
@@ -47,15 +49,28 @@ test("type <-> method mapping", async () => {
   const m = await import("../lib/payment-accounts");
   assert.equal(m.typeForMethod("BANK_TRANSFER"), "BANK_ACCOUNT");
   assert.equal(m.typeForMethod("CARD"), "POS");
-  assert.equal(m.typeForMethod("CASH"), null);
+  assert.equal(m.typeForMethod("CASH"), "CASH");
+  assert.equal(m.typeForMethod("QPAY"), null);
   assert.equal(m.methodForType("POS"), "CARD");
+  assert.equal(m.methodForType("CASH"), "CASH");
 });
 
-test("resolvePaymentAccount: non-bank methods ignore input", async () => {
+test("resolvePaymentAccount: QPAY / OTHER ignore input", async () => {
   const { resolvePaymentAccount } = await import("../lib/payment-accounts");
-  for (const method of ["CASH", "QPAY", "OTHER"]) {
+  for (const method of ["QPAY", "OTHER"]) {
     assert.equal(await resolvePaymentAccount(db(rows) as never, "t1", method, "a1"), null);
   }
+});
+
+test("resolvePaymentAccount: CASH account is optional; only this tenant's CASH rows resolve", async () => {
+  const { resolvePaymentAccount } = await import("../lib/payment-accounts");
+  assert.equal(await resolvePaymentAccount(db(rows) as never, "t1", "CASH", ""), null);
+  assert.equal(await resolvePaymentAccount(db(rows) as never, "t1", "CASH", undefined), null);
+  assert.equal((await resolvePaymentAccount(db(rows) as never, "t1", "CASH", "c1"))?.id, "c1");
+  // Stale bank ids / codes from older clients are ignored, as before CASH accounts existed.
+  assert.equal(await resolvePaymentAccount(db(rows) as never, "t1", "CASH", "a1"), null);
+  assert.equal(await resolvePaymentAccount(db(rows) as never, "t1", "CASH", "KHAN"), null);
+  await assert.rejects(resolvePaymentAccount(db(rows) as never, "t1", "CASH", "c2"), code("PAYMENT_BANK_NOT_ENABLED"));
 });
 
 test("resolvePaymentAccount: required, found, type match", async () => {
@@ -112,11 +127,12 @@ test("loadPaymentAccountLabels maps id -> label incl. inactive suffix, one query
   assert.equal(calls, 1, "no query for an empty id list");
 });
 
-test("paymentAccountHint / paymentAccountLabel tell same-named accounts apart, last 4 only", async () => {
+test("paymentAccountHint / paymentAccountLabel tell same-named accounts apart with the full number", async () => {
   const { paymentAccountHint, paymentAccountLabel, bankRef } = await import("../lib/payment-accounts");
-  assert.equal(paymentAccountHint({ type: "BANK_ACCOUNT", accountNumber: "5000 1234 5678" }), "··5678");
+  assert.equal(paymentAccountHint({ type: "BANK_ACCOUNT", accountNumber: "5000 1234 5678" }), "500012345678");
+  assert.equal(paymentAccountHint({ type: "CASH", accountNumber: null }), null);
   assert.equal(paymentAccountHint({ type: "POS", accountNumber: "123456789", terminalId: " 0042 " }), "TID 0042");
-  assert.equal(paymentAccountHint({ type: "POS", accountNumber: "123456789", terminalId: null }), "··6789");
+  assert.equal(paymentAccountHint({ type: "POS", accountNumber: "123456789", terminalId: null }), "123456789");
   assert.equal(paymentAccountHint({ type: "BANK_ACCOUNT", accountNumber: null }), null);
   assert.equal(
     paymentAccountLabel({ name: "Голомт банк", type: "POS", terminalId: "0042", accountNumber: null, isTest: true, isActive: false }),
@@ -124,6 +140,6 @@ test("paymentAccountHint / paymentAccountLabel tell same-named accounts apart, l
   );
   const ref = bankRef({ id: "a1", name: "Хаан", type: "BANK_ACCOUNT", isTest: false, isActive: true, legacyCode: null, accountNumber: "5000123456" });
   assert.equal(ref.bankLabel, "Хаан");
-  assert.equal(ref.bankHint, "··3456");
+  assert.equal(ref.bankHint, "5000123456");
   assert.equal(bankRef(null).bankHint, null);
 });

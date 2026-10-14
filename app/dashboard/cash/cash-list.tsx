@@ -14,6 +14,7 @@ import { listCashTypes, serializeCashType } from "@/lib/cash/types";
 import { ORDER_PAYMENT_METHOD_LABEL, formatTugrik } from "@/lib/orders";
 import { prisma } from "@/lib/prisma";
 import { listPickerAccounts } from "@/lib/payment-account-service";
+import { PAYMENT_ACCOUNT_TYPE_LABEL } from "@/lib/payment-accounts";
 import { CashRangeFilter } from "./cash-range-filter";
 import { CashCreateButton } from "./cash-entry-dialog";
 import { openSessionBranchIds } from "./open-sessions";
@@ -21,6 +22,8 @@ import { CashVoidButton } from "./cash-void-dialog";
 import { NoOpenSessionNotice } from "./session-warning";
 
 export type CashListSearchParams = {
+  /** "INCOME" | "EXPENSE"; absent = both. */
+  direction?: string;
   dateFrom?: string;
   dateTo?: string;
   branchId?: string;
@@ -35,6 +38,14 @@ export type CashListSearchParams = {
 };
 
 const PAGE_SIZE = 50;
+export const CASH_TRANSACTIONS_PATH = "/dashboard/cash/transactions";
+type Direction = "INCOME" | "EXPENSE";
+
+const DIRECTION_TABS: { value: Direction | null; label: string }[] = [
+  { value: null, label: "Бүгд" },
+  { value: "INCOME", label: "Орлого" },
+  { value: "EXPENSE", label: "Зарлага" },
+];
 const FILTER_METHODS = ["CASH", "BANK_TRANSFER", "CARD", "QPAY", "OTHER"];
 
 function fmtDateTime(iso: string): string {
@@ -49,18 +60,12 @@ function fmtDateTime(iso: string): string {
   });
 }
 
-/** Shared income / expense list (server component). */
-export async function CashListPage({
-  direction,
-  searchParams,
-}: {
-  direction: "INCOME" | "EXPENSE";
-  searchParams: Promise<CashListSearchParams>;
-}) {
+/** Combined income + expense list (server component). `?direction=INCOME|EXPENSE` narrows it to one side. */
+export async function CashListPage({ searchParams }: { searchParams: Promise<CashListSearchParams> }) {
   const user = await requireUser();
   if (!hasPermission(user, "cash.manage")) redirect("/dashboard");
-  const isIncome = direction === "INCOME";
   const sp = await searchParams;
+  const direction: Direction | null = sp.direction === "INCOME" || sp.direction === "EXPENSE" ? sp.direction : null;
 
   // The URL always carries an explicit range (dateFrom/dateTo or range=all). With none, redirect to this month
   // (Asia/Ulaanbaatar business days) so the picker shows it; clearing the dates yields range=all (all time).
@@ -71,7 +76,7 @@ export async function CashListPage({
     for (const [k, v] of Object.entries(sp)) if (typeof v === "string" && v) qs.set(k, v);
     qs.set("dateFrom", `${today.slice(0, 8)}01`);
     qs.set("dateTo", today);
-    redirect(`/dashboard/cash/${isIncome ? "income" : "expense"}?${qs.toString()}`);
+    redirect(`${CASH_TRANSACTIONS_PATH}?${qs.toString()}`);
   }
   const dateFrom = sp.dateFrom ?? "";
   const dateTo = sp.dateTo ?? "";
@@ -109,7 +114,7 @@ export async function CashListPage({
       if (error instanceof CashError && error.code === "CASH_DATE_INVALID") return null;
       throw error;
     }),
-    listCashTypes({ actor: user, direction, includeInactive: true }),
+    listCashTypes({ actor: user, direction: direction ?? undefined, includeInactive: true }),
     branchesPromise,
     listPickerAccounts(user.tenantId),
     branchesPromise.then((rows) => openSessionBranchIds(user.tenantId, rows.map((r) => r.id))),
@@ -125,13 +130,13 @@ export async function CashListPage({
   const types = typeRows.map(serializeCashType);
   const entries = result.entries;
   const totalPages = Math.max(1, Math.ceil(result.total / PAGE_SIZE));
-  const totalAmount = isIncome ? result.totals.income : result.totals.expense;
-  const totalCount = isIncome ? result.totals.incomeCount : result.totals.expenseCount;
-  const title = isIncome ? "орлого" : "зарлага";
+  const { totals } = result;
+  const totalCount = totals.incomeCount + totals.expenseCount;
   // The ledger rejects inactive branches: offer only active ones in the create dialogs (the filter keeps all).
   const activeBranches = branches.filter((b) => b.isActive);
   const defaultBranchId = activeBranches.find((b) => b.id === scopeBranchId)?.id ?? activeBranches[0]?.id ?? "";
   const paginationParams = {
+    direction: direction ?? undefined,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
     range: sp.range,
@@ -144,31 +149,73 @@ export async function CashListPage({
   };
   // One notice per page (not per row) when a listed entry's branch has no open register.
   const hasClosedRegisterRow = entries.some((e) => !e.isSystem && e.voidedAt == null && !openBranchIds.includes(e.branch.id));
+  // Direction tabs keep every other filter except the type (types belong to one direction) and the page.
+  const directionHref = (value: Direction | null) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(sp)) {
+      if (typeof v === "string" && v && k !== "direction" && k !== "typeId" && k !== "page") qs.set(k, v);
+    }
+    if (value) qs.set("direction", value);
+    return `${CASH_TRANSACTIONS_PATH}?${qs.toString()}`;
+  };
+  const createProps = {
+    branches: activeBranches.map((b) => ({ id: b.id, name: b.name })),
+    defaultBranchId,
+    banks: pickerAccounts,
+    today,
+    openBranchIds,
+    branchPinned: Boolean(scopeBranchId),
+  };
+  const manualTypes = (d: Direction) =>
+    types.filter((t) => t.direction === d && t.isActive && !t.isSystem).map((t) => ({ id: t.id, name: t.name }));
+  const cards: { label: string; value: string; tone?: string }[] = [
+    ...(direction !== "EXPENSE" ? [{ label: "Нийт орлого", value: formatTugrik(totals.income), tone: "text-[var(--oc-ok)]" }] : []),
+    ...(direction !== "INCOME" ? [{ label: "Нийт зарлага", value: formatTugrik(totals.expense), tone: "text-red-400 light:text-red-600" }] : []),
+    ...(direction === null ? [{ label: "Цэвэр", value: formatTugrik(totals.net) }] : []),
+    { label: "Бичлэгийн тоо", value: totalCount.toLocaleString("mn-MN") },
+  ];
 
   return (
     <div className="p-4 sm:p-6 max-w-full flex-1 flex flex-col min-h-0 w-full">
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">Кассын {title}</h1>
+          <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">Орлого, зарлага</h1>
           <p className="text-sm text-[var(--oc-muted3)] mt-1">
-            {isIncome
-              ? "Төлбөрийн орлого автоматаар бүртгэгдэнэ; бусад орлогыг гараар нэмнэ."
-              : "Дотоод засварын зардал автоматаар бүртгэгдэнэ; бусад зардлыг гараар нэмнэ."}
+            Төлбөрийн орлого, дотоод засварын зардал автоматаар бүртгэгдэнэ; бусад орлого, зарлагыг гараар нэмнэ.
           </p>
         </div>
-        <CashCreateButton
-          direction={direction}
-          types={types.filter((t) => t.isActive && !t.isSystem).map((t) => ({ id: t.id, name: t.name }))}
-          branches={activeBranches.map((b) => ({ id: b.id, name: b.name }))}
-          defaultBranchId={defaultBranchId}
-          banks={pickerAccounts}
-          canManageAccounts={hasPermission(user, "cash.manage")}
-          today={today}
-          openBranchIds={openBranchIds}
-          branchPinned={Boolean(scopeBranchId)}
-          canRecordOrderPayments={isIncome && canCreate(user, "payments")}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <CashCreateButton
+            direction="INCOME"
+            types={manualTypes("INCOME")}
+            {...createProps}
+            canManageAccounts={hasPermission(user, "cash.manage")}
+            canRecordOrderPayments={canCreate(user, "payments")}
+          />
+          <CashCreateButton
+            direction="EXPENSE"
+            types={manualTypes("EXPENSE")}
+            {...createProps}
+            canManageAccounts={hasPermission(user, "cash.manage")}
+          />
+        </div>
       </div>
+
+      <nav aria-label="Чиглэл" className="mb-3 inline-flex self-start rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-0.5">
+        {DIRECTION_TABS.map((t) => {
+          const selected = direction === t.value;
+          return (
+            <Link
+              key={t.label}
+              href={directionHref(t.value)}
+              aria-current={selected ? "page" : undefined}
+              className={`rounded-[8px] px-3 py-1.5 text-sm transition-colors ${selected ? "bg-[var(--oc-line)] text-[var(--oc-ink)] font-medium" : "text-[var(--oc-muted3)] hover:text-[var(--oc-ink)]"}`}
+            >
+              {t.label}
+            </Link>
+          );
+        })}
+      </nav>
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <CashRangeFilter />
@@ -182,7 +229,10 @@ export async function CashListPage({
         <FilterSelect
           paramName="typeId"
           placeholder="Бүх ангилал"
-          options={types.map((t) => ({ value: t.id, label: t.isActive ? t.name : `${t.name} (идэвхгүй)` }))}
+          options={types.map((t) => {
+            const side = direction ? "" : t.direction === "INCOME" ? " · орлого" : " · зарлага";
+            return { value: t.id, label: `${t.name}${side}${t.isActive ? "" : " (идэвхгүй)"}` };
+          })}
         />
         <FilterSelect
           paramName="method"
@@ -191,8 +241,8 @@ export async function CashListPage({
         />
         <FilterSelect
           paramName="bank"
-          placeholder="Бүх банк"
-          options={pickerAccounts.map((b) => ({ value: b.id, label: `${b.name} · ${b.type === "POS" ? "POS" : "Данс"}` }))}
+          placeholder="Бүх төлбөрийн арга"
+          options={pickerAccounts.map((b) => ({ value: b.id, label: `${b.name} · ${PAYMENT_ACCOUNT_TYPE_LABEL[b.type]}` }))}
         />
         <FilterSelect
           paramName="session"
@@ -204,18 +254,16 @@ export async function CashListPage({
           placeholder="Хүчингүйг нуух"
           options={[{ value: "1", label: "Хүчингүйг харуулах" }]}
         />
-        <ResetFilters paramNames={["dateFrom", "dateTo", "range", "branchId", "typeId", "method", "bank", "voided", "session"]} />
+        <ResetFilters paramNames={["direction", "dateFrom", "dateTo", "range", "branchId", "typeId", "method", "bank", "voided", "session"]} />
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-4 max-w-md">
-        <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] px-4 py-3">
-          <div className="text-xs text-[var(--oc-muted3)]">Нийт {title}</div>
-          <div className="text-lg font-semibold tabular-nums text-[var(--oc-ink)]">{formatTugrik(totalAmount)}</div>
-        </div>
-        <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] px-4 py-3">
-          <div className="text-xs text-[var(--oc-muted3)]">Бичлэгийн тоо</div>
-          <div className="text-lg font-semibold tabular-nums text-[var(--oc-ink)]">{totalCount}</div>
-        </div>
+      <div className={`grid gap-3 mb-4 ${cards.length > 2 ? "grid-cols-2 sm:grid-cols-4 max-w-3xl" : "grid-cols-2 max-w-md"}`}>
+        {cards.map((c) => (
+          <div key={c.label} className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] px-4 py-3">
+            <div className="text-xs text-[var(--oc-muted3)]">{c.label}</div>
+            <div className={`text-lg font-semibold tabular-nums ${c.tone ?? "text-[var(--oc-ink)]"}`}>{c.value}</div>
+          </div>
+        ))}
       </div>
 
       {hasClosedRegisterRow ? <NoOpenSessionNotice className="mb-3" /> : null}
@@ -252,6 +300,7 @@ export async function CashListPage({
               <tbody className="divide-y divide-[var(--oc-line)]">
                 {entries.map((e) => {
                   const voided = e.voidedAt != null;
+                  const income = e.direction === "INCOME";
                   return (
                     <tr key={e.id} className={`hover:bg-white/[0.02] transition-colors ${voided ? "opacity-60" : ""}`}>
                       <td className="px-4 py-3 font-plex-mono text-xs text-[var(--oc-muted2)] whitespace-nowrap">
@@ -272,7 +321,13 @@ export async function CashListPage({
                       </td>
                       <td className="px-4 py-3 text-sm text-[var(--oc-ink2)]">{e.branch.name}</td>
                       <td className="px-4 py-3 text-right text-sm tabular-nums text-[var(--oc-ink)] whitespace-nowrap">
-                        <span className={voided ? "line-through" : ""}>{formatTugrik(e.amount)}</span>
+                        <span
+                          className={`${voided ? "line-through" : ""} ${income ? "text-[var(--oc-ok)]" : "text-red-400 light:text-red-600"}`}
+                          title={income ? "Орлого" : "Зарлага"}
+                        >
+                          {income ? "+" : "−"}
+                          {formatTugrik(e.amount)}
+                        </span>
                         {e.taxIncluded ? (
                           <div className="text-xs text-[var(--oc-muted4)]">Татвар (туршилт): {formatTugrik(e.taxIncluded)}</div>
                         ) : null}
@@ -347,10 +402,10 @@ export async function CashListPage({
               <tfoot>
                 <tr className="border-t border-[var(--oc-line)] bg-[var(--oc-panel2)]">
                   <td colSpan={3} className="px-4 py-3 text-xs text-[var(--oc-muted3)]">
-                    Нийт (хүчингүй болон «Татвар (туршилт)»-гүйгээр, шүүлтүүрийн дагуу)
+                    {direction ? "Нийт" : "Цэвэр (орлого − зарлага)"} (хүчингүй болон «Татвар (туршилт)»-гүйгээр, шүүлтүүрийн дагуу)
                   </td>
                   <td className="px-4 py-3 text-right text-sm font-semibold tabular-nums text-[var(--oc-ink)] whitespace-nowrap">
-                    {formatTugrik(totalAmount)}
+                    {formatTugrik(direction === "INCOME" ? totals.income : direction === "EXPENSE" ? totals.expense : totals.net)}
                   </td>
                   <td colSpan={6} />
                 </tr>

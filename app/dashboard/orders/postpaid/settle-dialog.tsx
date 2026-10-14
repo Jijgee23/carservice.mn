@@ -11,7 +11,7 @@ import { DatePicker } from "@/app/_components/date-picker";
 import { Btn, Field } from "@/app/_components/landing-ops-ui";
 import { Modal } from "@/app/_components/modal";
 import { formatPriceInput, formatTugrik } from "@/lib/orders";
-import { PaymentMethodModal, paymentChoiceSummary, type PaymentAccountOption, type PaymentChoice } from "../../_components/payment-method-modal";
+import { PaymentMethodModal, choiceBankValue, paymentChoiceSummary, type PaymentAccountOption, type PaymentChoice } from "../../_components/payment-method-modal";
 import { PosSimulatorModal } from "../../_components/pos-simulator";
 import { NO_OPEN_SESSION_REASON, NoOpenSessionNotice } from "../../cash/session-warning";
 
@@ -31,7 +31,7 @@ type Props = {
   defaultBranchId: string;
   customers: Option[];
   banks: PaymentAccountOption[];
-  /** cash.manage: the empty picker links to /dashboard/banks. */
+  /** cash.manage: the empty picker links to /dashboard/payment_methods. */
   canManageAccounts?: boolean;
   /** Business-day "YYYY-MM-DD" (Asia/Ulaanbaatar). */
   today: string;
@@ -143,7 +143,7 @@ function SettleForm({ branches, defaultBranchId, customers, banks, canManageAcco
     fd.set("customerId", customerId);
     for (const o of ticked) fd.append("orderIds", o.id);
     fd.set("method", method);
-    if (needsBank) fd.set("bank", bank);
+    if (choiceBankValue(choice)) fd.set("bank", choiceBankValue(choice));
     fd.set("occurredAt", date);
     if (note.trim()) fd.set("note", note.trim());
     fd.set("expectedAmount", total);

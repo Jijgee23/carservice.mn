@@ -558,3 +558,24 @@ test("computeExpectedCashBatch runs ONE groupBy for the whole page and splits it
   assert.equal(empty.size, 0);
   assert.equal(calls.length, 1, "no query for an empty page");
 });
+
+test("live totals: CASH entries of different cash accounts (Бэлэн) collapse into the one drawer row", async () => {
+  const { liveTotalsFromGroups } = await import("../lib/cash/session");
+  const g = (method: string, bankId: string | null, direction: string, amount: number, n = 1) => ({
+    method, bankId, direction, _sum: { amount }, _count: { _all: n },
+  });
+  const live = liveTotalsFromGroups(await D(1000), [
+    g("CASH", null, "INCOME", 500),
+    g("CASH", "c1", "INCOME", 300, 2),
+    g("CASH", "c2", "EXPENSE", 100),
+    g("BANK_TRANSFER", "a1", "INCOME", 700),
+  ]);
+  const cashRows = live.byMethod.filter((r) => r.method === "CASH");
+  assert.equal(cashRows.length, 1);
+  assert.equal(cashRows[0].bank, "");
+  assert.equal(cashRows[0].income.toString(), "800");
+  assert.equal(cashRows[0].expense.toString(), "100");
+  assert.equal(cashRows[0].count, 4);
+  assert.equal(live.expectedCash.toString(), "1700");
+  assert.equal(live.byMethod.find((r) => r.method === "BANK_TRANSFER")?.bank, "a1");
+});

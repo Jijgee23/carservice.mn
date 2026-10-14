@@ -34,6 +34,7 @@ import {
   revokeUserSession,
 } from "@/lib/auth/user-session";
 import { prisma } from "@/lib/prisma";
+import { ensureCashAccount } from "@/lib/payment-accounts";
 import {
   consumeRateLimit,
   ipFromHeaders,
@@ -340,6 +341,9 @@ export async function signUpAction(
           logoUrl,
         },
       });
+
+      // Төлбөрийн аргууд: «Бэлэн» автоматаар (тенант өөрөө бүртгэхгүй).
+      await ensureCashAccount(tx, tenant.id);
 
       // Default нэгжүүд (ширхэг, цаг, мин, литр, кг, м, удаа, багц)
       await tx.unit.createMany({

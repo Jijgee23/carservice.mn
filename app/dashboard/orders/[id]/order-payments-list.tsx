@@ -10,7 +10,7 @@ import {
 import Link from "next/link";
 import { Btn } from "@/app/_components/landing-ops-ui";
 import { NO_OPEN_SESSION_REASON, NoOpenSessionNotice } from "../../cash/session-warning";
-import { PaymentMethodModal, type PaymentAccountOption, type PaymentChoice } from "../../_components/payment-method-modal";
+import { PaymentMethodModal, choiceBankValue, type PaymentAccountOption, type PaymentChoice } from "../../_components/payment-method-modal";
 import { QPayPanel, type PendingOrderPayment } from "./qpay-widget";
 import {
   ORDER_PAYMENT_METHOD_BADGE,
@@ -96,7 +96,7 @@ export function OrderPaymentsList({
   canReverse: boolean;
   /** Идэвхтэй банкууд (picker-д). */
   banks: PaymentAccountOption[];
-  /** cash.manage: the empty picker links to /dashboard/banks. */
+  /** cash.manage: the empty picker links to /dashboard/payment_methods. */
   canManageAccounts?: boolean;
   /** Whether the order's branch has an open cash session; when false, record/QPay/reverse are disabled. */
   cashSessionOpen: boolean;
@@ -136,7 +136,7 @@ export function OrderPaymentsList({
     fd.set("orderId", orderId);
     fd.set("method", choice.method);
     fd.set("amount", amount);
-    if (choice.method === "BANK_TRANSFER" || choice.method === "CARD") fd.set("bank", choice.bank);
+    if (choiceBankValue(choice)) fd.set("bank", choiceBankValue(choice));
     const res = await recordOrderPaymentAction(null, fd);
     if (res?.ok) {
       setLastChange(res.change ?? null);

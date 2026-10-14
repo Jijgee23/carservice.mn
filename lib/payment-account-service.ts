@@ -2,7 +2,7 @@ import { logAudit } from "@/lib/audit";
 import { hasPermission, type RoleCheckUser } from "@/lib/auth/roles";
 import { prisma } from "@/lib/prisma";
 import {
-  PAYMENT_ACCOUNT_TYPES,
+  CREATABLE_PAYMENT_ACCOUNT_TYPES,
   PaymentAccountError,
   maskAccountNumber,
   methodForType,
@@ -35,7 +35,10 @@ type Validated = {
   isActive?: boolean;
 };
 
-/** Pure shape validation. create: type/name/accountNumber required. update: type is immutable. */
+/**
+ * Pure shape validation. create: BANK_ACCOUNT / POS only (CASH is created automatically, one per tenant), with
+ * type/name/accountNumber required. update: type is immutable; CASH rules are checked against the stored type.
+ */
 export function validatePaymentAccountInput(input: unknown, mode: "create" | "update"): Validated {
   if (input == null || typeof input !== "object" || Array.isArray(input)) throw invalid("body", "Буруу хүсэлт.");
   const o = input as Record<string, unknown>;
@@ -43,7 +46,8 @@ export function validatePaymentAccountInput(input: unknown, mode: "create" | "up
 
   if (mode === "update" && o.type !== undefined) throw invalid("type", "Төрлийг өөрчлөх боломжгүй.");
   if (mode === "create") {
-    if (typeof o.type !== "string" || !(PAYMENT_ACCOUNT_TYPES as readonly string[]).includes(o.type)) {
+    if (o.type === "CASH") throw invalid("type", "«Бэлэн» автоматаар бий — шинээр нэмэх шаардлагагүй.");
+    if (typeof o.type !== "string" || !(CREATABLE_PAYMENT_ACCOUNT_TYPES as readonly string[]).includes(o.type)) {
       throw invalid("type", "Төрөл сонгоно уу (Данс эсвэл POS).");
     }
     out.type = o.type as PaymentAccountTypeValue;
@@ -96,10 +100,11 @@ type Row = { id: string; type: string; name: string; accountNumber: string | nul
 export type PaymentAccountDto = {
   id: string;
   type: PaymentAccountTypeValue;
-  method: "BANK_TRANSFER" | "CARD";
+  method: "CASH" | "BANK_TRANSFER" | "CARD";
   name: string;
-  /** Full number — only for cash.manage callers; null otherwise. */
+  /** Full number (null for CASH). */
   accountNumber: string | null;
+  /** Kept for older API clients; the UI shows the full number. */
   accountNumberMasked: string;
   terminalId: string | null;
   merchantId: string | null;
@@ -107,14 +112,14 @@ export type PaymentAccountDto = {
   isActive: boolean;
 };
 
-function toDto(row: Row, revealNumber: boolean): PaymentAccountDto {
+function toDto(row: Row): PaymentAccountDto {
   const type = row.type as PaymentAccountTypeValue;
   return {
     id: row.id,
     type,
     method: methodForType(type),
     name: row.name,
-    accountNumber: revealNumber ? row.accountNumber : null,
+    accountNumber: row.accountNumber,
     accountNumberMasked: maskAccountNumber(row.accountNumber),
     terminalId: row.terminalId,
     merchantId: row.merchantId,
@@ -130,18 +135,17 @@ function assertManage(actor: PaymentAccountActor) {
 }
 
 const auditView = (r: Row) => ({
-  type: r.type, name: r.name, accountNumber: maskAccountNumber(r.accountNumber), terminalId: r.terminalId,
+  type: r.type, name: r.name, accountNumber: r.accountNumber, terminalId: r.terminalId,
   merchantId: r.merchantId, isTest: r.isTest, isActive: r.isActive,
 });
 
 export async function listPaymentAccounts(input: { actor: PaymentAccountActor; includeInactive?: boolean }): Promise<PaymentAccountDto[]> {
-  const reveal = hasPermission(input.actor, "cash.manage");
   const rows = (await prisma.paymentAccount.findMany({
     where: { tenantId: input.actor.tenantId, ...(input.includeInactive ? {} : { isActive: true }) },
     orderBy: [{ type: "asc" }, { name: "asc" }, { id: "asc" }],
     select: SELECT,
   })) as Row[];
-  return rows.map((r) => toDto(r, reveal));
+  return rows.map(toDto);
 }
 
 export async function createPaymentAccount(input: { actor: PaymentAccountActor; data: unknown }): Promise<PaymentAccountDto> {
@@ -164,11 +168,11 @@ export async function createPaymentAccount(input: { actor: PaymentAccountActor; 
       })) as Row;
       await logAudit({
         tenantId, userId: input.actor.id, entity: "PaymentAccount", entityId: created.id, action: "CREATE",
-        summary: `Төлбөрийн сонголт нэмэв: ${created.name}`, after: auditView(created),
+        summary: `Төлбөрийн арга нэмэв: ${created.name}`, after: auditView(created),
       }, tx);
       return created;
     });
-    return toDto(row, true);
+    return toDto(row);
   } catch (error) {
     if ((error as { code?: string } | null)?.code === "P2002") {
       throw new PaymentAccountError("Энэ дансны дугаар аль хэдийн бүртгэгдсэн байна.", "PAYMENT_ACCOUNT_DUPLICATE", 409, { accountNumber: "Давхардсан дугаар." });
@@ -184,18 +188,24 @@ export async function updatePaymentAccount(input: { actor: PaymentAccountActor; 
   try {
     const row = await prisma.$transaction(async (tx) => {
       const before = (await tx.paymentAccount.findFirst({ where: { id: input.id, tenantId }, select: SELECT })) as Row | null;
-      if (!before) throw new PaymentAccountError("Төлбөрийн сонголт олдсонгүй.", "PAYMENT_ACCOUNT_NOT_FOUND", 404);
+      if (!before) throw new PaymentAccountError("Төлбөрийн арга олдсонгүй.", "PAYMENT_ACCOUNT_NOT_FOUND", 404);
+      if (before.type === "CASH" && v.accountNumber !== undefined) {
+        throw invalid("accountNumber", "Бэлэн төрөлд дансны дугаар хэрэггүй.");
+      }
+      if (before.type === "CASH" && v.isActive === false) {
+        throw invalid("isActive", "«Бэлэн» үргэлж идэвхтэй — унтраах боломжгүй.");
+      }
       if (before.type !== "POS" && (v.terminalId || v.merchantId || v.isTest)) {
         throw invalid("type", "Терминал, Туршилт зөвхөн POS-д хамаарна.");
       }
       const updated = (await tx.paymentAccount.update({ where: { id: before.id }, data: v, select: SELECT })) as Row;
       await logAudit({
         tenantId, userId: input.actor.id, entity: "PaymentAccount", entityId: updated.id, action: "UPDATE",
-        summary: `Төлбөрийн сонголт засав: ${updated.name}`, before: auditView(before), after: auditView(updated),
+        summary: `Төлбөрийн арга засав: ${updated.name}`, before: auditView(before), after: auditView(updated),
       }, tx);
       return updated;
     });
-    return toDto(row, true);
+    return toDto(row);
   } catch (error) {
     if ((error as { code?: string } | null)?.code === "P2002") {
       throw new PaymentAccountError("Энэ дансны дугаар аль хэдийн бүртгэгдсэн байна.", "PAYMENT_ACCOUNT_DUPLICATE", 409, { accountNumber: "Давхардсан дугаар." });
@@ -206,17 +216,17 @@ export async function updatePaymentAccount(input: { actor: PaymentAccountActor; 
 
 export function toPickerAccount(dto: PaymentAccountDto) {
   return {
-    id: dto.id, type: dto.type, method: dto.method, name: dto.name, accountNumberMasked: dto.accountNumberMasked,
+    id: dto.id, type: dto.type, method: dto.method, name: dto.name, accountNumber: dto.accountNumber, accountNumberMasked: dto.accountNumberMasked,
     terminalId: dto.terminalId, merchantId: dto.merchantId, isTest: dto.isTest,
   };
 }
 
-/** Active accounts for payment pickers: any authenticated staff, never the full number. */
+/** Active accounts for payment pickers: any authenticated staff. */
 export async function listPickerAccounts(tenantId: string) {
   const rows = (await prisma.paymentAccount.findMany({
     where: { tenantId, isActive: true },
     orderBy: [{ type: "asc" }, { name: "asc" }, { id: "asc" }],
     select: SELECT,
   })) as Row[];
-  return rows.map((r) => toPickerAccount(toDto(r, false)));
+  return rows.map((r) => toPickerAccount(toDto(r)));
 }

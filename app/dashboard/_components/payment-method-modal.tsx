@@ -11,9 +11,9 @@ export type PaymentChoice = { method: PaymentMethodKey; bank: string };
 
 export type PaymentAccountOption = {
   id: string;
-  type: "BANK_ACCOUNT" | "POS";
+  type: "CASH" | "BANK_ACCOUNT" | "POS";
   name: string;
-  accountNumberMasked: string;
+  accountNumber: string | null;
   terminalId: string | null;
   isTest: boolean;
 };
@@ -23,9 +23,9 @@ type Base = {
   onClose: () => void;
   /** Гарчиг, жишээ «Төлбөр бүртгэх · Үлдэгдэл 10,000₮». */
   title: string;
-  /** Идэвхтэй төлбөрийн сонголтууд (данс / POS). */
+  /** Идэвхтэй төлбөрийн аргууд (бэлэн / данс / POS). */
   banks: PaymentAccountOption[];
-  /** Сонголт байхгүй үед «Төлбөрийн сонголт» руу холбоос харуулах эсэх (cash.manage). */
+  /** Арга байхгүй үед «Төлбөрийн аргууд» руу холбоос харуулах эсэх (cash.manage). */
   canManageAccounts?: boolean;
   /** Зөвхөн захиалгын төлбөрийн формд QPay мөр гаргана. */
   includeQpay?: boolean;
@@ -74,12 +74,17 @@ type Row = {
 
 const keyOf = (c: PaymentChoice) => `${c.method}:${c.bank}`;
 
+/** The `bank` form value for a choice: the account id for CASH / BANK_TRANSFER / CARD, "" otherwise. */
+export function choiceBankValue(choice: PaymentChoice): string {
+  return choice.method === "CASH" || choice.method === "BANK_TRANSFER" || choice.method === "CARD" ? choice.bank : "";
+}
+
 /** Товч харуулалт, жишээ «💳 Хаан банк · POS» — форм дээрх «Төлбөрийн хэлбэр» товчид. */
 export function paymentChoiceSummary(choice: PaymentChoice, banks: PaymentAccountOption[]): string {
   const nameOf = (id: string) => banks.find((b) => b.id === id)?.name ?? id;
   switch (choice.method) {
     case "CASH":
-      return "💵 Бэлэн";
+      return choice.bank ? `💵 ${nameOf(choice.bank)} · Бэлэн` : "💵 Бэлэн";
     case "QPAY":
       return "▦ QPay";
     case "BANK_TRANSFER":
@@ -92,7 +97,7 @@ export function paymentChoiceSummary(choice: PaymentChoice, banks: PaymentAccoun
 }
 
 function accountRowLabel(b: PaymentAccountOption): string {
-  return `${b.name}${b.isTest ? ` · ${TEST_BADGE}` : ""}${b.accountNumberMasked ? ` · ${b.accountNumberMasked}` : ""}`;
+  return `${b.name}${b.isTest ? ` · ${TEST_BADGE}` : ""}${b.accountNumber ? ` · ${b.accountNumber}` : ""}`;
 }
 
 export function buildPaymentRows(banks: PaymentAccountOption[], includeQpay: boolean, qpayOnly: boolean): Row[] {
@@ -100,7 +105,15 @@ export function buildPaymentRows(banks: PaymentAccountOption[], includeQpay: boo
   const qpay: PaymentChoice = { method: "QPAY", bank: "" };
   const other: PaymentChoice = { method: "OTHER", bank: "" };
   if (qpayOnly) return [{ key: keyOf(qpay), choice: qpay, label: "QPay", group: "top", icon: "▦" }];
-  const rows: Row[] = [{ key: keyOf(cash), choice: cash, label: "Бэлэн", group: "top", icon: "💵" }];
+  // Registered cash methods replace the built-in «Бэлэн» row; without any, the built-in row stays.
+  const cashAccounts = banks.filter((x) => x.type === "CASH");
+  const rows: Row[] =
+    cashAccounts.length > 0
+      ? cashAccounts.map((b) => {
+          const choice: PaymentChoice = { method: "CASH", bank: b.id };
+          return { key: keyOf(choice), choice, label: accountRowLabel(b), group: "top" as const, icon: "💵" };
+        })
+      : [{ key: keyOf(cash), choice: cash, label: "Бэлэн", group: "top", icon: "💵" }];
   if (includeQpay) rows.push({ key: keyOf(qpay), choice: qpay, label: "QPay", group: "top", icon: "▦" });
   for (const b of banks.filter((x) => x.type === "BANK_ACCOUNT")) {
     const choice: PaymentChoice = { method: "BANK_TRANSFER", bank: b.id };
@@ -203,7 +216,7 @@ function ModalBody(props: PaymentMethodModalProps) {
               {props.canManageAccounts ? (
                 <>
                   {" "}
-                  <a href="/dashboard/banks" className="underline hover:text-[var(--oc-ink)]">
+                  <a href="/dashboard/payment_methods" className="underline hover:text-[var(--oc-ink)]">
                     {PAYMENT_ACCOUNTS_ADD_LINK}
                   </a>
                 </>

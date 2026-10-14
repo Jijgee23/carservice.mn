@@ -29,6 +29,22 @@ export type CashReportBankRow = {
   count: number;
 };
 export type CashReportMethodRow = { method: CashReportMethod; methodLabel: string; total: string; count: number; banks: CashReportBankRow[] };
+/** One side-by-side income/expense line of the detailed by-method report (a method, or one account under it). */
+export type CashReportFlowFigures = { incomeCount: number; income: string; expenseCount: number; expense: string; net: string };
+export type CashReportMethodAccountRow = CashReportFlowFigures & {
+  /** PaymentAccount id (null = recorded without an account). */
+  bank: string | null;
+  bankLabel: string;
+  bankIsTest: boolean;
+};
+export type CashReportMethodDetailRow = CashReportFlowFigures & {
+  method: CashReportMethod;
+  methodLabel: string;
+  /** Share of total income, percent with one decimal ("0.0" when there is no income). */
+  incomeShare: string;
+  /** Per payment account — BANK_TRANSFER / CARD only (cash is one drawer; QPay / other have no accounts). */
+  accounts: CashReportMethodAccountRow[];
+};
 export type CashReportTypeRow = { typeId: string; name: string; systemKey: string | null; total: string; count: number };
 export type CashReportMethodNetRow = { method: CashReportMethod; methodLabel: string; income: string; expense: string; net: string };
 export type CashReportSessionMethodRow = {
@@ -71,6 +87,8 @@ export type CashSummary = {
   expenseByType: CashReportTypeRow[];
   expenseByMethod: Array<{ method: CashReportMethod; methodLabel: string; total: string; count: number }>;
   netByMethod: CashReportMethodNetRow[];
+  /** Detailed by-method report: income + expense + net per method, split per payment account for transfer / card. */
+  byMethodDetail: CashReportMethodDetailRow[];
   /** = netByMethod CASH row .net — expected drawer movement. */
   netCash: string;
   postpaid: {
@@ -249,6 +267,38 @@ export async function buildCashSummary(input: {
   });
   const netCash = netByMethod.find((r) => r.method === "CASH")?.net ?? "0";
 
+  // --- detailed by method (income + expense side by side, per account for bank methods) ---
+  const flow = (rows: typeof groups): CashReportFlowFigures => {
+    const inc = rows.filter((g) => g.direction === "INCOME");
+    const exp = rows.filter((g) => g.direction === "EXPENSE");
+    const income = inc.reduce((a, g) => a.plus(sum(g)), ZERO);
+    const expense = exp.reduce((a, g) => a.plus(sum(g)), ZERO);
+    return {
+      incomeCount: inc.reduce((a, g) => a + cnt(g), 0),
+      income: income.toString(),
+      expenseCount: exp.reduce((a, g) => a + cnt(g), 0),
+      expense: expense.toString(),
+      net: income.minus(expense).toString(),
+    };
+  };
+  const allIncome = incomeGroups.reduce((a, g) => a.plus(sum(g)), ZERO);
+  const byMethodDetail: CashReportMethodDetailRow[] = CASH_REPORT_METHODS.map((method) => {
+    const rows = groups.filter((g) => g.method === method);
+    const figures = flow(rows);
+    const accounts: CashReportMethodAccountRow[] = [];
+    if (BANK_METHODS.includes(method)) {
+      const keys = [...new Set(rows.map((g) => g.bankId ?? null))].sort(
+        (a, b) => (a === null ? 1 : 0) - (b === null ? 1 : 0) || nameOf(a).label.localeCompare(nameOf(b).label),
+      );
+      for (const key of keys) {
+        const n = nameOf(key);
+        accounts.push({ bank: key, bankLabel: n.label, bankIsTest: n.isTest, ...flow(rows.filter((g) => (g.bankId ?? null) === key)) });
+      }
+    }
+    const incomeShare = allIncome.gt(0) ? new Prisma.Decimal(figures.income).div(allIncome).times(100).toFixed(1) : "0.0";
+    return { method, methodLabel: methodLabel(method), incomeShare, ...figures, accounts };
+  });
+
   // --- 8 totals ---
   const totalIncome = incomeGroups.reduce((a, g) => a.plus(sum(g)), ZERO);
   const totalExpense = expenseGroups.reduce((a, g) => a.plus(sum(g)), ZERO);
@@ -401,6 +451,7 @@ export async function buildCashSummary(input: {
     expenseByType,
     expenseByMethod,
     netByMethod,
+    byMethodDetail,
     netCash,
     postpaid: {
       workDone: { total: dec(workDone._sum?.totalAmount).toString(), count: workDone._count?._all ?? 0 },

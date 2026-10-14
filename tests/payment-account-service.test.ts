@@ -47,8 +47,10 @@ function fakeDb(seed: Row[] = []) {
   const model = {
     findMany: async ({ where }: { where: { tenantId: string; isActive?: boolean } }) =>
       rows.filter((r) => r.tenantId === where.tenantId && (where.isActive === undefined || r.isActive === where.isActive)).map(pick),
-    findFirst: async ({ where }: { where: { id: string; tenantId: string } }) => {
-      const r = rows.find((x) => x.id === where.id && x.tenantId === where.tenantId);
+    findFirst: async ({ where }: { where: { id?: string; tenantId: string; type?: string } }) => {
+      const r = rows.find(
+        (x) => x.tenantId === where.tenantId && (where.id === undefined || x.id === where.id) && (where.type === undefined || x.type === where.type),
+      );
       return r ? pick(r) : null;
     },
     create: async ({ data }: { data: Record<string, unknown> }) => {
@@ -97,21 +99,20 @@ test("service: non-cash.manage is forbidden (403) on create and update", async (
   assert.equal(db.creates.length, 0);
 });
 
-test("service: list for non-manager returns masked only; manager sees full number", async () => {
+test("service: list returns the full account number to every caller (numbers are not hidden)", async () => {
   const { listPaymentAccounts } = await import("../lib/payment-account-service");
   const db = fakeDb([base({}), base({ id: "a2", tenantId: "t2", name: "Бусад" })]);
   await withFake(db, async () => {
     const asStaff = await listPaymentAccounts({ actor: staff });
     assert.equal(asStaff.length, 1);
-    assert.equal(asStaff[0].accountNumber, null);
+    assert.equal(asStaff[0].accountNumber, "5012345678");
     assert.match(asStaff[0].accountNumberMasked, /5678$/);
-    assert.ok(!JSON.stringify(asStaff).includes("5012345678"));
     const asManager = await listPaymentAccounts({ actor: manager });
     assert.equal(asManager[0].accountNumber, "5012345678");
   });
 });
 
-test("service: create takes tenantId from actor and audits the masked number only", async () => {
+test("service: create takes tenantId from actor and audits the account", async () => {
   const { createPaymentAccount } = await import("../lib/payment-account-service");
   const db = fakeDb();
   await withFake(db, async () => {
@@ -121,9 +122,7 @@ test("service: create takes tenantId from actor and audits the masked number onl
   assert.equal(db.creates[0].tenantId, "t1");
   assert.equal(db.audits.length, 1);
   const after = db.audits[0].after as Record<string, unknown>;
-  assert.match(String(after.accountNumber), /5678$/);
-  assert.notEqual(after.accountNumber, "5012345678");
-  assert.ok(!JSON.stringify(db.audits[0]).includes("5012345678"));
+  assert.equal(after.accountNumber, "5012345678");
 });
 
 test("service: unique violation -> PAYMENT_ACCOUNT_DUPLICATE (409)", async () => {
@@ -143,7 +142,7 @@ test("service: update of another tenant id -> PAYMENT_ACCOUNT_NOT_FOUND (404)", 
   });
 });
 
-test("service: setting terminalId on a BANK_ACCOUNT -> PAYMENT_ACCOUNT_INVALID; valid update audits masked", async () => {
+test("service: setting terminalId on a BANK_ACCOUNT -> PAYMENT_ACCOUNT_INVALID; valid update is audited", async () => {
   const { updatePaymentAccount } = await import("../lib/payment-account-service");
   const db = fakeDb([base({})]);
   await withFake(db, async () => {
@@ -152,5 +151,28 @@ test("service: setting terminalId on a BANK_ACCOUNT -> PAYMENT_ACCOUNT_INVALID; 
     assert.equal(dto.name, "Шинэ нэр");
   });
   assert.equal(db.audits.length, 1);
-  assert.ok(!JSON.stringify(db.audits[0]).includes("5012345678"));
+});
+
+test("service: «Бэлэн» is automatic — it cannot be created, switched off or given a number; its name can be edited", async () => {
+  const { createPaymentAccount, updatePaymentAccount, validatePaymentAccountInput } = await import("../lib/payment-account-service");
+  assert.throws(() => validatePaymentAccountInput({ type: "CASH", name: "Касс 1" }, "create"), code("PAYMENT_ACCOUNT_INVALID"));
+  const db = fakeDb([base({ id: "c1", type: "CASH", name: "Бэлэн", accountNumber: null })]);
+  await withFake(db, async () => {
+    await assert.rejects(createPaymentAccount({ actor: manager, data: { type: "CASH", name: "Касс 2" } }), code("PAYMENT_ACCOUNT_INVALID"));
+    await assert.rejects(updatePaymentAccount({ actor: manager, id: "c1", data: { isActive: false } }), code("PAYMENT_ACCOUNT_INVALID"));
+    await assert.rejects(updatePaymentAccount({ actor: manager, id: "c1", data: { accountNumber: "5012345678" } }), code("PAYMENT_ACCOUNT_INVALID"));
+    const renamed = await updatePaymentAccount({ actor: manager, id: "c1", data: { name: "Касс" } });
+    assert.equal(renamed.name, "Касс");
+    assert.equal(renamed.method, "CASH");
+    assert.equal(renamed.accountNumber, null);
+  });
+  assert.equal(db.creates.length, 0);
+});
+
+test("ensureCashAccount inserts the default «Бэлэн» idempotently (skipDuplicates)", async () => {
+  const { ensureCashAccount, DEFAULT_CASH_ACCOUNT_NAME } = await import("../lib/payment-accounts");
+  const calls: unknown[] = [];
+  const client = { paymentAccount: { createMany: async (args: unknown) => { calls.push(args); return { count: 1 }; } } };
+  await ensureCashAccount(client as never, "t1");
+  assert.deepEqual(calls, [{ data: [{ tenantId: "t1", type: "CASH", name: DEFAULT_CASH_ACCOUNT_NAME }], skipDuplicates: true }]);
 });

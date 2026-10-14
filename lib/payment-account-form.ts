@@ -16,9 +16,13 @@ export function createPayloadFromForm(fd: FormData): Record<string, unknown> {
   };
 }
 
-/** Type is never read (immutable). `isTestPresent` marks that the checkbox was rendered, so absent `isTest` means false. */
+/**
+ * Type is never read (immutable). accountNumber is sent only when its field was rendered (CASH has none).
+ * `isTestPresent` marks that the checkbox was rendered, so absent `isTest` means false.
+ */
 export function updatePayloadFromForm(fd: FormData): { id: string; data: Record<string, unknown> } {
-  const data: Record<string, unknown> = { name: text(fd, "name"), accountNumber: text(fd, "accountNumber") };
+  const data: Record<string, unknown> = { name: text(fd, "name") };
+  if (fd.has("accountNumber")) data.accountNumber = text(fd, "accountNumber");
   if (fd.has("terminalId")) data.terminalId = text(fd, "terminalId");
   if (fd.has("merchantId")) data.merchantId = text(fd, "merchantId");
   if (fd.has("isTestPresent")) data.isTest = fd.get("isTest") === "on";

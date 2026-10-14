@@ -6,7 +6,7 @@ const src = (rel: string) => readFile(new URL(`../${rel}`, import.meta.url), "ut
 
 test("schema declares PaymentAccount and the three bankId FKs", async () => {
   const schema = await src("prisma/schema.prisma");
-  assert.match(schema, /enum PaymentAccountType\s*\{\s*BANK_ACCOUNT\s+POS\s*\}/);
+  assert.match(schema, /enum PaymentAccountType\s*\{\s*CASH\s+BANK_ACCOUNT\s+POS\s*\}/);
   assert.match(schema, /model PaymentAccount \{/);
   for (const model of ["OrderPayment", "CashTransaction", "PostpaidSettlement"]) {
     const body = schema.slice(schema.indexOf(`model ${model} {`));
@@ -17,6 +17,27 @@ test("schema declares PaymentAccount and the three bankId FKs", async () => {
   // CashSessionMethodCount keeps its string key (spec §3 exception): no bankId, no relation.
   const mc = schema.slice(schema.indexOf("model CashSessionMethodCount {"));
   assert.doesNotMatch(mc.slice(0, mc.indexOf("\n}\n")), /bankId/);
+});
+
+test("migration: CASH type is added in place (enum value only, nothing dropped)", async () => {
+  const sql = await src("prisma/migrations/20261014090000_payment_account_cash/migration.sql");
+  assert.match(sql, /ALTER TYPE "PaymentAccountType" ADD VALUE IF NOT EXISTS 'CASH'/);
+  assert.doesNotMatch(sql, /DROP|DELETE|UPDATE/i);
+});
+
+test("migration: one CASH per tenant is a partial unique index (not expressible in Prisma)", async () => {
+  const sql = await src("prisma/migrations/20261014120000_payment_account_one_cash/migration.sql");
+  assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS "PaymentAccount_one_cash_per_tenant_key" ON "PaymentAccount"\("tenantId"\) WHERE "type" = 'CASH'/);
+  assert.doesNotMatch(sql, /DROP|DELETE|UPDATE/i);
+  assert.match(await src("prisma/schema.prisma"), /PaymentAccount_one_cash_per_tenant_key/);
+});
+
+test("migration: every existing tenant gets one active «Бэлэн» under the RLS bypass, and a miss aborts", async () => {
+  const sql = await src("prisma/migrations/20261014130000_payment_account_default_cash/migration.sql");
+  assert.match(sql, /SET LOCAL app\.bypass_rls = 'on';/);
+  assert.match(sql, /INSERT INTO "PaymentAccount"[\s\S]*'CASH', 'Бэлэн'[\s\S]*WHERE NOT EXISTS[\s\S]*ON CONFLICT DO NOTHING;/);
+  assert.match(sql, /RAISE EXCEPTION 'default cash backfill missed a tenant'/);
+  assert.doesNotMatch(sql, /DROP|DELETE/i);
 });
 
 test("migration: table, RLS, backfill, no destructive statements", async () => {

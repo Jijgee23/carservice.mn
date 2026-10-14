@@ -435,13 +435,21 @@ test("cash summary workbook has a sheet per section with Mongolian headers", asy
   const wb = new Workbook();
   await wb.xlsx.load(buf as unknown as ArrayBuffer);
   assert.deepEqual(wb.worksheets.map((w) => w.name), [
-    "Хураангуй", "Арга-аар орлого", "Төрлөөр орлого", "Төрлөөр зарлага", "Арга-аар зарлага", "Цэвэр дүн", "Дараа тооцоо", "Кассын ээлж", "Ээлж — аргаар",
+    "Хураангуй", "Арга — дэлгэрэнгүй", "Арга-аар орлого", "Төрлөөр орлого", "Төрлөөр зарлага", "Арга-аар зарлага", "Цэвэр дүн", "Дараа тооцоо", "Кассын ээлж", "Ээлж — аргаар",
   ]);
   const header = (name: string) => (wb.getWorksheet(name)!.getRow(1).values as unknown[]).slice(1);
   assert.deepEqual(header("Арга-аар орлого"), ["Төлбөрийн арга", "Банк", "Нийт", "Тоо"]);
   assert.deepEqual(header("Цэвэр дүн"), ["Төлбөрийн арга", "Орлого", "Зарлага", "Цэвэр"]);
   const bankRow = (wb.getWorksheet("Арга-аар орлого")!.getRow(5).values as unknown[]).slice(1);
   assert.deepEqual(bankRow.slice(0, 4), ["Карт", "Хаан банк", 1000, 1]);
+  assert.deepEqual(header("Арга — дэлгэрэнгүй"), [
+    "Төлбөрийн арга", "Данс / POS", "Орлого (тоо)", "Орлого", "Зарлага (тоо)", "Зарлага", "Цэвэр", "Орлогын хувь (%)",
+  ]);
+  // Rows: CASH, BANK_TRANSFER, CARD, «Хаан банк» under CARD, QPAY, OTHER.
+  const detail = (n: number) => (wb.getWorksheet("Арга — дэлгэрэнгүй")!.getRow(n).values as unknown[]).slice(1);
+  assert.deepEqual(detail(2), ["Бэлэн", "", 0, 0, 1, 400, -400, 0]);
+  assert.deepEqual(detail(4), ["Карт", "", 1, 1000, 0, 0, 1000, 100]);
+  assert.deepEqual(detail(5).slice(0, 7), ["Карт", "Хаан банк", 1, 1000, 0, 0, 1000]);
   assert.equal(wb.getWorksheet("Кассын ээлж")!.rowCount, 2); // header + «Ээлжээс гадуур»
   assert.match(cashSummaryFilename(FROM, TO), /^mungun-guilgee_2026-10-01_2026-10-31\.xlsx$/);
 });
@@ -490,4 +498,55 @@ test("outstanding bound: an order fully paid today but only part paid at range e
   });
   const s = await buildCashSummary({ actor: ACTOR, from: FROM, to: TO, client, branchId: "b1" });
   assert.equal(s.postpaid.outstanding.total, "60000");
+});
+
+test("byMethodDetail: income + expense + net per method, per account for transfer / card, income share", async () => {
+  const { buildCashSummary } = await import("../lib/cash/report");
+  const { client } = fake({
+    types: TYPES, orders: [], payments: [], sessions: [],
+    tx: [
+      tx({ direction: "INCOME", typeId: "ty-pay", method: "CASH", amount: 60000 }),
+      tx({ direction: "INCOME", typeId: "ty-pay", method: "CASH", bankId: "pa-cash", amount: 15000 }),
+      tx({ direction: "EXPENSE", typeId: "ty-rent", method: "CASH", amount: 5000 }),
+      tx({ direction: "INCOME", typeId: "ty-pay", method: "BANK_TRANSFER", bankId: "pa-khan", amount: 20000 }),
+      tx({ direction: "EXPENSE", typeId: "ty-rent", method: "BANK_TRANSFER", bankId: "pa-khan", amount: 3000 }),
+      tx({ direction: "EXPENSE", typeId: "ty-rent", method: "BANK_TRANSFER", bankId: "pa-golomt", amount: 1000 }),
+      tx({ direction: "INCOME", typeId: "ty-pay", method: "BANK_TRANSFER", bankId: null, amount: 5000 }),
+      tx({ direction: "INCOME", typeId: "ty-pay", method: "CARD", amount: 999, voidedAt: IN_RANGE }),
+    ],
+  });
+  const s = await buildCashSummary({ actor: ACTOR, from: FROM, to: TO, client });
+  const m = (name: string) => s.byMethodDetail.find((r) => r.method === name)!;
+  assert.deepEqual(s.byMethodDetail.map((r) => r.method), ["CASH", "BANK_TRANSFER", "CARD", "QPAY", "OTHER"]);
+
+  // Cash is one drawer: no per-account split even when entries name the «Бэлэн» account.
+  const cash = m("CASH");
+  assert.deepEqual([cash.incomeCount, cash.income, cash.expenseCount, cash.expense, cash.net], [2, "75000", 1, "5000", "70000"]);
+  assert.equal(cash.accounts.length, 0);
+  assert.equal(cash.incomeShare, "75.0"); // 75000 / 100000
+
+  const bt = m("BANK_TRANSFER");
+  assert.deepEqual([bt.income, bt.expense, bt.net, bt.incomeShare], ["25000", "4000", "21000", "25.0"]);
+  // Accounts sorted by label, «no account» last; each with its own income / expense / net.
+  assert.deepEqual(bt.accounts.map((a) => [a.bank, a.bankLabel, a.incomeCount, a.income, a.expenseCount, a.expense, a.net]), [
+    ["pa-golomt", "Голомт банк", 0, "0", 1, "1000", "-1000"],
+    ["pa-khan", "Хаан банк", 1, "20000", 1, "3000", "17000"],
+    [null, "Банк тодорхойгүй", 1, "5000", 0, "0", "5000"],
+  ]);
+
+  // Voided entries never count; a method with no entries is all zeros.
+  const card = m("CARD");
+  assert.deepEqual([card.incomeCount, card.income, card.net, card.incomeShare, card.accounts.length], [0, "0", "0", "0.0", 0]);
+  assert.equal(s.totals.net, "91000");
+});
+
+test("byMethodDetail: no income at all -> every share is 0.0", async () => {
+  const { buildCashSummary } = await import("../lib/cash/report");
+  const { client } = fake({
+    types: TYPES, orders: [], payments: [], sessions: [],
+    tx: [tx({ direction: "EXPENSE", typeId: "ty-rent", method: "CASH", amount: 500 })],
+  });
+  const s = await buildCashSummary({ actor: ACTOR, from: FROM, to: TO, client });
+  assert.ok(s.byMethodDetail.every((r) => r.incomeShare === "0.0"));
+  assert.equal(s.byMethodDetail.find((r) => r.method === "CASH")!.net, "-500");
 });

@@ -9,7 +9,7 @@ import { IncomeChart } from "../income-chart";
 import { fmt, loadReportData, parseRange, type Range } from "./data";
 
 export const metadata = {
-  title: "Тайлан",
+  title: "Засварын хуудасны тайлан",
 };
 
 const QUICK_RANGES = [
@@ -94,7 +94,7 @@ export default async function ReportsPage({
   return (
     <div className="p-4 sm:p-6 max-w-full flex-1 flex flex-col min-h-0 w-full">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">Тайлан</h1>
+        <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">Засварын хуудасны тайлан</h1>
         <p className="text-sm text-[var(--oc-muted3)] mt-1">
           {range.label} · {completedCount} дууссан засварын хуудас · {totalInRange} нийт
         </p>

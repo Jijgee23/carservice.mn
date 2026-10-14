@@ -5,8 +5,8 @@ process.env.DATABASE_URL ??= "postgresql://unused/unused";
 process.env.SESSION_SECRET ??= "unit-test-placeholder-secret-value-not-real-00";
 
 const accounts = [
-  { id: "a1", type: "BANK_ACCOUNT" as const, name: "Хаан банк", accountNumberMasked: "••••5678", terminalId: null, isTest: false },
-  { id: "p1", type: "POS" as const, name: "Голомт POS", accountNumberMasked: "••••1234", terminalId: "TID001", isTest: true },
+  { id: "a1", type: "BANK_ACCOUNT" as const, name: "Хаан банк", accountNumber: "5012345678", terminalId: null, isTest: false },
+  { id: "p1", type: "POS" as const, name: "Голомт POS", accountNumber: "5011111234", terminalId: "TID001", isTest: true },
 ];
 
 test("rows: BANK_ACCOUNT -> transfer group, POS -> card group, each only once", async () => {
@@ -17,6 +17,17 @@ test("rows: BANK_ACCOUNT -> transfer group, POS -> card group, each only once", 
   assert.equal(rows.find((r) => r.choice.bank === "p1")?.label.includes("Туршилт"), true);
   assert.equal(rows[0].choice.method, "CASH");
   assert.equal(rows.at(-1)?.choice.method, "OTHER");
+});
+
+test("rows: registered CASH methods replace the built-in «Бэлэн» row; account numbers are shown in full", async () => {
+  const { buildPaymentRows, choiceBankValue, paymentChoiceSummary } = await import("../app/dashboard/_components/payment-method-modal");
+  const withCash = [...accounts, { id: "c1", type: "CASH" as const, name: "Касс 1", accountNumber: null, terminalId: null, isTest: false }];
+  const rows = buildPaymentRows(withCash, false, false);
+  assert.deepEqual(rows.filter((r) => r.choice.method === "CASH").map((r) => r.choice), [{ method: "CASH", bank: "c1" }]);
+  assert.equal(rows.find((r) => r.choice.bank === "a1")?.label, "Хаан банк · 5012345678");
+  assert.equal(paymentChoiceSummary({ method: "CASH", bank: "c1" }, withCash), "💵 Касс 1 · Бэлэн");
+  assert.equal(choiceBankValue({ method: "CASH", bank: "c1" }), "c1");
+  assert.equal(choiceBankValue({ method: "OTHER", bank: "x" }), "");
 });
 
 test("empty account list leaves only cash/other (+QPay)", async () => {
@@ -96,7 +107,7 @@ test("forwarders: CashEntryForm / SettleForm take the prop they forward; SettleB
 test("modal gate: the add link renders only when props.canManageAccounts, inside the empty-accounts branch", async () => {
   const src = await source("app/dashboard/_components/payment-method-modal.tsx");
   const re =
-    /banks\.length === 0 && !qpayOnly \? \([\s\S]*?PAYMENT_ACCOUNTS_EMPTY[\s\S]*?props\.canManageAccounts \? \([\s\S]*?href="\/dashboard\/banks"[\s\S]*?PAYMENT_ACCOUNTS_ADD_LINK/;
+    /banks\.length === 0 && !qpayOnly \? \([\s\S]*?PAYMENT_ACCOUNTS_EMPTY[\s\S]*?props\.canManageAccounts \? \([\s\S]*?href="\/dashboard\/payment_methods"[\s\S]*?PAYMENT_ACCOUNTS_ADD_LINK/;
   assert.match(src, re);
   assert.doesNotMatch(src.replace("props.canManageAccounts ?", "true ?"), re);
 });

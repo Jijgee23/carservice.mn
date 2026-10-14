@@ -120,7 +120,7 @@ test("settlement document: title, voided, account hint, orders sorted by complet
   const doc = buildSettlementDocument(src as never);
   assert.equal(doc.title, "Тооцооны нэхэмжлэх");
   assert.equal(doc.voided, false);
-  assert.equal(doc.account, "Хаан ··3456", "settlement shows last 4 only");
+  assert.equal(doc.account, "Хаан 5000123456", "settlement shows the full account number");
   assert.deepEqual(doc.orders.map((o) => o.number), ["A", "B"]);
   assert.equal(doc.total, "150000");
 

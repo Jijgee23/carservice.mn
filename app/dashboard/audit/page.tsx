@@ -76,7 +76,8 @@ const ENTITY_LABEL: Record<EntityType, string> = {
   CashTransactionType: "Кассын төрөл",
   CashSession: "Кассын ээлж",
   PostpaidSettlement: "Тооцоо нийлэлт",
-  PaymentAccount: "Төлбөрийн сонголт",
+  PaymentAccount: "Төлбөрийн арга",
+  StockCount: "Барааны тооллого",
 };
 
 const ACTION_OPTIONS = Object.entries(ACTION_LABEL).map(([value, label]) => ({

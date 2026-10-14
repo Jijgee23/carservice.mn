@@ -147,9 +147,9 @@ const navItems: NavItem[] = [
   },
 
   {
-    href: "/dashboard/cash/income",
+    href: "/dashboard/cash/transactions",
     view: "cash.manage",
-    label: "Касс",
+    label: "Касс ба Санхүү",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="2" y="6" width="20" height="12" rx="2" />
@@ -158,12 +158,12 @@ const navItems: NavItem[] = [
       </svg>
     ),
     children: [
-      { href: "/dashboard/cash/income", label: "Орлого" },
-      { href: "/dashboard/cash/expense", label: "Зарлага" },
+      { href: "/dashboard/cash/transactions", label: "Орлого, зарлага" },
       { href: "/dashboard/cash/sessions", label: "Кассын ээлж" },
       { href: "/dashboard/cash/settlements", label: "Тооцоо нийлэлт" },
       { href: "/dashboard/cash/types", label: "Ангилал" },
       { href: "/dashboard/cash/report", label: "Мөнгөн гүйлгээний тайлан" },
+      { href: "/dashboard/payment_methods", label: "Төлбөрийн аргууд" },
     ],
   },
   {
@@ -181,6 +181,7 @@ const navItems: NavItem[] = [
       { href: "/dashboard/services/labor", label: "Ажил", exact: true },
       { href: "/dashboard/services/diagnostics", label: "Оношилгоо" },
       { href: "/dashboard/services/goods", label: "Сэлбэг / Бараа" },
+      { href: "/dashboard/services/stock-counts", label: "Тооллого" },
       {
         href: "/dashboard/services/categories",
         label: "Ангилал",
@@ -219,6 +220,11 @@ const secondaryItems: NavItem[] = [
         <path d="M7 15l3-4 4 3 5-7" />
       </svg>
     ),
+    children: [
+      { href: "/dashboard/reports", label: "Засварын хуудасны тайлан", exact: true, view: PUBLIC_VIEW },
+      // Барааны каталог харах эрхтэй ажилтанд л харагдана (хуудас өөрөө мөн шалгана).
+      { href: "/dashboard/reports/stock", label: "Сэлбэг барааны үлдэгдэл", view: "services" },
+    ],
   },
   {
     href: "/dashboard/settings",
@@ -233,12 +239,9 @@ const secondaryItems: NavItem[] = [
     children: [
       { href: "/dashboard/settings", label: "Байгууллагын", exact: true },
       { href: "/dashboard/settings/system", label: "Системийн" },
-      { href: "/dashboard/settings/qpay", label: "QPay" },
       { href: "/dashboard/settings/subscription", label: "Багц" },
       // `audit.view` эрхтэй (owner биш) ажилтанд бүлэг зөвхөн энэ child-аар харагдана.
       { href: "/dashboard/audit", label: "Аудит лог", view: "audit" },
-      // `cash.manage` эрхтэй (owner биш) ажилтанд мөн зөвхөн энэ child-аар харагдана.
-      { href: "/dashboard/banks", label: "Банк", view: "cash.manage" },
     ],
   },
   {

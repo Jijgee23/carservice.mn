@@ -82,6 +82,9 @@ export type SessionMethodTotal = {
 
 const groupKey = (method: string, bank: string) => `${method}|${bank}`;
 
+/** A shift has one cash drawer: CASH entries group as one row whichever cash account (Бэлэн) they name. */
+const drawerBankKey = (method: string, bankId: string | null | undefined) => (method === "CASH" ? "" : (bankId ?? ""));
+
 /** Live per-(method, bank) totals of a session: non-voided entries of ANY method, one row per group present. */
 export async function sessionMethodTotals(client: SessionClient, tenantId: string, sessionId: string): Promise<SessionMethodTotal[]> {
   const groups = await client.cashTransaction.groupBy({
@@ -92,7 +95,7 @@ export async function sessionMethodTotals(client: SessionClient, tenantId: strin
   });
   const byKey = new Map<string, SessionMethodTotal>();
   for (const g of groups) {
-    const bank = g.bankId ?? "";
+    const bank = drawerBankKey(g.method, g.bankId);
     const key = groupKey(g.method, bank);
     const row = byKey.get(key) ?? { method: g.method as SessionMethod, bank, income: ZERO, expense: ZERO, net: ZERO, count: 0 };
     const amount = new Prisma.Decimal((g._sum?.amount ?? 0).toString());
@@ -124,7 +127,7 @@ export function liveTotalsFromGroups(openingCash: Prisma.Decimal, groups: Readon
   const entryCount = cash.reduce((n, g) => n + (g._count?._all ?? 0), 0);
   const byKey = new Map<string, SessionMethodTotal>();
   for (const g of groups) {
-    const bank = g.bankId ?? "";
+    const bank = drawerBankKey(g.method, g.bankId);
     const key = groupKey(g.method, bank);
     const row = byKey.get(key) ?? { method: g.method as SessionMethod, bank, income: ZERO, expense: ZERO, net: ZERO, count: 0 };
     if (g.direction === "INCOME") row.income = row.income.plus(amountOf(g));

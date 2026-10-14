@@ -45,7 +45,7 @@ export function QPayPanel({
       <div className="flex flex-col gap-2 text-xs text-[var(--oc-muted3)]">
         <p>QPay тохируулаагүй байна. QPay-ээр төлбөр авахын тулд тохиргоог хийнэ үү.</p>
         <a
-          href="/dashboard/settings/qpay"
+          href="/dashboard/payment_methods"
           className="text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)] underline"
         >
           QPay тохиргоо →

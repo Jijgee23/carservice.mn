@@ -7,7 +7,7 @@ import { FormError } from "@/app/_components/auth-shell";
 import { DatePicker } from "@/app/_components/date-picker";
 import { Btn, Field } from "@/app/_components/landing-ops-ui";
 import { Modal } from "@/app/_components/modal";
-import { PaymentMethodModal, paymentChoiceSummary, type PaymentAccountOption, type PaymentChoice } from "../_components/payment-method-modal";
+import { PaymentMethodModal, choiceBankValue, paymentChoiceSummary, type PaymentAccountOption, type PaymentChoice } from "../_components/payment-method-modal";
 import { PosSimulatorModal } from "../_components/pos-simulator";
 import { formatPriceInput, liveFormatPriceInput } from "@/lib/orders";
 import { CustomerPicker } from "./customer-picker";
@@ -23,7 +23,7 @@ type Props = {
   branches: Option[];
   defaultBranchId: string;
   banks: PaymentAccountOption[];
-  /** cash.manage: the empty picker links to /dashboard/banks. */
+  /** cash.manage: the empty picker links to /dashboard/payment_methods. */
   canManageAccounts?: boolean;
   /** Business-day "YYYY-MM-DD" (Asia/Ulaanbaatar). */
   today: string;
@@ -203,7 +203,7 @@ function CashEntryForm({ direction, types, branches, defaultBranchId, branchPinn
       }}
     >
       <input type="hidden" name="method" value={choice.method} />
-      <input type="hidden" name="bank" value={choice.method === "BANK_TRANSFER" || choice.method === "CARD" ? choice.bank : ""} />
+      <input type="hidden" name="bank" value={choiceBankValue(choice)} />
       <input type="hidden" name="direction" value={direction} />
       <input type="hidden" name="attachmentPath" value={attachment?.path ?? ""} />
       <FormError message={state && !state.ok && Object.keys(fieldErrors).length === 0 ? state.message : undefined} />

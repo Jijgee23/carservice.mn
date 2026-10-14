@@ -19,7 +19,7 @@ function failure(error: unknown): PaymentAccountActionState {
 }
 
 function refresh() {
-  revalidatePath("/dashboard/banks");
+  revalidatePath("/dashboard/payment_methods");
   revalidatePath("/dashboard", "layout");
 }
 

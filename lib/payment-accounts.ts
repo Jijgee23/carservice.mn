@@ -1,8 +1,13 @@
-// Tenant-defined payment accounts (Данс / POS). Replaces the fixed catalog in the old lib/banks.ts.
-// BANK_ACCOUNT <-> BANK_TRANSFER, POS <-> CARD. Payments reference an account by bankId (FK).
+// Tenant-defined payment methods (Төлбөрийн аргууд: Бэлэн / Данс / POS). Replaces the fixed catalog in the old lib/banks.ts.
+// CASH <-> CASH, BANK_ACCOUNT <-> BANK_TRANSFER, POS <-> CARD. Payments reference an account by bankId (FK).
+// CASH accounts are optional: a CASH payment without one stays valid (bankId null) — the drawer is one per shift.
 
-export const PAYMENT_ACCOUNT_TYPES = ["BANK_ACCOUNT", "POS"] as const;
+export const PAYMENT_ACCOUNT_TYPES = ["CASH", "BANK_ACCOUNT", "POS"] as const;
 export type PaymentAccountTypeValue = (typeof PAYMENT_ACCOUNT_TYPES)[number];
+
+/** Types a tenant adds itself. «Бэлэн» is not one: every tenant has exactly one, created automatically. */
+export const CREATABLE_PAYMENT_ACCOUNT_TYPES = ["BANK_ACCOUNT", "POS"] as const;
+export const DEFAULT_CASH_ACCOUNT_NAME = "Бэлэн";
 
 /** Төлбөрийн аргууд, банк/данс заавал шаардлагатай. */
 export const BANK_REQUIRED_METHODS: readonly string[] = ["BANK_TRANSFER", "CARD"];
@@ -24,8 +29,14 @@ export const BANK_NAME_SUGGESTIONS: readonly string[] = [
 
 export const TEST_BADGE = "Туршилт";
 export const INACTIVE_SUFFIX = " (идэвхгүй)";
-export const PAYMENT_ACCOUNTS_EMPTY = "Төлбөрийн сонголт бүртгээгүй байна";
-export const PAYMENT_ACCOUNTS_ADD_LINK = "Төлбөрийн сонголт нэмэх";
+export const PAYMENT_ACCOUNTS_EMPTY = "Төлбөрийн арга бүртгээгүй байна";
+export const PAYMENT_ACCOUNTS_ADD_LINK = "Төлбөрийн арга нэмэх";
+
+export const PAYMENT_ACCOUNT_TYPE_LABEL: Record<PaymentAccountTypeValue, string> = {
+  CASH: "Бэлэн",
+  BANK_ACCOUNT: "Данс",
+  POS: "POS",
+};
 
 export type PaymentAccountErrorCode =
   | "PAYMENT_BANK_REQUIRED"
@@ -49,12 +60,14 @@ export class PaymentAccountError extends Error {
 }
 
 export function typeForMethod(method: string): PaymentAccountTypeValue | null {
+  if (method === "CASH") return "CASH";
   if (method === "BANK_TRANSFER") return "BANK_ACCOUNT";
   if (method === "CARD") return "POS";
   return null;
 }
 
-export function methodForType(type: PaymentAccountTypeValue): "BANK_TRANSFER" | "CARD" {
+export function methodForType(type: PaymentAccountTypeValue): "CASH" | "BANK_TRANSFER" | "CARD" {
+  if (type === "CASH") return "CASH";
   return type === "POS" ? "CARD" : "BANK_TRANSFER";
 }
 
@@ -68,6 +81,18 @@ export function normalizeAccountNumber(raw: unknown): string | null {
 export function maskAccountNumber(number: string | null | undefined): string {
   if (!number) return "";
   return `••••${number.length > 4 ? number.slice(-4) : ""}`;
+}
+
+/**
+ * Creates the tenant's one «Бэлэн» row if it is missing (signup; the migration backfilled existing tenants).
+ * skipDuplicates = ON CONFLICT DO NOTHING, so the partial unique index makes concurrent calls safe.
+ */
+export async function ensureCashAccount(
+  client: { paymentAccount: { createMany(args: never): Promise<unknown> } },
+  tenantId: string,
+): Promise<void> {
+  const writer = client.paymentAccount as unknown as { createMany(args: unknown): Promise<unknown> };
+  await writer.createMany({ data: [{ tenantId, type: "CASH", name: DEFAULT_CASH_ACCOUNT_NAME }], skipDuplicates: true });
 }
 
 export type ResolvedPaymentAccount = {
@@ -95,9 +120,11 @@ export type PaymentAccountReader = {
 const RESOLVE_SELECT = { id: true, type: true, name: true, isTest: true, isActive: true, legacyCode: true } as const;
 
 /**
- * Resolves the account a BANK_TRANSFER / CARD payment is recorded against, inside the caller's transaction.
+ * Resolves the account a CASH / BANK_TRANSFER / CARD payment is recorded against, inside the caller's transaction.
  * `raw` is a PaymentAccount id, or (older apps) a legacy bank code such as "KHAN" which maps to this tenant's
- * legacy row of the type the method implies. Other methods return null and ignore `raw`.
+ * legacy row of the type the method implies. CASH: the account is optional — empty `raw`, or anything that is not
+ * one of this tenant's CASH rows (older clients may send a stale bank code), resolves to null as before.
+ * Other methods return null and ignore `raw`.
  * Errors (all 422): REQUIRED, NOT_ENABLED (unknown / other tenant / inactive), TYPE_MISMATCH.
  */
 export async function resolvePaymentAccount(
@@ -109,10 +136,13 @@ export async function resolvePaymentAccount(
   const wantedType = typeForMethod(method);
   if (!wantedType) return null;
   const key = typeof raw === "string" ? raw.trim() : "";
+  if (!key && wantedType === "CASH") return null;
   if (!key) throw new PaymentAccountError("Банк / данс сонгоно уу.", "PAYMENT_BANK_REQUIRED");
   const reader = tx.paymentAccount as unknown as { findFirst(args: unknown): Promise<AccountRow | null> };
   let row = await reader.findFirst({ where: { tenantId, id: key }, select: RESOLVE_SELECT });
-  if (!row) {
+  if (wantedType === "CASH") {
+    if (!row || row.type !== "CASH") return null;
+  } else if (!row) {
     // Legacy bank code from an older client: this tenant's legacy row of the type the method implies.
     row = await reader.findFirst({ where: { tenantId, legacyCode: key, type: wantedType }, select: RESOLVE_SELECT });
   }
@@ -140,16 +170,16 @@ type AccountHintSource = { type: string; accountNumber?: string | null; terminal
 
 /**
  * Short identifier that tells same-named accounts apart: POS -> «TID …» (falls back to the account number),
- * account -> last 4 characters of the number only («··1234») — the full number is never shown here.
+ * account -> the full account number. CASH has none.
  */
 export function paymentAccountHint(account: AccountHintSource): string | null {
   const tid = account.terminalId?.trim();
   if (account.type === "POS" && tid) return `TID ${tid}`;
   const number = account.accountNumber?.replace(/\s+/g, "") ?? "";
-  return number ? `··${number.slice(-4)}` : null;
+  return number || null;
 }
 
-/** Full display label: «Нэр ··1234 · Туршилт (идэвхгүй)». Used where accounts are listed side by side (shift, report). */
+/** Full display label: «Нэр 5012345678 · Туршилт (идэвхгүй)». Used where accounts are listed side by side (shift, report). */
 export function paymentAccountLabel(account: AccountHintSource & { name: string; isTest: boolean; isActive: boolean }): string {
   const hint = paymentAccountHint(account);
   return `${account.name}${hint ? ` ${hint}` : ""}${account.isTest ? ` · ${TEST_BADGE}` : ""}${account.isActive ? "" : INACTIVE_SUFFIX}`;

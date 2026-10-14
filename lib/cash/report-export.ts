@@ -26,6 +26,26 @@ export async function buildCashSummaryWorkbook(summary: CashSummary) {
     { label: "Дотоод зардал", value: num(summary.internalCost.total) },
   ]);
 
+  // Detailed by-method report (same figures as the page table): one line per method, then its accounts.
+  const detailRows: Array<Record<string, unknown>> = [];
+  for (const m of summary.byMethodDetail) {
+    const figures = (f: CashSummary["byMethodDetail"][number]["accounts"][number] | CashSummary["byMethodDetail"][number]) => ({
+      incomeCount: f.incomeCount, income: num(f.income), expenseCount: f.expenseCount, expense: num(f.expense), net: num(f.net),
+    });
+    detailRows.push({ method: m.methodLabel, account: "", ...figures(m), share: Number(m.incomeShare) });
+    for (const a of m.accounts) detailRows.push({ method: m.methodLabel, account: a.bankLabel, ...figures(a), share: null });
+  }
+  sheet("Арга — дэлгэрэнгүй", [
+    { header: "Төлбөрийн арга", key: "method", width: 18 },
+    { header: "Данс / POS", key: "account", width: 30 },
+    { header: "Орлого (тоо)", key: "incomeCount", width: 12 },
+    { header: "Орлого", key: "income", width: 16 },
+    { header: "Зарлага (тоо)", key: "expenseCount", width: 12 },
+    { header: "Зарлага", key: "expense", width: 16 },
+    { header: "Цэвэр", key: "net", width: 16 },
+    { header: "Орлогын хувь (%)", key: "share", width: 14 },
+  ], detailRows);
+
   const methodRows: Array<Record<string, unknown>> = [];
   for (const m of summary.incomeByMethod) {
     methodRows.push({ method: m.methodLabel, bank: "", total: num(m.total), count: m.count });

@@ -195,8 +195,8 @@ export default async function CashSessionDetailPage({ params }: { params: Promis
         {truncated.entries ? (
           <p className="px-5 py-3 text-xs text-[var(--oc-muted3)] border-t border-[var(--oc-line)]">
             Сүүлийн {truncated.cap} бичлэгийг харуулав ({totals.count} бичлэгээс); дээрх нийлбэр бүх бичлэгийг хамарна. Бүрэн жагсаалтыг{" "}
-            <Link href="/dashboard/cash/income" className="text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)]">
-              орлогын жагсаалт
+            <Link href="/dashboard/cash/transactions" className="text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)]">
+              орлого, зарлагын жагсаалт
             </Link>{" "}
             дээрээс шүүж үзнэ үү.
           </p>
