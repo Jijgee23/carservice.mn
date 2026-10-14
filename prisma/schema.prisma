@@ -105,10 +105,10 @@ model User {
 
   // Гар түр хаах flag. true бол ажилтан хэвийн ажиллана. Манагер цаг
   // үе гарваал false болгож login-г блоклож болно (бичлэг нь хадгалагдана).
-  isActive    Boolean   @default(true)
+  isActive      Boolean   @default(true)
   // Түр ажиллах ажилтан үүсгэх үед энэ огноо тогтооно. Энэ огнооноос хойш
   // нэвтрэх оролдлого хийвэл automatically блоклогдоно. null бол байнгын.
-  activeUntil DateTime?
+  activeUntil   DateTime?
   // Хэрэглэгч өөрөө түр хаасан. Дахин нэвтрэхэд null болно (isActive-аас тусдаа —
   // isActive=false бол админ блоклосон, нэвтрэлтээр сэргэхгүй).
   deactivatedAt DateTime?
@@ -1606,12 +1606,12 @@ model Otp {
 // Цаг захиалах үед тухайн тенантын [[Customer]]-той утсаар нь холбогдоно
 // (Customer.accountId). User (ажилтан) болон SuperAdmin-аас тусдаа principal.
 model Account {
-  id        String  @id @default(cuid())
-  phone     String  @unique // 8 оронтой канон формат (lib/phone.ts)
-  name      String?
-  email     String?
-  avatarUrl String?
-  isActive  Boolean @default(true) // false бол нэвтрэлт блоклогдоно
+  id            String    @id @default(cuid())
+  phone         String    @unique // 8 оронтой канон формат (lib/phone.ts)
+  name          String?
+  email         String?
+  avatarUrl     String?
+  isActive      Boolean   @default(true) // false бол нэвтрэлт блоклогдоно
   // Хэрэглэгч өөрөө түр хаасан. Дахин нэвтрэхэд null болно (isActive-аас тусдаа —
   // isActive=false бол админ блоклосон, нэвтрэлтээр сэргэхгүй).
   deactivatedAt DateTime?
