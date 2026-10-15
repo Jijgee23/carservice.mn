@@ -13,6 +13,8 @@ export function accountTombstone(id: string, now: Date) {
     name: null,
     email: null,
     avatarUrl: null,
+    passwordHash: null,
+    passwordUpdatedAt: null,
     isActive: false,
     deactivatedAt: null,
     deletedAt: now,

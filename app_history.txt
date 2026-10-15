@@ -6,6 +6,28 @@ CARCARE.MN — Хөгжүүлэлтийн түүх (Dev history)
 
 
 ------------------------------------------------------------------------
+2026-10-15  ·  суурь commit 0a20ab8 (kass & finance, item balance report etc, bugs)
+------------------------------------------------------------------------
+
+Үйлчлүүлэгч (Account) — заавал биш нууц үг, нууц үг эсвэл OTP-оор нэвтрэх
+------------------------------------------------------------------------
+- Schema: Account.passwordHash / passwordUpdatedAt (nullable), OtpType ACCOUNT_PASSWORD
+  (migration 20261015090000_account_password). Устгасан (tombstone) Account-ийн нууц үг мөн арилна.
+- lib/auth/account-password.ts: validate (8–128, үсэг + тоо), verifyAccountPassword — бүртгэлгүй дугаар /
+  нууц үггүй / буруу нууц үг ижил хариу, байхгүй үед dummy bcrypt (timing), утсаар 10/15 мин хязгаар (OTP
+  нэвтрэлтэд нөлөөлөхгүй), блоклогдсоныг зөвхөн зөв нууц үгийн дараа хэлнэ; шинэ Account үүсгэхгүй.
+  Тохируулах / солих / устгахад ШИНЭ ACCOUNT_PASSWORD SMS код заавал (нээлттэй session ганцаараа нууц үг
+  нэмж чадахгүй); «нууц үгээ мартсан» = кодоор нэвтэрч шинэчилнэ.
+- Web: /login — «Кодоор / Нууц үгээр» таб (accountLoginAction mode=password, IP 30/15 мин); шинэ
+  /account/security «Нууц үг» хуудас (тохируулах / солих / устгах, «Код авах»), consumer sidebar-д холбоос.
+- Mobile API: POST /api/v1/app/auth/login-password; GET/PUT/DELETE /api/v1/app/account/password;
+  POST /api/v1/app/account/password/request-otp; verify-otp хариунд account.hasPassword. API docs шинэчлэв.
+- Шалгалт: route handler-уудыг шинэ Prisma client-ээр шууд дуудаж бүх урсгал (буруу/дахин ашигласан код, сул
+  нууц үг, буруу нууц үг, бүртгэлгүй дугаар, блок, устгах) зөв; туршилтын өгөгдлийг устгасан. Ажиллаж буй
+  dev server (14-нөөс хойш) хуучин Prisma client-тэй тул restart хийтэл шинэ route 500 өгнө.
+  Тест: tests/customer-account-password.test.ts (6). Бүтэн suite 51 fail = baseline.
+
+------------------------------------------------------------------------
 2026-10-14  ·  суурь commit f2f5ef6 (Show payment-account identifiers on cash shift and report ...)
 ------------------------------------------------------------------------
 

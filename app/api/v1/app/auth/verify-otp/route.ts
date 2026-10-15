@@ -68,6 +68,6 @@ export async function POST(req: Request) {
   return jsonOk({
     accessToken,
     reactivated,
-    account: { id: account.id, phone: account.phone, name: account.name },
+    account: { id: account.id, phone: account.phone, name: account.name, hasPassword: Boolean(account.passwordHash) },
   });
 }

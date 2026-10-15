@@ -1658,6 +1658,7 @@ enum OtpType {
   CONSUMER_LOGIN // онлайн цаг захиалгын Account утсаар нэвтрэх
   SET_PASSWORD // ажилтны анхны нэвтрэлт — нууц үг үүсгэж аккаунт идэвхжүүлэх
   ACCOUNT_CLOSE // аккаунт хаах/устгах баталгаажуулалт
+  ACCOUNT_PASSWORD // Account нууц үг тохируулах/солих/устгах баталгаажуулалт
 }
 
 model Otp {
@@ -1691,17 +1692,21 @@ model Otp {
 // Цаг захиалах үед тухайн тенантын [[Customer]]-той утсаар нь холбогдоно
 // (Customer.accountId). User (ажилтан) болон SuperAdmin-аас тусдаа principal.
 model Account {
-  id            String    @id @default(cuid())
-  phone         String    @unique // 8 оронтой канон формат (lib/phone.ts)
-  name          String?
-  email         String?
-  avatarUrl     String?
-  isActive      Boolean   @default(true) // false бол нэвтрэлт блоклогдоно
+  id                String    @id @default(cuid())
+  phone             String    @unique // 8 оронтой канон формат (lib/phone.ts)
+  name              String?
+  email             String?
+  avatarUrl         String?
+  // Заавал биш: тохируулсан бол утас + нууц үгээр нэвтэрч болно (OTP-оор нэвтрэх үргэлж боломжтой).
+  // Тохируулах/солих/устгахад шинэ ACCOUNT_PASSWORD OTP шаардана (lib/auth/account-password.ts).
+  passwordHash      String?
+  passwordUpdatedAt DateTime?
+  isActive          Boolean   @default(true) // false бол нэвтрэлт блоклогдоно
   // Хэрэглэгч өөрөө түр хаасан. Дахин нэвтрэхэд null болно (isActive-аас тусдаа —
   // isActive=false бол админ блоклосон, нэвтрэлтээр сэргэхгүй).
-  deactivatedAt DateTime?
+  deactivatedAt     DateTime?
   // Бүрмөсөн устгасан (PII арилгасан tombstone). Буцаагдахгүй.
-  deletedAt     DateTime?
+  deletedAt         DateTime?
 
   lastLoginAt DateTime?
   createdAt   DateTime  @default(now())

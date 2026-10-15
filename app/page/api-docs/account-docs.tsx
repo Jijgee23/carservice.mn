@@ -39,6 +39,47 @@ Res:  200 {
 403  { "error": "Энэ дугаар түр хаагдсан байна." }`}</Code>
         </Endpoint>
 
+        <Endpoint
+          method="POST"
+          path="/api/v1/app/auth/login-password"
+          auth="public"
+          tags={["Rate limit: 30/15 мин (IP), 10/15 мин (утас)"]}
+          title="Нууц үгээр нэвтрэх (кодын оронд). Зөвхөн нууц үг тохируулсан Account; шинэ Account үүсгэхгүй."
+        >
+          <Code>{`Req:  { "phone": "99112233", "password": "..." }
+Res:  200 { "accessToken": "<JWT>", "reactivated": false,
+            "account": { "id": "...", "phone": "99112233", "name": "Бат" | null, "hasPassword": true } }   // verify-otp-той ижил
+400  { "error": "Утасны дугаар буруу." } | { "error": "Нууц үг шаардлагатай." }
+401  { "error": "Утасны дугаар эсвэл нууц үг буруу байна.", "code": "INVALID_CREDENTIALS" }   // дугаар бүртгэлгүй / нууц үггүй ч ижил
+403  { "error": "Энэ дугаар түр хаагдсан байна.", "code": "ACCOUNT_BLOCKED" }
+429  { "error": "...", "code": "RATE_LIMITED" }   // энэ дугаарт хэт олон буруу оролдлого — кодоор нэвтрэх боломжтой хэвээр
+// verify-otp-ийн account-д мөн "hasPassword" ирнэ — апп «Нууц үгээр нэвтрэх» сонголтыг харуулахад ашиглана.`}</Code>
+        </Endpoint>
+
+        <Endpoint method="GET" path="/api/v1/app/account/password" auth="bearer" title="Нууц үг тохируулсан эсэх.">
+          <Code>{`Res:  200 { "hasPassword": true, "updatedAt": "2026-10-15T02:00:00.000Z" | null }`}</Code>
+        </Endpoint>
+
+        <Endpoint method="POST" path="/api/v1/app/account/password/request-otp" auth="bearer" tags={["Rate limit: 5/10 мин"]} title="Нууц үг тохируулах/солих/устгахад шаардлагатай SMS кодыг бүртгэлтэй утсанд илгээх.">
+          <Code>{`Req:  {}
+Res:  200 { "ok": true, "maskedPhone": "******33" }
+429  { "error": "<throttle мессеж>" }`}</Code>
+        </Endpoint>
+
+        <Endpoint method="PUT" path="/api/v1/app/account/password" auth="bearer" tags={["Rate limit: 10/10 мин"]} title="Нууц үг тохируулах эсвэл солих (request-otp-оор авсан код заавал).">
+          <Code>{`Req:  { "code": "123456", "password": "Shine2026" }   // 8–128 тэмдэгт, үсэг + тоо
+Res:  200 { "ok": true, "hasPassword": true }
+422  { "error": "...", "code": "PASSWORD_INVALID", "fieldErrors": { "password": "..." } }
+422  { "error": "Код буруу байна.", "code": "OTP_INVALID", "fieldErrors": { "code": "..." } }`}</Code>
+        </Endpoint>
+
+        <Endpoint method="DELETE" path="/api/v1/app/account/password" auth="bearer" tags={["Rate limit: 10/10 мин"]} title="Нууц үг устгах — цаашид зөвхөн кодоор нэвтэрнэ.">
+          <Code>{`Req:  { "code": "123456" }
+Res:  200 { "ok": true, "hasPassword": false }
+422  { "error": "Код буруу байна.", "code": "OTP_INVALID", "fieldErrors": { "code": "..." } }
+// Нууц үгээ мартсан: кодоор нэвтэрч (verify-otp), дараа нь PUT-оор шинийг тохируулна.`}</Code>
+        </Endpoint>
+
         <div className="rounded-[10px] border border-[var(--oc-accent)]/25 bg-[var(--oc-accent)]/[0.06] p-4">
           <p className="text-sm text-[var(--oc-ink2)]">
             <strong>Алхам 3 — токен ашиглах.</strong> Цаашид бүх auth

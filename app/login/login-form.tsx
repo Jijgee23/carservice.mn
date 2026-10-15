@@ -18,6 +18,10 @@ export function AccountLoginForm() {
 
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
+  // «Нэг удаагийн кодоор» (OTP) эсвэл «Нууц үгээр» — нууц үг тохируулсан хэрэглэгчид л хоёр дахь нь ажиллана.
+  const [mode, setMode] = useState<"otp" | "password">("otp");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const lockedPhone = state?.phone ?? phone;
 
@@ -32,7 +36,30 @@ export function AccountLoginForm() {
       )}
 
       {!awaiting ? (
+        <div role="tablist" aria-label="Нэвтрэх арга" className="grid grid-cols-2 gap-1 rounded-[10px] border border-[var(--oc-line)] p-1">
+          {(
+            [
+              ["otp", "Нэг удаагийн кодоор"],
+              ["password", "Нууц үгээр"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={mode === value}
+              onClick={() => setMode(value)}
+              className={`rounded-lg py-2 text-sm transition-colors ${mode === value ? "bg-[var(--oc-accent)]/15 text-[var(--oc-ink)] ring-1 ring-[var(--oc-accent)]/40 font-medium" : "text-[var(--oc-muted3)] hover:text-[var(--oc-ink)]"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {!awaiting ? (
         <>
+          {mode === "password" ? <input type="hidden" name="mode" value="password" /> : null}
           <Field label="Утасны дугаар" htmlFor="phone" error={fe.phone}>
             <input
               id="phone"
@@ -47,7 +74,41 @@ export function AccountLoginForm() {
               placeholder="99112233"
             />
           </Field>
-          <SubmitButton pending={pending}>Код авах →</SubmitButton>
+          {mode === "password" ? (
+            <>
+              <Field label="Нууц үг" htmlFor="password" error={fe.password}>
+                <div className="relative">
+                  <input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className={`auth-input pr-14 ${fe.password ? "border-red-500/50" : ""}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--oc-muted3)] hover:text-[var(--oc-ink2)]"
+                  >
+                    {showPassword ? "Нуух" : "Харах"}
+                  </button>
+                </div>
+              </Field>
+              <SubmitButton pending={pending}>Нэвтрэх →</SubmitButton>
+              <p className="text-center text-xs text-[var(--oc-muted3)]">
+                Нууц үгээ мартсан эсвэл тохируулаагүй бол{" "}
+                <button type="button" onClick={() => setMode("otp")} className="underline hover:text-[var(--oc-accent-hi)]">
+                  нэг удаагийн кодоор нэвтэрнэ
+                </button>{" "}
+                үү. Нэвтэрсний дараа «Нууц үг» хэсэгт тохируулна.
+              </p>
+            </>
+          ) : (
+            <SubmitButton pending={pending}>Код авах →</SubmitButton>
+          )}
         </>
       ) : (
         <>
