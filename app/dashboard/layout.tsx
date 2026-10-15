@@ -15,6 +15,7 @@ import { ALL_BRANCHES } from "@/lib/auth/session";
 import { resolveTodayLockedBranch } from "@/lib/employee-branch-lock";
 import { prisma } from "@/lib/prisma";
 import { getSubscriptionState } from "@/lib/subscription-server";
+import { setTenantContext } from "@/lib/tenant-context";
 
 // Ops Console дизайны фонт — landing/auth хуудсуудтай ижил механизм, зөвхөн
 // dashboard route-д scoped (бусад апп — account/system — Geist хэвээр).
@@ -35,6 +36,11 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const user = await requireUser();
+  // requireUser() нь cache()-тэй бөгөөд context-оо өөрийн async frame дотор тавьдаг — layout нь page-тэй зэрэгцэн
+  // render хийгддэг тул тэр context энд үргэлж дамждаггүй байсан (прод: «Tenant context тохируулагдаагүй
+  // (Notification.count)», /dashboard-ийн ~20% нь 500). Тиймээс layout өөрөө, query-үүдийнхээ өмнө тавина
+  // ((app)/layout.tsx-ийн setBypassContext()-тэй ижил зарчим).
+  setTenantContext(user.tenantId);
   const initials =
     (user.firstName[0] ?? "") + (user.lastName[0] ?? "");
   const userName = `${user.firstName} ${user.lastName}`.trim();
