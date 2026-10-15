@@ -249,6 +249,14 @@ export async function resolveTakenAppointmentIntervals(
  * Appointments linked to an active order are counted through the order only,
  * preventing the same vehicle/job from consuming capacity twice.
  */
+/**
+ * An in-progress order with no finish estimate is treated as still on the lift — but only for this many days after
+ * it started. Older ones are almost always jobs nobody closed (prod 2026-10-15: June–September IN_PROGRESS orders
+ * blocked every online-booking slot of a capacity-1 branch, forever). The staff calendar still shows them with its
+ * «missing-estimate / unknown-occupancy» warnings until someone completes or cancels them.
+ */
+export const UNKNOWN_END_OCCUPANCY_DAYS = 7;
+
 export async function resolveTakenCapacityIntervals(
   client: PrismaTransactionClient,
   branchId: string,
@@ -368,12 +376,13 @@ export async function resolveTakenCapacityIntervals(
           // Missing/unknown estimate: conservatively occupy through end of
           // day, unless this is a scheduled order, where one branch slot is
           // the same bounded estimate used by the calendar and conflict
-          // checker.
+          // checker — and never beyond UNKNOWN_END_OCCUPANCY_DAYS after the
+          // start, so a forgotten in-progress order stops blocking bookings.
           const end = current.end != null && Number.isFinite(current.end.getTime())
             ? current.end.getTime()
             : o.status === "SCHEDULED" && o.scheduledAt != null
               ? start + fallbackMinutes * 60000
-              : dayEnd.getTime();
+              : Math.min(dayEnd.getTime(), start + UNKNOWN_END_OCCUPANCY_DAYS * 86_400_000);
           if (end > dayStart.getTime()) out.push({ startMs: start, endMs: end });
         }
       }
