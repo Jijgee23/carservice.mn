@@ -1,6 +1,7 @@
 import { enforceRateLimit, jsonError, jsonOk } from "@/lib/api";
 import { checkUserActive } from "@/lib/auth/active";
 import { buildApiLoginResponse } from "@/lib/auth/api-login";
+import { parseLoginDevice } from "@/lib/auth/login-device";
 import { IDENTIFIER_ERROR, loginIdentifierFromBody } from "@/lib/auth/login-identifier";
 import { verifyPassword } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
@@ -9,10 +10,12 @@ import { setBypassContext } from "@/lib/tenant-context";
 const MAX_LOGIN_ATTEMPTS = 5;
 
 /**
- * POST /api/v1/auth/login  { identifier, password } → access/refresh token
+ * POST /api/v1/auth/login
+ *   { identifier, password, type: "ios" | "android", fcm, model, os, loc?: { lat, lng } } → access/refresh token
  *
- * `identifier` — имэйл эсвэл утасны дугаар (99112233, 9911-2233, +976...).
- * Хуучин клиентийн `{ email, password }` (эсвэл `{ phone, password }`) хэвээр ажиллана.
+ * `identifier` — имэйл эсвэл утасны дугаар (99112233, 9911-2233, +976...); хуучин `email` / `phone` түлхүүр ч хүчинтэй.
+ * type / fcm / model / os заавал (хаанаас, ямар төхөөрөмжөөс нэвтэрснийг session-д хадгална, fcm-ээр push бүртгэнэ);
+ * loc заавал биш.
  */
 export async function POST(req: Request) {
   // Нэвтрэхээс өмнө — session/tenant хараахан байхгүй.
@@ -41,6 +44,10 @@ export async function POST(req: Request) {
   }
   const id = loginIdentifierFromBody(body);
   if (!id) return jsonError(400, IDENTIFIER_ERROR);
+  const parsedDevice = parseLoginDevice(body);
+  if (!parsedDevice.ok) {
+    return jsonError(400, Object.values(parsedDevice.fieldErrors)[0], { code: "VALIDATION", fieldErrors: parsedDevice.fieldErrors });
+  }
 
   const user = await prisma.user.findUnique({
     where: id,
@@ -118,5 +125,5 @@ export async function POST(req: Request) {
     });
   }
 
-  return jsonOk({ ...(await buildApiLoginResponse(user, req)), reactivated });
+  return jsonOk({ ...(await buildApiLoginResponse(user, req, parsedDevice.device)), reactivated });
 }

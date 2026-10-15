@@ -1,6 +1,7 @@
 import { enforceRateLimit, jsonError, jsonOk } from "@/lib/api";
 import { checkUserActive } from "@/lib/auth/active";
 import { buildApiLoginResponse } from "@/lib/auth/api-login";
+import { parseLoginDevice } from "@/lib/auth/login-device";
 import { IDENTIFIER_ERROR, loginIdentifierFromBody } from "@/lib/auth/login-identifier";
 import { revokeAllOtps, verifyOtp } from "@/lib/auth/otp";
 import { hashPassword } from "@/lib/auth/password";
@@ -49,6 +50,11 @@ export async function POST(req: Request) {
   }
   if (pwd.length < 8) {
     return jsonError(400, "Нууц үг хамгийн багадаа 8 тэмдэгт байх ёстой.");
+  }
+  // Same device fields as /auth/login: this call signs the user in and registers the push device.
+  const parsedDevice = parseLoginDevice(body);
+  if (!parsedDevice.ok) {
+    return jsonError(400, Object.values(parsedDevice.fieldErrors)[0], { code: "VALIDATION", fieldErrors: parsedDevice.fieldErrors });
   }
 
   const user = await prisma.user.findUnique({
@@ -118,5 +124,5 @@ export async function POST(req: Request) {
     summary: `${user.email} · аккаунт идэвхжүүлэв (mobile)`,
   });
 
-  return jsonOk(await buildApiLoginResponse(user, req));
+  return jsonOk(await buildApiLoginResponse(user, req, parsedDevice.device));
 }

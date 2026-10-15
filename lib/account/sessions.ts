@@ -14,6 +14,7 @@
 // Session ids from the two tables can collide in theory, so callers must
 // always address a row by (source, id) together, never `id` alone.
 
+import { loginDeviceLabel, loginLocationUrl } from "@/lib/auth/login-device";
 import { deviceLabel, sessionStatus, type SessionStatus } from "@/lib/auth/user-session";
 import type { AccountClient } from "./types";
 
@@ -23,6 +24,10 @@ export type AccountSessionDto = {
   id: string;
   source: AccountSessionSource;
   deviceLabel: string;
+  /** Mobile login: "IOS" | "ANDROID" (null for web / older mobile sessions). */
+  deviceType: string | null;
+  /** Where the mobile login happened, when the app sent it. */
+  location: { lat: number; lng: number; mapUrl: string } | null;
   ip: string | null;
   createdAt: Date;
   lastActivityAt: Date | null;
@@ -62,6 +67,11 @@ type SessionLikeRow = {
   lastUsedAt?: Date | null;
   expiresAt: Date;
   revokedAt: Date | null;
+  deviceType?: string | null;
+  deviceModel?: string | null;
+  deviceOs?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 function toDto(
@@ -72,7 +82,14 @@ function toDto(
   return {
     id: row.id,
     source,
-    deviceLabel: deviceLabel(row.userAgent),
+    deviceLabel:
+      loginDeviceLabel({ deviceModel: row.deviceModel ?? null, deviceOs: row.deviceOs ?? null, deviceType: row.deviceType ?? null }) ??
+      deviceLabel(row.userAgent),
+    deviceType: row.deviceType ?? null,
+    location:
+      row.latitude != null && row.longitude != null
+        ? { lat: row.latitude, lng: row.longitude, mapUrl: loginLocationUrl(row.latitude, row.longitude)! }
+        : null,
     ip: row.ip,
     createdAt: row.createdAt,
     lastActivityAt: row.lastSeenAt ?? row.lastUsedAt ?? null,
@@ -116,6 +133,11 @@ export async function listAccountSessions(
     lastUsedAt: true,
     expiresAt: true,
     revokedAt: true,
+    deviceType: true,
+    deviceModel: true,
+    deviceOs: true,
+    latitude: true,
+    longitude: true,
   } as const;
 
   const now = new Date();

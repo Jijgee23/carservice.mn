@@ -191,6 +191,14 @@ export default async function ProfilePage({
                       </div>
                       <div className="font-plex-mono text-xs text-[var(--oc-muted3)] tabular-nums">
                         {s.ip ?? "—"} · Сүүлд: {formatDateTime(s.lastActivityAt ?? s.createdAt)}
+                        {s.location ? (
+                          <>
+                            {" · "}
+                            <a href={s.location.mapUrl} target="_blank" rel="noreferrer" className="text-[var(--oc-accent)] hover:underline">
+                              Байршил
+                            </a>
+                          </>
+                        ) : null}
                       </div>
                     </div>
                     <ConfirmForm

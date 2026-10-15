@@ -44,7 +44,19 @@ Res:  200 { "status": "not_registered", "identifier": "...", "message": "..." }
           tags={["Rate limit: 10/60с (IP)"]}
           title="Идэвхжсэн хэрэглэгчийн нэвтрэлт (status=password үед)."
         >
-          <Code>{`Req:  { "identifier": "manager@example.com" | "99112233", "password": "..." }
+          <Code>{`Req:  {
+  "identifier": "manager@example.com" | "99112233",
+  "password": "...",
+  "type": "ios" | "android",                 // заавал
+  "fcm": "<Firebase push token>",            // заавал — энэ ажилтны push төхөөрөмжөөр бүртгэгдэнэ
+  "model": "iPhone 15 Pro" | "SM-S918B",     // заавал, ≤100 тэмдэгт
+  "os": "iOS 18.1" | "Android 14",           // заавал, ≤100 тэмдэгт
+  "loc": { "lat": 47.918, "lng": 106.917 },  // заавал биш — нэвтэрсэн байршил
+  "deviceId": "<аппын install id>"           // заавал биш, 8–128 тэмдэгт — POST /devices-д ашигладагтай ИЖИЛ id илгээвэл
+}                                            // FCM token солигдсон ч нэг утас нэг Device мөр хэвээр
+// Нэвтрэлт push төхөөрөмжийг өөрөө бүртгэнэ — тусдаа POST /api/v1/devices дуудах шаардлагагүй.
+// Төхөөрөмж, байршил нь энэ нэвтрэлтийн session-д хадгалагдана (refresh хийхэд хэвээр) —
+// GET /api/v1/me/sessions-ийн мөр бүрт deviceLabel ("iPhone 15 Pro · iOS 18.1"), deviceType, location { lat, lng, mapUrl } | null.
 Res:  200 {
   "accessToken": "<JWT>", "accessTokenExpiresInSeconds": 86400,
   "refreshToken": "<token>", "refreshTokenExpiresInSeconds": ..., "refreshTokenExpiresAt": "2026-...",
@@ -54,6 +66,7 @@ Res:  200 {
     "branchId": "..." | null, "tenant": { "id": "...", "name": "Инфосистемс" }
   }
 }
+400 { "error": "...", "code": "VALIDATION", "fieldErrors": { "type" | "fcm" | "model" | "os" | "loc": "..." } }
 401 { "error": "Нэвтрэх нэр эсвэл нууц үг буруу." }
 423 { "error": "Хэт олон удаа буруу оролдсон тул аккаунт түгжигдсэн. Нууц үгээ сэргээнэ үү." }
 403 { "error": "Энэ аккаунт идэвхжээгүй байна. Веб дээр анхны нэвтрэлт хийж нууц үгээ үүсгэнэ үү." }
@@ -79,7 +92,8 @@ Res:  200 { "sent": true, "maskedPhone": "99***33", "message": "..." }
           tags={["Rate limit: 10/60с (IP)"]}
           title="OTP код баталгаажуулж, шинэ нууц үг тохируулан идэвхжүүлэх."
         >
-          <Code>{`Req:  { "identifier": "manager@example.com" | "99112233", "code": "123456", "password": "минимум 8 тэмдэгт" }
+          <Code>{`Req:  { "identifier": "manager@example.com" | "99112233", "code": "123456", "password": "минимум 8 тэмдэгт",
+        "type", "fcm", "model", "os", "loc"?, "deviceId"? }   // төхөөрөмжийн талбарууд /auth/login-тэй ижил (заавал)
 Res:  200 { same shape as /auth/login }
 400  { "error": "6 оронтой код шаардлагатай." } | { "error": "Нууц үг хамгийн багадаа 8 тэмдэгт байх ёстой." }
 401  { "error": "Кодны хугацаа дууссан. Шинээр код илгээнэ үү." }
@@ -133,9 +147,11 @@ Res:  200 { "accessToken": "...", "accessTokenExpiresInSeconds": 86400,
 401 { "error": "Refresh token хүчингүй.", "reason": "invalid" }`}</Code>
         </Endpoint>
 
-        <Endpoint method="POST" path="/api/v1/auth/logout" auth="public" title="Тухайн төхөөрөмжийн refreshToken-ийг цуцлах.">
+        <Endpoint method="POST" path="/api/v1/auth/logout" auth="public" title="Тухайн төхөөрөмжийн refreshToken-ийг цуцалж, энэ нэвтрэлтээр бүртгэгдсэн push төхөөрөмжийг устгах.">
           <Code>{`Req:  { "refreshToken": "<token>" }
-Res:  200 { "ok": true }`}</Code>
+Res:  200 { "ok": true, "deviceRemoved": true | false }
+// Тусдаа DELETE /api/v1/devices/{deviceId} дуудах шаардлагагүй. Тэр утсанд хойно нь өөр ажилтан нэвтэрсэн бол
+// (төхөөрөмж түүнд шилжсэн) устгахгүй — deviceRemoved: false.`}</Code>
         </Endpoint>
 
         <div className="rounded-[10px] border border-[var(--oc-accent)]/25 bg-[var(--oc-accent)]/[0.06] p-4">

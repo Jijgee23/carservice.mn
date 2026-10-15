@@ -18,10 +18,22 @@ function generateRaw(): string {
   return randomBytes(32).toString("base64url");
 }
 
+export type RefreshTokenDevice = {
+  deviceType: "IOS" | "ANDROID";
+  deviceModel: string;
+  deviceOs: string;
+  latitude: number | null;
+  longitude: number | null;
+  /** Device.id registered by this login (deleted again on logout). */
+  pushDeviceId?: string | null;
+};
+
 export type IssueRefreshOptions = {
   userId: string;
   userAgent?: string | null;
   ip?: string | null;
+  /** Mobile login device + location (POST /api/v1/auth/login). */
+  device?: RefreshTokenDevice | null;
 };
 
 export async function issueRefreshToken(
@@ -37,6 +49,7 @@ export async function issueRefreshToken(
       userId: opts.userId,
       userAgent: opts.userAgent ?? null,
       ip: opts.ip ?? null,
+      ...(opts.device ?? {}),
       expiresAt,
     },
     select: { id: true },
@@ -68,6 +81,13 @@ export async function rotateRefreshToken(
       expiresAt: true,
       revokedAt: true,
       replacedById: true,
+      // The login device / location belongs to the whole rotation chain.
+      deviceType: true,
+      deviceModel: true,
+      deviceOs: true,
+      latitude: true,
+      longitude: true,
+      pushDeviceId: true,
     },
   });
   if (!existing) return { ok: false, reason: "invalid" };
@@ -106,6 +126,12 @@ export async function rotateRefreshToken(
         userId: existing.userId,
         userAgent: opts.userAgent ?? null,
         ip: opts.ip ?? null,
+        deviceType: existing.deviceType,
+        deviceModel: existing.deviceModel,
+        deviceOs: existing.deviceOs,
+        latitude: existing.latitude,
+        longitude: existing.longitude,
+        pushDeviceId: existing.pushDeviceId,
         expiresAt: newExpiresAt,
       },
       select: { id: true },
@@ -133,12 +159,14 @@ export async function rotateRefreshToken(
 /**
  * Тухайн token-ыг revoke. Олдохгүй ч false-г буцаахгүй (idempotent).
  */
-export async function revokeRefreshToken(rawToken: string): Promise<void> {
+export async function revokeRefreshToken(rawToken: string): Promise<{ userId: string; pushDeviceId: string | null } | null> {
   const tokenHash = hashToken(rawToken);
+  const row = await prisma.refreshToken.findUnique({ where: { tokenHash }, select: { userId: true, pushDeviceId: true } });
   await prisma.refreshToken.updateMany({
     where: { tokenHash, revokedAt: null },
     data: { revokedAt: new Date() },
   });
+  return row;
 }
 
 /**

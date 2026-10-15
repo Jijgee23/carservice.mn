@@ -9,10 +9,29 @@ import {
   ACCESS_TOKEN_MAX_AGE_SECONDS,
   signApiToken,
 } from "@/lib/auth/api-token";
+import { createHash } from "node:crypto";
+import type { LoginDevice } from "@/lib/auth/login-device";
 import {
   REFRESH_TOKEN_MAX_AGE_SECONDS,
   issueRefreshToken,
 } from "@/lib/auth/refresh-token";
+import { registerDevice } from "@/lib/devices";
+import { prisma } from "@/lib/prisma";
+
+/**
+ * Push бүртгэл (тусдаа POST /devices дуудалт шаардлагагүй): аппын install id (body.deviceId) ирсэн бол түүгээр,
+ * үгүй бол ижил FCM token-той Device-ээр, эсвэл token-оос тогтвортой id үүсгэнэ. registerDevice эзнийг энэ
+ * ажилтанд шилжүүлж, token-ийг өөр мөрөөс цэвэрлэнэ. Буцаах Device.id-г session-д холбож, logout устгана.
+ */
+async function registerLoginDevice(userId: string, device: LoginDevice): Promise<string> {
+  // The app's own install id wins (same key its POST /devices token refresh uses → one phone, one row).
+  const existing = device.deviceId
+    ? null
+    : await prisma.device.findFirst({ where: { firebaseToken: device.fcm }, select: { deviceId: true } });
+  const deviceId = device.deviceId ?? existing?.deviceId ?? `fcm-${createHash("sha256").update(device.fcm).digest("hex").slice(0, 32)}`;
+  const row = await registerDevice({ userId }, { deviceId, platform: device.type, firebaseToken: device.fcm, model: device.model, os: device.os });
+  return row.id;
+}
 
 export type ApiLoginUser = {
   id: string;
@@ -46,6 +65,8 @@ function requestMeta(req: Request): {
 export async function buildApiLoginResponse(
   user: ApiLoginUser,
   req: Request,
+  /** POST /auth/login: the device / location to record on the session and the FCM token to register. */
+  device?: LoginDevice | null,
 ): Promise<Record<string, unknown>> {
   const { userAgent, ip } = requestMeta(req);
   // D-180: the refresh token is issued first so its id can be embedded in
@@ -54,7 +75,21 @@ export async function buildApiLoginResponse(
     id: refreshTokenId,
     token: refreshToken,
     expiresAt: refreshExpiresAt,
-  } = await issueRefreshToken({ userId: user.id, userAgent, ip });
+  } = await issueRefreshToken({
+    userId: user.id,
+    userAgent,
+    ip,
+    device: device
+      ? {
+          deviceType: device.type,
+          deviceModel: device.model,
+          deviceOs: device.os,
+          latitude: device.latitude,
+          longitude: device.longitude,
+          pushDeviceId: await registerLoginDevice(user.id, device),
+        }
+      : null,
+  });
 
   const accessToken = await signApiToken({
     userId: user.id,

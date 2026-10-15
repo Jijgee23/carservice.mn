@@ -1940,11 +1940,22 @@ model RefreshToken {
 
   expiresAt    DateTime
   revokedAt    DateTime?
-  replacedById String?       @unique // rotation хэлхээ — энэ token-ийг ямар token орлоосон бэ (нэг шинэ token зөвхөн нэг хуучинтай холбогдоно)
-  replacedBy   RefreshToken? @relation("TokenRotation", fields: [replacedById], references: [id], onDelete: SetNull)
-  replacedFrom RefreshToken? @relation("TokenRotation")
+  replacedById String?         @unique // rotation хэлхээ — энэ token-ийг ямар token орлоосон бэ (нэг шинэ token зөвхөн нэг хуучинтай холбогдоно)
+  replacedBy   RefreshToken?   @relation("TokenRotation", fields: [replacedById], references: [id], onDelete: SetNull)
+  replacedFrom RefreshToken?   @relation("TokenRotation")
   userAgent    String?
   ip           String?
+  // Мобайл нэвтрэлтийн төхөөрөмж ба байршил (POST /api/v1/auth/login). Rotate хийхэд шинэ мөрөнд хуулагдана;
+  // байршил нь НЭВТЭРСЭН үеийнх (дараагийн refresh-ээр шинэчлэгдэхгүй).
+  deviceType   DevicePlatform?
+  deviceModel  String?
+  deviceOs     String?
+  latitude     Float?
+  longitude    Float?
+  // Энэ нэвтрэлтээр бүртгэгдсэн push төхөөрөмж — POST /auth/logout түүнийг устгана (тусдаа DELETE /devices дуудалт
+  // шаардлагагүй). Rotate хийхэд хуулагдана.
+  pushDeviceId String?
+  pushDevice   Device?         @relation(fields: [pushDeviceId], references: [id], onDelete: SetNull)
 
   createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
@@ -2003,6 +2014,8 @@ model Device {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   lastSeenAt DateTime @default(now())
+
+  refreshTokens RefreshToken[]
 
   @@index([userId])
   @@index([accountId])

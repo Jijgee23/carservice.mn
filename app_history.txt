@@ -9,6 +9,22 @@ CARCARE.MN — Хөгжүүлэлтийн түүх (Dev history)
 2026-10-15  ·  суурь commit 0a20ab8 (kass & finance, item balance report etc, bugs)
 ------------------------------------------------------------------------
 
+Ажилтны мобайл нэвтрэлт — төхөөрөмж ба байршил
+------------------------------------------------------------------------
+- POST /api/v1/auth/login body: { identifier, password, type: ios|android, fcm, model, os, loc?: { lat, lng } } —
+  type/fcm/model/os ЗААВАЛ (хуучин зөвхөн identifier+password клиент 400 VALIDATION авна), loc заавал биш.
+- RefreshToken-д deviceType/deviceModel/deviceOs/latitude/longitude (migration 20261015120000_refresh_token_device);
+  rotate хийхэд хуулагдана (байршил = нэвтэрсэн үеийнх). fcm-ээр push Device-ийг энэ ажилтанд бүртгэнэ (deviceId:
+  ижил token-той мөр эсвэл fcm-<sha256>). Нэвтрэлтийн жагсаалт (профайл + GET /api/v1/me/sessions): deviceLabel
+  «iPhone 15 Pro · iOS 18.1», deviceType, location { lat, lng, mapUrl (OpenStreetMap) }; профайлд «Байршил» холбоос.
+- Local DB дээр route handler-ээр бүх урсгал шалгав (хуучин body 400, буруу type/loc, бүтэн body, refresh-ийн дараа
+  хэвээр, push device эзэн, жагсаалт); туршилтын өгөгдлийг устгасан. Тест: tests/login-device.test.ts.
+- (нэмэлт) Нэг API: login/activate push Device-ийг өөрөө бүртгэж session-д холбоно (RefreshToken.pushDeviceId,
+  migration 20261015130000_refresh_token_push_device; rotate-д хуулагдана); POST /auth/logout token-ийг цуцалж тэр
+  Device-ийг устгана (өөр ажилтанд шилжсэн бол үгүй) → { ok, deviceRemoved }. Login/activate body-д заавал биш
+  `deviceId` (аппын install id — POST /devices-тэй ижил тул нэг утас нэг мөр). /auth/activate мөн төхөөрөмжийн
+  талбаруудыг шаардана. Local DB: 4 тохиолдол (бүртгэл+холбоос, refresh, logout устгал, хуваалцсан утас) зөв.
+
 Үйлчлүүлэгч (Account) — заавал биш нууц үг, нууц үг эсвэл OTP-оор нэвтрэх
 ------------------------------------------------------------------------
 - Schema: Account.passwordHash / passwordUpdatedAt (nullable), OtpType ACCOUNT_PASSWORD
