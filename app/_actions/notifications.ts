@@ -19,7 +19,7 @@ import { setTenantContext } from "@/lib/tenant-context";
 export async function getStaffUnreadCount(): Promise<number> {
   const user = await requireUser();
   setTenantContext(user.tenantId);
-  return prisma.notification.count({
+  return await prisma.notification.count({
     where: { userId: user.id, readAt: null },
   });
 }
@@ -44,7 +44,7 @@ export async function markStaffNotificationRead(id: string): Promise<number> {
     data: { readAt: new Date() },
   });
   revalidatePath("/dashboard/notifications");
-  return prisma.notification.count({
+  return await prisma.notification.count({
     where: { userId: user.id, readAt: null },
   });
 }

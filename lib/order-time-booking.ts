@@ -177,7 +177,7 @@ export async function getOpenOrderTimeBookings(
   client: { orderTimeBooking: typeof prisma.orderTimeBooking },
   orderId: string,
 ): Promise<OpenOrderTimeBooking[]> {
-  return client.orderTimeBooking.findMany({
+  return await client.orderTimeBooking.findMany({
     where: { orderId, closedAt: null },
     select: { id: true, kind: true, startAt: true, endAt: true },
   });

@@ -278,7 +278,7 @@ export async function listStockCounts(tenantId: string, page = 1) {
 }
 
 export async function getStockCount(tenantId: string, id: string) {
-  return prisma.stockCount.findFirst({
+  return await prisma.stockCount.findFirst({
     where: { id, tenantId },
     select: {
       id: true, number: true, status: true, note: true, categoryName: true, createdAt: true, completedAt: true, cancelledAt: true,

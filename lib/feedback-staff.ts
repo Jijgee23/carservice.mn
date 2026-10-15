@@ -139,7 +139,7 @@ export async function getStaffFeedbackWithThread(
   actor: StaffFeedbackActor,
   id: string,
 ): Promise<(Feedback & { messages: FeedbackMessage[] }) | null> {
-  return prisma.feedback.findFirst({
+  return await prisma.feedback.findFirst({
     where: { id, tenantId: actor.tenantId },
     include: { messages: { orderBy: { createdAt: "asc" } } },
   });

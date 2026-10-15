@@ -20,14 +20,14 @@ import { HoursDisclosure } from "./hours-disclosure";
 export const dynamic = "force-dynamic";
 
 async function loadOrg(slug: string) {
-  return prisma.tenant.findFirst({
+  return await prisma.tenant.findFirst({
     where: { slug, acceptsOnlineBooking: true, suspended: false },
     select: { id: true, slug: true, name: true, logoUrl: true, phone1: true },
   });
 }
 
 async function loadBranch(tenantId: string, branchId: string) {
-  return prisma.branch.findFirst({
+  return await prisma.branch.findFirst({
     where: { id: branchId, tenantId, isActive: true },
     select: {
       id: true,

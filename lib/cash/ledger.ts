@@ -277,7 +277,7 @@ export async function runVoidCashEntry(
     before: { voided: false },
     after: { voided: true, reason },
   }, tx);
-  return tx.cashTransaction.findUniqueOrThrow({ where: { id: entry.id }, select: CASH_ENTRY_SELECT });
+  return await tx.cashTransaction.findUniqueOrThrow({ where: { id: entry.id }, select: CASH_ENTRY_SELECT });
 }
 
 /** Void (never delete/edit). Auto entries -> 422 CASH_SYSTEM_ENTRY; unknown/out-of-scope -> 404. */

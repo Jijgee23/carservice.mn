@@ -57,7 +57,7 @@ export async function verifyAccountPassword(input: { phone: string; password: st
 
 /** Same bookkeeping as an OTP login: last login, and a self-deactivated account comes back. */
 export async function finishAccountLogin(accountId: string) {
-  return prisma.account.update({
+  return await prisma.account.update({
     where: { id: accountId },
     data: { lastLoginAt: new Date(), deactivatedAt: null },
     select: { id: true, phone: true, name: true, passwordHash: true },

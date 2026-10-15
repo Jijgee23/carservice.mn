@@ -22,7 +22,7 @@ export type {
 
 const store: QPayStore<void> = {
   async getSettings() {
-    return prisma.qPaySettings.findUnique({ where: { id: 1 } });
+    return await prisma.qPaySettings.findUnique({ where: { id: 1 } });
   },
   async saveTokens(_id, tokens) {
     await prisma.qPaySettings.update({ where: { id: 1 }, data: tokens });

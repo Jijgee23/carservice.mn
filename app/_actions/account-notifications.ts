@@ -21,7 +21,7 @@ import { setBypassContext } from "@/lib/tenant-context";
 export async function getAccountUnreadCount(): Promise<number> {
   const account = await requireAccount();
   setBypassContext();
-  return prisma.notification.count({
+  return await prisma.notification.count({
     where: { accountId: account.id, readAt: null },
   });
 }
@@ -46,7 +46,7 @@ export async function markAccountNotificationRead(id: string): Promise<number> {
     data: { readAt: new Date() },
   });
   revalidatePath("/account/notifications");
-  return prisma.notification.count({
+  return await prisma.notification.count({
     where: { accountId: account.id, readAt: null },
   });
 }

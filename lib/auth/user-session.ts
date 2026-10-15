@@ -10,7 +10,7 @@ export async function createUserSession(opts: {
   ip?: string | null;
 }): Promise<{ id: string; expiresAt: Date }> {
   const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000);
-  return prisma.userSession.create({
+  return await prisma.userSession.create({
     data: {
       userId: opts.userId,
       userAgent: opts.userAgent ?? null,

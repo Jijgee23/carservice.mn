@@ -12,7 +12,7 @@ import { BookingForm } from "./booking-form";
 export const dynamic = "force-dynamic";
 
 async function loadOrg(slug: string) {
-  return prisma.tenant.findFirst({
+  return await prisma.tenant.findFirst({
     where: { slug, acceptsOnlineBooking: true, suspended: false },
     select: {
       id: true,

@@ -87,7 +87,7 @@ export async function assertStaffScope(
 }
 
 async function loadAppointmentForStaffAction(id: string) {
-  return prisma.appointment.findUnique({
+  return await prisma.appointment.findUnique({
     where: { id },
     select: {
       id: true,

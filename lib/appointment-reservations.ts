@@ -132,7 +132,7 @@ export async function reserveAppointmentInTransaction(
     if (!input.validateAssignee) throw new ReservationError(400, "Хариуцах мастер шалгагдаагүй байна.");
     await input.validateAssignee(tx, branch.id);
   }
-  return tx.appointment.create({
+  return await tx.appointment.create({
     data: {
       assignedToId,
       tenantId: input.tenantId, branchId: branch.id, requestedAt: input.requestedAt,
@@ -230,7 +230,7 @@ export async function moveAppointmentInTransaction(
     throw new ReservationConflictError("Энэ цаг дүүрсэн байна. Өөр цаг сонгоно уу.");
   }
 
-  return tx.appointment.update({
+  return await tx.appointment.update({
     where: { id: appt.id },
     // S17 Phase B: resetting reminderSentAt lets the appointment-reminders
     // cron's `reminderSentAt: null` filter pick this appointment back up for

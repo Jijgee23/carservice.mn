@@ -297,7 +297,7 @@ async function lockBranch(tx: PrismaTransactionClient, tenantId: string, branchI
 
 /** The branch's open session (closedAt null) or null. */
 export async function getOpenSession(client: Pick<PrismaTransactionClient, "cashSession">, tenantId: string, branchId: string) {
-  return client.cashSession.findFirst({ where: { tenantId, branchId, closedAt: null }, orderBy: { openedAt: "desc" }, select: SESSION_SELECT });
+  return await client.cashSession.findFirst({ where: { tenantId, branchId, closedAt: null }, orderBy: { openedAt: "desc" }, select: SESSION_SELECT });
 }
 
 /** Light flag for the «Касс нээгдээгүй байна» warning. */

@@ -84,7 +84,7 @@ export async function registerDevice(
       data: { firebaseToken: null },
     });
   }
-  return prisma.device.upsert({
+  return await prisma.device.upsert({
     where: { deviceId: input.deviceId },
     create: { deviceId: input.deviceId, ...data },
     update: data,

@@ -12,7 +12,7 @@ import { setBypassContext } from "@/lib/tenant-context";
 export const dynamic = "force-dynamic";
 
 async function loadBranch(branchId: string) {
-  return prisma.branch.findFirst({
+  return await prisma.branch.findFirst({
     where: {
       id: branchId,
       isActive: true,

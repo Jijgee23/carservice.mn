@@ -51,7 +51,7 @@ export type CustomerBroadcastResult = {
 export async function countBroadcastRecipients(
   actor: CustomerBroadcastActor,
 ): Promise<number> {
-  return prisma.customer.count({
+  return await prisma.customer.count({
     where: { tenantId: actor.tenantId, accountId: { not: null } },
   });
 }

@@ -24,7 +24,7 @@ type TenantQPaySettingsFields = QPayTokenFields & { enabled: boolean };
 
 const store: QPayStore<string, TenantQPaySettingsFields> = {
   async getSettings(tenantId) {
-    return prisma.tenantQPaySettings.findUnique({ where: { tenantId } });
+    return await prisma.tenantQPaySettings.findUnique({ where: { tenantId } });
   },
   async saveTokens(tenantId, tokens) {
     await prisma.tenantQPaySettings.update({ where: { tenantId }, data: tokens });
