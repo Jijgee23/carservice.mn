@@ -419,13 +419,20 @@ Res:  201 { "account": { ...дээрх бүтэц } }
 422 { "error": "...", "code": "PAYMENT_ACCOUNT_INVALID", "fieldErrors": { "<талбар>": "..." } }`}</Code>
         </Endpoint>
 
-        <Endpoint method="PATCH" path="/api/v1/payment-accounts/[id]" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage", "Багц идэвхтэй байх шаардлагатай"]} title="Төлбөрийн арга засах / идэвхгүй болгох. Устгахгүй; type өөрчлөгдөхгүй.">
+        <Endpoint method="PATCH" path="/api/v1/payment-accounts/[id]" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage", "Багц идэвхтэй байх шаардлагатай"]} title="Төлбөрийн арга засах / идэвхгүй болгох. type өөрчлөгдөхгүй.">
           <Code>{`Req:  { "name"?, "accountNumber"?, "terminalId"?, "merchantId"?, "isTest"?, "isActive"? }   // type илгээвэл 422
 Res:  200 { "account": { ...дээрх бүтэц } }
       // Нэр өөрчилбөл түүхэн төлбөр, тайланд шинэ нэр харагдана. isActive=false → сонгогчоос алга болно, хуучин бичлэг « (идэвхгүй)» гэж харагдана. CASH (Бэлэн): isActive=false, accountNumber илгээвэл 422 — зөвхөн нэр засна.
 403 CASH_MANAGE_FORBIDDEN
 404 { "code": "PAYMENT_ACCOUNT_NOT_FOUND" }
 409 { "code": "PAYMENT_ACCOUNT_DUPLICATE" }  422 { "code": "PAYMENT_ACCOUNT_INVALID", "fieldErrors": {...} }`}</Code>
+        </Endpoint>
+
+        <Endpoint method="DELETE" path="/api/v1/payment-accounts/[id]" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage", "Багц идэвхтэй байх шаардлагатай"]} title="Төлбөрийн арга устгах — зөвхөн ямар ч гүйлгээнд ашиглагдаагүй бол.">
+          <Code>{`Res:  200 { "ok": true }
+404 { "error": "Төлбөрийн арга олдсонгүй.", "code": "PAYMENT_ACCOUNT_NOT_FOUND" }
+409 { "error": "4 гүйлгээнд ашиглагдсан — идэвхгүй болгоно уу.", "code": "PAYMENT_ACCOUNT_IN_USE", "usage": 4 }   // PATCH { isActive: false }
+422 { "error": "«Бэлэн» автоматаар бий — устгахгүй.", "code": "PAYMENT_ACCOUNT_INVALID" }`}</Code>
         </Endpoint>
 
         <Endpoint method="GET" path="/api/v1/cash/entries" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage"]} title="Кассын орлого/зарлагын бичлэгүүд + нийлбэр (хүчингүй болсон бичлэг нийлбэрт орохгүй).">

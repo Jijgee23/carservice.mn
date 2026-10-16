@@ -214,6 +214,98 @@ export async function updatePaymentAccount(input: { actor: PaymentAccountActor; 
   }
 }
 
+// --- bulk ------------------------------------------------------------------
+
+export const PAYMENT_ACCOUNT_BULK_MAX = 200;
+
+export type PaymentAccountBulkItem = {
+  id: string;
+  name: string | null;
+  /** deleted / updated / unchanged = done; the rest are skipped with `message`. */
+  status: "deleted" | "updated" | "unchanged" | "in_use" | "cash" | "not_found" | "invalid";
+  /** in_use: payments + cash entries + settlements that reference the account. */
+  usage?: number;
+  message?: string;
+};
+
+function bulkIds(ids: unknown): string[] {
+  if (!Array.isArray(ids)) throw invalid("ids", "ids массив шаардлагатай.");
+  const unique = [...new Set(ids.filter((v): v is string => typeof v === "string" && v.trim() !== "").map((v) => v.trim()))];
+  if (unique.length === 0) throw invalid("ids", "Нэг ч төлбөрийн арга сонгоогүй байна.");
+  if (unique.length > PAYMENT_ACCOUNT_BULK_MAX) throw invalid("ids", `Нэг удаад ${PAYMENT_ACCOUNT_BULK_MAX} хүртэл.`);
+  return unique;
+}
+
+/**
+ * Deletes payment methods that nothing references. An account any payment, cash entry or postpaid settlement points
+ * at stays (those rows keep their account via a Restrict FK and history must keep its label) — it is reported as
+ * `in_use` so the caller can deactivate it instead. «Бэлэн» is automatic and never deleted. One transaction per id.
+ */
+export async function deletePaymentAccounts(input: { actor: PaymentAccountActor; ids: unknown }): Promise<PaymentAccountBulkItem[]> {
+  assertManage(input.actor);
+  const tenantId = input.actor.tenantId;
+  const results: PaymentAccountBulkItem[] = [];
+  for (const id of bulkIds(input.ids)) {
+    try {
+      results.push(
+        await prisma.$transaction(async (tx) => {
+          const row = (await tx.paymentAccount.findFirst({ where: { id, tenantId }, select: SELECT })) as Row | null;
+          if (!row) return { id, name: null, status: "not_found" as const, message: "Олдсонгүй." };
+          if (row.type === "CASH") return { id, name: row.name, status: "cash" as const, message: "«Бэлэн» автоматаар бий — устгахгүй." };
+          const [payments, entries, settlements] = await Promise.all([
+            tx.orderPayment.count({ where: { tenantId, bankId: id } }),
+            tx.cashTransaction.count({ where: { tenantId, bankId: id } }),
+            tx.postpaidSettlement.count({ where: { tenantId, bankId: id } }),
+          ]);
+          const usage = payments + entries + settlements;
+          if (usage > 0) {
+            return { id, name: row.name, status: "in_use" as const, usage, message: `${usage} гүйлгээнд ашиглагдсан — идэвхгүй болгоно уу.` };
+          }
+          await tx.paymentAccount.delete({ where: { id } });
+          await logAudit({
+            tenantId, userId: input.actor.id, entity: "PaymentAccount", entityId: id, action: "DELETE",
+            summary: `Төлбөрийн арга устгав: ${row.name}`, before: auditView(row),
+          }, tx);
+          return { id, name: row.name, status: "deleted" as const };
+        }),
+      );
+    } catch (error) {
+      // A payment recorded between the count and the delete: the Restrict FK refuses it.
+      if ((error as { code?: string } | null)?.code === "P2003") {
+        results.push({ id, name: null, status: "in_use", message: "Гүйлгээнд ашиглагдсан — идэвхгүй болгоно уу." });
+      } else {
+        throw error;
+      }
+    }
+  }
+  return results;
+}
+
+/** Activates / deactivates many accounts (same rules as a single update: «Бэлэн» cannot be switched off). */
+export async function setPaymentAccountsActive(input: { actor: PaymentAccountActor; ids: unknown; isActive: boolean }): Promise<PaymentAccountBulkItem[]> {
+  assertManage(input.actor);
+  const results: PaymentAccountBulkItem[] = [];
+  for (const id of bulkIds(input.ids)) {
+    const before = await prisma.paymentAccount.findFirst({ where: { id, tenantId: input.actor.tenantId }, select: { name: true, isActive: true } });
+    if (!before) {
+      results.push({ id, name: null, status: "not_found", message: "Олдсонгүй." });
+      continue;
+    }
+    if (before.isActive === input.isActive) {
+      results.push({ id, name: before.name, status: "unchanged" });
+      continue;
+    }
+    try {
+      await updatePaymentAccount({ actor: input.actor, id, data: { isActive: input.isActive } });
+      results.push({ id, name: before.name, status: "updated" });
+    } catch (error) {
+      if (!(error instanceof PaymentAccountError)) throw error;
+      results.push({ id, name: before.name, status: error.code === "PAYMENT_ACCOUNT_NOT_FOUND" ? "not_found" : "invalid", message: error.message });
+    }
+  }
+  return results;
+}
+
 export function toPickerAccount(dto: PaymentAccountDto) {
   return {
     id: dto.id, type: dto.type, method: dto.method, name: dto.name, accountNumber: dto.accountNumber, accountNumberMasked: dto.accountNumberMasked,

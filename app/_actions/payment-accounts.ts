@@ -6,7 +6,13 @@ import { knownAuthorizationMessage } from "@/lib/action-errors";
 import { requireUser } from "@/lib/auth";
 import { PaymentAccountError } from "@/lib/payment-accounts";
 import { createPayloadFromForm, updatePayloadFromForm } from "@/lib/payment-account-form";
-import { createPaymentAccount, updatePaymentAccount } from "@/lib/payment-account-service";
+import {
+  createPaymentAccount,
+  deletePaymentAccounts,
+  setPaymentAccountsActive,
+  updatePaymentAccount,
+  type PaymentAccountBulkItem,
+} from "@/lib/payment-account-service";
 import { assertActiveSubscription } from "@/lib/subscription-server";
 
 export type PaymentAccountActionState = { ok: boolean; message?: string; fieldErrors?: Record<string, string> } | null;
@@ -62,5 +68,36 @@ export async function setPaymentAccountActiveAction(id: string, isActive: boolea
   } catch (error) {
     unstable_rethrow(error);
     return failure(error);
+  }
+}
+
+export type PaymentAccountBulkState =
+  | { ok: true; results: PaymentAccountBulkItem[] }
+  | { ok: false; message: string };
+
+/** Deletes the selected payment methods that nothing references; the rest come back with a reason. */
+export async function bulkDeletePaymentAccountsAction(ids: string[]): Promise<PaymentAccountBulkState> {
+  try {
+    const user = await requireUser();
+    await assertActiveSubscription(user.tenantId);
+    const results = await deletePaymentAccounts({ actor: user, ids });
+    refresh();
+    return { ok: true, results };
+  } catch (error) {
+    unstable_rethrow(error);
+    return { ok: false, message: failure(error)?.message ?? "Алдаа гарлаа." };
+  }
+}
+
+export async function bulkSetPaymentAccountsActiveAction(ids: string[], isActive: boolean): Promise<PaymentAccountBulkState> {
+  try {
+    const user = await requireUser();
+    await assertActiveSubscription(user.tenantId);
+    const results = await setPaymentAccountsActive({ actor: user, ids, isActive });
+    refresh();
+    return { ok: true, results };
+  } catch (error) {
+    unstable_rethrow(error);
+    return { ok: false, message: failure(error)?.message ?? "Алдаа гарлаа." };
   }
 }

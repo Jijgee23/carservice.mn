@@ -1,9 +1,16 @@
 "use client";
 
 import { useCallback, useRef, useState, useTransition, type KeyboardEvent } from "react";
-import { setPaymentAccountActiveAction } from "@/app/_actions/payment-accounts";
+import {
+  bulkDeletePaymentAccountsAction,
+  bulkSetPaymentAccountsActiveAction,
+  setPaymentAccountActiveAction,
+  type PaymentAccountBulkState,
+} from "@/app/_actions/payment-accounts";
 import { setTenantQPayEnabledAction } from "@/app/_actions/tenant-qpay";
 import { Btn } from "@/app/_components/landing-ops-ui";
+import { Modal } from "@/app/_components/modal";
+import { SelectAllCell, SelectRowCell, SelectionActions, useRowSelection } from "@/app/_components/row-selection";
 import { PAYMENT_ACCOUNT_TYPE_LABEL, PAYMENT_ACCOUNT_TYPES, PAYMENT_ACCOUNTS_EMPTY, TEST_BADGE } from "@/lib/payment-accounts";
 import type { PaymentAccountDto } from "@/lib/payment-account-service";
 import { PaymentAccountDialog } from "./payment-account-dialog";
@@ -40,7 +47,18 @@ const FOCUS_RING =
 
 const TH = "font-plex-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--oc-muted3)] font-medium px-4 py-2.5 text-left";
 
-type Notice = { kind: "undo"; account: PaymentAccountDto } | { kind: "error"; message: string } | null;
+type Notice =
+  | { kind: "undo"; account: PaymentAccountDto }
+  | { kind: "error"; message: string }
+  | { kind: "bulk"; done: string; skipped: Array<{ name: string; message: string }> }
+  | null;
+
+type BulkOp = "delete" | "deactivate" | "activate";
+
+const BULK_DONE: Record<BulkOp, string> = { delete: "устгагдлаа", deactivate: "идэвхгүй боллоо", activate: "идэвхжлээ" };
+
+/** «Бэлэн» is automatic (never deleted / switched off), so it is not selectable. */
+const selectable = (a: PaymentAccountDto) => a.type !== "CASH";
 
 export function PaymentAccountsList({
   accounts,
@@ -65,6 +83,31 @@ export function PaymentAccountsList({
   const [filter, setFilter] = useState<Filter>("ALL");
   const [showInactive, setShowInactive] = useState(false);
   const filterRefs = useRef<Partial<Record<Filter, HTMLButtonElement | null>>>({});
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [bulkPending, startBulk] = useTransition();
+
+  function runBulk(op: BulkOp) {
+    const ids = [...selection.selected];
+    if (ids.length === 0) return;
+    setNotice(null);
+    startBulk(async () => {
+      const res: PaymentAccountBulkState =
+        op === "delete" ? await bulkDeletePaymentAccountsAction(ids) : await bulkSetPaymentAccountsActiveAction(ids, op === "activate");
+      setConfirmDelete(false);
+      if (!res.ok) {
+        setNotice({ kind: "error", message: res.message });
+        return;
+      }
+      const done = res.results.filter((r) => r.status === "deleted" || r.status === "updated" || r.status === "unchanged");
+      const skipped = res.results
+        .filter((r) => !done.includes(r))
+        .map((r) => ({ name: r.name ?? accounts.find((a) => a.id === r.id)?.name ?? r.id, message: r.message ?? "Боломжгүй." }));
+      setNotice({ kind: "bulk", done: done.length ? `${done.length} төлбөрийн арга ${BULK_DONE[op]}.` : "", skipped });
+      // Keep the skipped ones selected so «Идэвхгүй болгох» is one click away for accounts still in use.
+      selection.clear();
+      for (const r of res.results) if (!done.includes(r) && r.status !== "not_found") selection.toggle(r.id);
+    });
+  }
 
   function setActive(account: PaymentAccountDto, next: boolean) {
     setNotice(null);
@@ -109,12 +152,21 @@ export function PaymentAccountsList({
     .filter((a) => showInactive || a.isActive)
     .sort((a, b) => Number(b.isActive) - Number(a.isActive) || TYPE_ORDER[a.type] - TYPE_ORDER[b.type] || a.name.localeCompare(b.name));
   const filterLabel = FILTERS.find((f) => f.value === filter)!.label;
+  // Same selection as the other bulk tables: checkbox, drag across rows (mouse 1), right-click menu (mouse 2).
+  const selection = useRowSelection(rows.filter(selectable));
+  const selectedAccounts = accounts.filter((a) => selection.selected.has(a.id));
+  const bulkActions = [
+    { label: "Идэвхжүүлэх", onSelect: () => runBulk("activate"), disabled: bulkPending, variant: "ghost" as const },
+    { label: "Идэвхгүй болгох", onSelect: () => runBulk("deactivate"), disabled: bulkPending, variant: "ghost" as const },
+    { label: "Устгах", onSelect: () => setConfirmDelete(true), disabled: bulkPending },
+  ];
 
   const qpayRow = () => {
     const active = Boolean(qpay?.enabled);
     const muted = active ? "" : "opacity-60";
     return (
       <tr key="qpay" className="border-b border-[var(--oc-line)] last:border-b-0">
+        <td className="w-10 pl-4 pr-1 py-2.5" />
         <td className={`px-4 py-2.5 ${muted}`}>
           <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${QPAY_BADGE}`}>QPay</span>
         </td>
@@ -173,7 +225,12 @@ export function PaymentAccountsList({
     const muted = a.isActive ? "" : "opacity-60";
     const terminal = [a.terminalId ? `TID ${a.terminalId}` : null, a.merchantId ? `MID ${a.merchantId}` : null].filter(Boolean).join(" · ");
     return (
-      <tr key={a.id} className="border-b border-[var(--oc-line)] last:border-b-0">
+      <tr key={a.id} className={`border-b border-[var(--oc-line)] last:border-b-0 ${selection.selected.has(a.id) ? "bg-[var(--oc-accent)]/[0.06]" : ""}`}>
+        {selectable(a) ? (
+          <SelectRowCell selection={selection} id={a.id} label={`Сонгох: ${a.name}`} className="w-10 pl-4 pr-1 py-2.5" />
+        ) : (
+          <td className="w-10 pl-4 pr-1 py-2.5" />
+        )}
         <td className={`px-4 py-2.5 ${muted}`}>
           <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${TYPE_BADGE[a.type]}`}>
             {PAYMENT_ACCOUNT_TYPE_LABEL[a.type]}
@@ -282,7 +339,23 @@ export function PaymentAccountsList({
       </div>
 
       <div aria-live="polite" className="empty:hidden">
-        {notice?.kind === "undo" ? (
+        {notice?.kind === "bulk" ? (
+          <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] px-4 py-2.5 text-sm text-[var(--oc-ink2)] flex flex-col gap-1">
+            {notice.done ? <span className="text-[var(--oc-ok)]">{notice.done}</span> : null}
+            {notice.skipped.length > 0 ? (
+              <>
+                <span>{notice.skipped.length} нь өөрчлөгдөөгүй:</span>
+                <ul className="list-disc pl-5 text-xs text-[var(--oc-muted3)]">
+                  {notice.skipped.map((s) => (
+                    <li key={s.name}>
+                      <span className="text-[var(--oc-ink2)]">{s.name}</span> — {s.message}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+          </div>
+        ) : notice?.kind === "undo" ? (
           <div className="flex items-center justify-between gap-3 rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] px-4 py-2.5 text-sm text-[var(--oc-ink2)]">
             <span className="min-w-0 truncate">{notice.account.name} идэвхгүй боллоо.</span>
             <Btn type="button" variant="ghost" size="sm" className={FOCUS_RING} onClick={() => setActive(notice.account, true)}>
@@ -298,25 +371,30 @@ export function PaymentAccountsList({
 
       <section id="pa-panel" role="tabpanel" aria-labelledby={`pa-tab-${filter}`} className="flex flex-col gap-2">
         {rows.length > 0 || showQpay ? (
-          <div className="overflow-x-auto rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)]">
-            <table className="w-full min-w-[640px]">
-              <thead>
-                <tr className="border-b border-[var(--oc-line)]">
-                  <th className={TH}>Төрөл</th>
-                  <th className={TH}>Нэр</th>
-                  <th className={TH}>Дансны дугаар</th>
-                  <th className={TH}>Терминал / код</th>
-                  <th className={TH}>Төлөв</th>
-                  <th className={TH}>
-                    <span className="sr-only">Үйлдэл</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {showQpay ? qpayRow() : null}
-                {rows.map(renderRow)}
-              </tbody>
-            </table>
+          <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] overflow-hidden">
+            <SelectionActions selection={selection} noun="төлбөрийн арга" actions={bulkActions} />
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px]">
+                <thead>
+                  <tr className="border-b border-[var(--oc-line)]">
+                    <SelectAllCell selection={selection} className="w-10 pl-4 pr-1 py-2.5" />
+                    <th className={TH}>Төрөл</th>
+
+                    <th className={TH}>Нэр</th>
+                    <th className={TH}>Дансны дугаар</th>
+                    <th className={TH}>Терминал / код</th>
+                    <th className={TH}>Төлөв</th>
+                    <th className={TH}>
+                      <span className="sr-only">Үйлдэл</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody {...selection.dragArea}>
+                  {showQpay ? qpayRow() : null}
+                  {rows.map(renderRow)}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : (
           <p className="rounded-[10px] border border-dashed border-[var(--oc-line)] px-4 py-6 text-center text-sm text-[var(--oc-muted3)]">
@@ -357,6 +435,32 @@ export function PaymentAccountsList({
           if (filter !== "ALL" && type !== filter) selectFilter(type === "CASH" ? "ALL" : type);
         }}
       />
+      <Modal open={confirmDelete} onClose={() => setConfirmDelete(false)} title="Төлбөрийн арга устгах" widthClassName="max-w-md">
+        <div className="flex flex-col gap-3 p-5 text-sm text-[var(--oc-ink2)]">
+          <p>
+            Сонгосон <b className="text-[var(--oc-ink)]">{selectedAccounts.length}</b> төлбөрийн аргыг устгах уу?
+          </p>
+          <ul className="list-disc pl-5 text-xs text-[var(--oc-muted3)] max-h-40 overflow-auto">
+            {selectedAccounts.map((a) => (
+              <li key={a.id}>
+                {a.name} · {PAYMENT_ACCOUNT_TYPE_LABEL[a.type]}
+                {a.accountNumber ? ` · ${a.accountNumber}` : ""}
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-[var(--oc-muted3)]">
+            Гүйлгээнд ашиглагдсан арга устахгүй (түүх нь хадгалагдана) — тэдгээрийг идэвхгүй болгоно уу.
+          </p>
+          <div className="flex items-center gap-2 pt-1">
+            <Btn type="button" variant="danger" size="md" disabled={bulkPending} onClick={() => runBulk("delete")}>
+              {bulkPending ? "Устгаж байна…" : "Устгах"}
+            </Btn>
+            <Btn type="button" variant="ghost" size="md" onClick={() => setConfirmDelete(false)}>
+              Болих
+            </Btn>
+          </div>
+        </div>
+      </Modal>
       {canManageQpay ? <QPayDialog open={qpayOpen} initial={qpayInitial} onClose={closeQpay} /> : null}
     </div>
   );

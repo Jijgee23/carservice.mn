@@ -18,7 +18,10 @@ test("PUT /banks/enabled is gone; payment-accounts routes exist and are permissi
   assert.match(list, /requireActiveSubscriptionApi/);
   assert.match(item, /export async function PATCH/);
   assert.match(item, /requireActiveSubscriptionApi/);
-  assert.doesNotMatch(item, /export async function DELETE/, "no hard delete (spec P7)");
+  // 2026-10-16: DELETE exists, but only removes accounts nothing references (history keeps its label);
+  // referenced ones get 409 PAYMENT_ACCOUNT_IN_USE and should be deactivated instead.
+  assert.match(item, /export async function DELETE/);
+  assert.match(item, /deletePaymentAccounts\(\{ actor: auth\.user, ids: \[id\] \}\)/);
 });
 
 test("GET /banks returns accounts plus the legacy compatibility fields", async () => {
