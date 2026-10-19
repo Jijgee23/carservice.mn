@@ -40,6 +40,8 @@ export function matchesSelectQuery(option: SelectOption, query: string): boolean
 // Олон мянган бичлэгтэй үед DOM-ыг хүндрүүлэхгүй — эхний N-ийг харуулж,
 // үлдсэнийг "нарийвчлан бичнэ үү" гэж мэдэгдэнэ.
 const MAX_VISIBLE_OPTIONS = 100;
+/** Жагсаалтын дээд өндөр — 16rem. */
+const LIST_MAX_HEIGHT = 256;
 
 /**
  * Form-д зориулсан modern dropdown — native <select>-ийн оронд.
@@ -97,9 +99,12 @@ export function Select({
   const value = isControlled ? (controlledValue as string) : internalValue;
 
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(
-    null,
-  );
+  // Доош багтахгүй (хүснэгтийн сүүлийн мөр, дэлгэцийн доод хэсэг) бол дээш
+  // нээнэ — `bottom`-оор байрлуулж, өндрийг боломжит зайгаар хязгаарлана.
+  const [pos, setPos] = useState<
+    | { top?: number; bottom?: number; left: number; width: number; maxHeight: number }
+    | null
+  >(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -118,7 +123,28 @@ export function Select({
     const el = btnRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    setPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    const gap = 4;
+    const margin = 8;
+    // Жагсаалтын өндрийн ойролцоо тооцоо (мөр ~36px + padding), 16rem хүртэл.
+    const rowCount = Math.min(options.length, MAX_VISIBLE_OPTIONS) + (required ? 0 : 1);
+    const wanted = Math.min(LIST_MAX_HEIGHT, Math.max(rowCount, 1) * 36 + 8);
+    const below = window.innerHeight - r.bottom - gap - margin;
+    const above = r.top - gap - margin;
+    if (below < wanted && above > below) {
+      setPos({
+        bottom: window.innerHeight - r.top + gap,
+        left: r.left,
+        width: r.width,
+        maxHeight: Math.min(LIST_MAX_HEIGHT, above),
+      });
+    } else {
+      setPos({
+        top: r.bottom + gap,
+        left: r.left,
+        width: r.width,
+        maxHeight: Math.min(LIST_MAX_HEIGHT, Math.max(below, 120)),
+      });
+    }
   }
 
   function openList(initialQuery = "") {
@@ -369,6 +395,7 @@ export function Select({
                   position: "fixed",
                   zIndex: 200,
                   top: pos.top,
+                  bottom: pos.bottom,
                   left: pos.left,
                   width: pos.width,
                   background: "var(--popover)",
@@ -377,7 +404,7 @@ export function Select({
                   boxShadow: "0 20px 50px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0,0,0,0.4)",
                   overflow: "hidden",
                   padding: "0.25rem 0",
-                  maxHeight: "16rem",
+                  maxHeight: pos.maxHeight,
                   overflowY: "auto",
                 }}
               >
