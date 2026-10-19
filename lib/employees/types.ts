@@ -89,6 +89,7 @@ export type EmployeeErrorCode =
   | "VALIDATION"
   | "NOT_FOUND"
   | "OWNER_ROLE_LOCKED"
+  | "OWNER_ONLY"
   | "SELF_DEACTIVATE"
   | "SELF_ACTION"
   | "LAST_OWNER"

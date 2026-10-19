@@ -160,6 +160,7 @@ const ownedVehicle = { vehicleId: "vehicle-a", customerId: "customer-a", isPostp
 function appointmentFixture(overrides: Partial<ValidateInput["appointment"] & {}> = {}) {
   return {
     id: "appt-a",
+    status: "CONFIRMED" as const,
     customerId: "customer-a",
     accountId: null,
     vehicleId: null,
@@ -497,4 +498,30 @@ test("architecture guard: order-create-references.ts imports nothing from Prisma
   assert.doesNotMatch(source, /@\/lib\/prisma/, "the pure seam must not import @/lib/prisma");
   assert.doesNotMatch(source, /@\/app\/generated\/prisma\/client/, "the pure seam must not import the generated Prisma client");
   assert.doesNotMatch(source, /@\/lib\/env/, "the pure seam must not import @/lib/env");
+});
+
+// ---------------------------------------------------------------------------
+// Dead appointments (cancelled / rejected / no-show) must not be linked —
+// linking used to flip them back to CONFIRMED and drop the refund-needed fee.
+// ---------------------------------------------------------------------------
+
+for (const status of ["CANCELLED", "REJECTED", "NO_SHOW"] as const) {
+  test(`appointment in ${status} status cannot get a service order`, () => {
+    const result = validate(baseInput({ appointmentId: "appt-a", appointment: appointmentFixture({ status }) }));
+    assert.ok(result.appointmentId, `expected appointmentId error for ${status}`);
+  });
+}
+
+for (const status of ["PENDING", "CONFIRMED"] as const) {
+  test(`appointment in ${status} status can get a service order`, () => {
+    const result = validate(baseInput({ appointmentId: "appt-a", appointment: appointmentFixture({ status }) }));
+    assert.equal(result.appointmentId, undefined);
+  });
+}
+
+test("order-create link updateMany only flips linkable appointment statuses", () => {
+  const source = readCommandSource();
+  const link = source.slice(source.indexOf("tx.appointment.updateMany({"));
+  const where = link.slice(0, link.indexOf("data:"));
+  assert.match(where, /status: \{ in: \[\.\.\.LINKABLE_APPOINTMENT_STATUSES\] \}/);
 });

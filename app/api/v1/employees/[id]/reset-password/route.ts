@@ -35,7 +35,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const result = await resetEmployeePassword(prisma, actor, fd);
   if ("noop" in result) return jsonError(404, "Ажилтан олдсонгүй.", { code: "NOT_FOUND" });
   if (!result.ok) {
-    return jsonError(409, result.error, { code: result.code });
+    return jsonError(result.code === "OWNER_ONLY" ? 403 : 409, result.error, { code: result.code });
   }
 
   await logAudit({

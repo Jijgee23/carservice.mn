@@ -52,3 +52,7 @@ next-env.d.ts
 /public/uploads/*
 !/public/uploads/.gitkeep
 image.png
+
+# DB dumps — never commit (contain PII and credentials)
+/*.sql
+/*.dump

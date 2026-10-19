@@ -23,7 +23,11 @@ function readSource(relativePath: string): string {
   return readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), relativePath), "utf8");
 }
 
-const actionsSource = () => readSource("../app/_actions/appointments.ts");
+// The account reschedule core lives outside the "use server" file (its
+// `account` argument must never be client-callable), so it is part of the
+// adapter surface too.
+const actionsSource = () =>
+  readSource("../app/_actions/appointments.ts") + readSource("../lib/appointments/account-reschedule.ts");
 const commandsSource = () => readSource("../lib/appointments/appointment-commands.ts");
 const bulkSource = () => readSource("../lib/appointments/appointment-bulk-commands.ts");
 const createSource = () => readSource("../lib/appointments/appointment-create-command.ts");
@@ -132,6 +136,13 @@ test("action adapters call the shared appointment commands rather than reimpleme
   ]) {
     assert.ok(source.includes(call), `expected action adapters to call ${call}`);
   }
+});
+
+test("account reschedule core is not exported from a \"use server\" module", () => {
+  const actions = readSource("../app/_actions/appointments.ts");
+  assert.doesNotMatch(actions, /export async function rescheduleAppointmentByAccountCore\(/);
+  const core = readSource("../lib/appointments/account-reschedule.ts");
+  assert.doesNotMatch(core, /^["']use server["']/m);
 });
 
 test("command modules carry no FormData, redirect, revalidatePath or NextResponse", () => {

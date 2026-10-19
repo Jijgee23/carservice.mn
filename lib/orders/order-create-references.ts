@@ -20,8 +20,12 @@ export type VehicleReferenceSnapshot = {
   isPostpaid: boolean;
 };
 
+/** Mirrors the Prisma `AppointmentStatus` enum (kept local — see header). */
+export type AppointmentStatus = "PENDING" | "CONFIRMED" | "REJECTED" | "CANCELLED" | "NO_SHOW";
+
 export type AppointmentReferenceSnapshot = {
   id: string;
+  status: AppointmentStatus;
   customerId: string | null;
   accountId: string | null;
   vehicleId: string | null;
@@ -46,6 +50,9 @@ export type ValidateOrderReferencesInput = {
   accountVehicleToLink: boolean;
 };
 
+/** Засварын хуудастай холбож болох (идэвхтэй) цаг захиалгын төлөв. */
+export const LINKABLE_APPOINTMENT_STATUSES: ReadonlySet<AppointmentStatus> = new Set(["PENDING", "CONFIRMED"]);
+
 export function validateOrderReferences(
   input: ValidateOrderReferencesInput,
 ): Record<string, string> {
@@ -56,6 +63,10 @@ export function validateOrderReferences(
   if (!customer) fieldErrors.customerId = "Үйлчлүүлэгч олдсонгүй.";
   if (appointmentId && !appointment) {
     fieldErrors.appointmentId = "Цаг захиалга олдсонгүй.";
+  } else if (appointmentId && appointment && !LINKABLE_APPOINTMENT_STATUSES.has(appointment.status)) {
+    // Цуцлагдсан/татгалзсан/ирээгүй цагийг холбовол доорх link updateMany
+    // түүнийг CONFIRMED болгож сэргээдэг байсан (буцаан олголт алга болно).
+    fieldErrors.appointmentId = "Цуцлагдсан эсвэл хаагдсан цаг захиалгад засварын хуудас үүсгэх боломжгүй.";
   } else if (appointmentId && appointment?.serviceOrderId) {
     fieldErrors.appointmentId = "Энэ цаг захиалгад засварын хуудас аль хэдийн үүссэн байна.";
   } else if (appointmentId && appointment?.branchId !== branchId) {

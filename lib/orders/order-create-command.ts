@@ -15,7 +15,11 @@ import {
   isCarriedAssigneeIneligible,
 } from "@/lib/appointments/appointment-assignee-label";
 import { internalPostpaidConflict } from "@/lib/orders/order-internal";
-import { resolveOrderIsPostpaid, validateOrderReferences } from "@/lib/orders/order-create-references";
+import {
+  LINKABLE_APPOINTMENT_STATUSES,
+  resolveOrderIsPostpaid,
+  validateOrderReferences,
+} from "@/lib/orders/order-create-references";
 
 export type CreateOrderCommandInput = {
   tenantId: string;
@@ -132,6 +136,7 @@ export async function createOrderCommand(
                 where: { id: input.appointmentId, tenantId: input.tenantId },
                 select: {
                   id: true,
+                  status: true,
                   customerId: true,
                   accountId: true,
                   vehicleId: true,
@@ -301,6 +306,8 @@ export async function createOrderCommand(
               customerId: input.customerId,
               ...(appointment?.accountId ? { accountId: appointment.accountId } : {}),
               serviceOrderId: null,
+              // Уншсанаас хойш зэрэгцээ цуцлагдсан бол сэргээхгүй (compare-and-set).
+              status: { in: [...LINKABLE_APPOINTMENT_STATUSES] },
             },
             data: {
               serviceOrderId: created.id,

@@ -21,6 +21,11 @@ import { s, validateCommon } from "./validate";
 
 export type Noop = { ok: true; noop: true };
 
+// Тенант админы (owner) бүртгэлийг зөвхөн өөр админ л удирдана — эс бөгөөс
+// `employees.edit` эрхтэй ажилтан админы утсыг өөрийнхөөр сольж, «нууц үг
+// сэргээх» OTP-оор админы эрхийг булааж авах боломжтой байв.
+const OWNER_ONLY_ERROR = "Тенант админы бүртгэлийг зөвхөн админ өөрчилнө.";
+
 export type CreatePrepared = {
   ok: true;
   data: ValidatedEmployee;
@@ -36,7 +41,7 @@ export type FieldErr = {
 
 export type MessageErr = {
   ok: false;
-  code: "NOT_FOUND" | "OWNER_ROLE_LOCKED" | "DUPLICATE" | "UNKNOWN";
+  code: "NOT_FOUND" | "OWNER_ROLE_LOCKED" | "OWNER_ONLY" | "SELF_ACTION" | "DUPLICATE" | "UNKNOWN";
   error: string;
   fieldErrors?: Record<string, string>;
 };
@@ -209,6 +214,20 @@ export async function updateEmployee(
   // 409 болгодог байсан тул owner-ийн нэр ч засагдахгүй байв. Үүрэг болон
   // идэвхтэй/хугацааг owner-д хэвээр нь үлдээнэ (эдгээрийг toggle-active /
   // owner шилжүүлэх урсгал удирдана).
+  if (target.isOwner && !actor.isOwner) {
+    return { ok: false, code: "OWNER_ONLY", error: OWNER_ONLY_ERROR };
+  }
+  // Өөрийн үүргийг өөрчилж эрхээ дээшлүүлэхээс сэргийлнэ (үүрэг удирдах нь
+  // owner-ийн эрх — app/_actions/roles.ts).
+  if (target.id === actor.id && !actor.isOwner && data.roleId !== target.roleId) {
+    return {
+      ok: false,
+      code: "SELF_ACTION",
+      error: "Та өөрийн үүргийг өөрчлөх боломжгүй.",
+      fieldErrors: { roleId: "Та өөрийн үүргийг өөрчлөх боломжгүй." },
+    };
+  }
+
   if (target.isOwner) {
     if (data.roleId && data.roleId !== target.roleId) {
       return {
@@ -382,6 +401,9 @@ export async function bulkUpdateEmployeeRoleBranch(
       // OWNER (тенант админ)-ын үүрэг/салбарыг олноор ч сольж болохгүй —
       // updateEmployeeAction-тэй ижил дүрэм.
       if (emp.isOwner) throw new Error("Тенант админыг өөрчлөх боломжгүй.");
+      if (emp.id === actor.id && !actor.isOwner && roleId && emp.roleId !== roleId) {
+        throw new Error("Та өөрийн үүргийг өөрчлөх боломжгүй.");
+      }
 
       const data: { roleId?: string; branchId?: string } = {};
       if (roleId && emp.roleId !== roleId) data.roleId = roleId;
@@ -438,7 +460,7 @@ export type ToggleActiveResult =
       before: { isActive: boolean };
       after: { isActive: boolean };
     }
-  | { ok: false; code: "SELF_DEACTIVATE" | "LAST_OWNER"; error: string };
+  | { ok: false; code: "SELF_DEACTIVATE" | "LAST_OWNER" | "OWNER_ONLY"; error: string };
 
 export async function toggleEmployeeActive(
   db: EmployeesClient,
@@ -457,6 +479,9 @@ export async function toggleEmployeeActive(
     select: { isOwner: true, isActive: true, firstName: true, lastName: true, deletedAt: true },
   });
   if (!target || target.deletedAt) return { ok: true, noop: true };
+  if (target.isOwner && !actor.isOwner) {
+    return { ok: false, code: "OWNER_ONLY", error: OWNER_ONLY_ERROR };
+  }
   if (target.isOwner && !next) {
     const activeOwners = await db.user.count({
       where: { tenantId: actor.tenantId, isOwner: true, isActive: true, deactivatedAt: null, deletedAt: null },
@@ -482,7 +507,7 @@ export async function toggleEmployeeActive(
 export type DeleteResult =
   | Noop
   | { ok: true; id: string; summary: string }
-  | { ok: false; code: "SELF_ACTION" | "LAST_OWNER" | "OPEN_ORDERS"; error: string };
+  | { ok: false; code: "SELF_ACTION" | "LAST_OWNER" | "OPEN_ORDERS" | "OWNER_ONLY"; error: string };
 
 export async function deleteEmployee(
   db: EmployeesClient,
@@ -501,6 +526,9 @@ export async function deleteEmployee(
   });
   if (!target || target.deletedAt) return { ok: true, noop: true };
 
+  if (target.isOwner && !actor.isOwner) {
+    return { ok: false, code: "OWNER_ONLY", error: OWNER_ONLY_ERROR };
+  }
   if (target.isOwner) {
     const ownerCount = await db.user.count({
       where: { tenantId: actor.tenantId, isOwner: true, isActive: true, deactivatedAt: null, deletedAt: null },
@@ -541,7 +569,7 @@ export async function deleteEmployee(
 export type ResetPasswordResult =
   | Noop
   | { ok: true; id: string; summary: string }
-  | { ok: false; code: "SELF_ACTION"; error: string };
+  | { ok: false; code: "SELF_ACTION" | "OWNER_ONLY"; error: string };
 
 /**
  * Ажилтны нууц үгийг хүчингүй болгоно (шинэ ажилтан үүсгэхтэй ижил
@@ -562,9 +590,12 @@ export async function resetEmployeePassword(
 
   const target = await db.user.findFirst({
     where: { id, tenantId: actor.tenantId },
-    select: { firstName: true, lastName: true, deletedAt: true },
+    select: { firstName: true, lastName: true, deletedAt: true, isOwner: true },
   });
   if (!target || target.deletedAt) return { ok: true, noop: true };
+  if (target.isOwner && !actor.isOwner) {
+    return { ok: false, code: "OWNER_ONLY", error: OWNER_ONLY_ERROR };
+  }
 
   // Нууц үгийг сервер огт үүсгэдэггүй — зөвхөн хүчингүй болгоод OTP
   // урсгал руу оруулна.

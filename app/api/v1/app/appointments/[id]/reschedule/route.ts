@@ -1,4 +1,4 @@
-import { rescheduleAppointmentByAccountCore } from "@/app/_actions/appointments";
+import { rescheduleAppointmentByAccountCore } from "@/lib/appointments/account-reschedule";
 import { jsonError, jsonOk } from "@/lib/api";
 import { getApiAccountFromRequest } from "@/lib/auth/account-api-token";
 

@@ -192,6 +192,9 @@ function fd(fields: Record<string, string | string[]>): FormData {
 
 const ACTOR = { id: "me1", tenantId: "t1", isOwner: false };
 const OWNER_ACTOR = { id: "owner1", tenantId: "t1", isOwner: true };
+// A second owner not present in the fake DB — reaches the LAST_OWNER guard
+// without tripping the self-action checks.
+const CO_OWNER_ACTOR = { id: "owner-other", tenantId: "t1", isOwner: true };
 
 // --- validateCommon / prepareCreateEmployee: exact Mongolian messages ------
 
@@ -479,7 +482,7 @@ test("updateEmployee: an owner's role cannot be edited", async () => {
   });
   const result = await core.updateEmployee(
     db,
-    ACTOR,
+    OWNER_ACTOR,
     "u1",
     fd({ firstName: "Boss", lastName: "Own", email: "boss@b.com", phone: "99112233", roleId: "any-role" }),
   );
@@ -512,7 +515,7 @@ test("updateEmployee: an owner's profile can be edited; role and active state st
   });
   const result = await core.updateEmployee(
     db,
-    ACTOR,
+    OWNER_ACTOR,
     "u1",
     fd({ firstName: "Шинэ", lastName: "Own", email: "boss@b.com", phone: "99112244" }),
   );
@@ -638,7 +641,7 @@ test("toggleEmployeeActive: cannot deactivate the last active owner", async () =
       },
     ],
   });
-  const actor = { id: "actor1", tenantId: "t1", isOwner: false };
+  const actor = { id: "actor1", tenantId: "t1", isOwner: true };
   const result = await core.toggleEmployeeActive(db, actor, fd({ id: "owner1" }));
   assert.equal(result.ok, false);
   if (result.ok) throw new Error("unreachable");
@@ -743,7 +746,7 @@ test("deleteEmployee: cannot delete the last owner", async () => {
       },
     ],
   });
-  const result = await core.deleteEmployee(db, ACTOR, fd({ id: "owner1" }));
+  const result = await core.deleteEmployee(db, CO_OWNER_ACTOR, fd({ id: "owner1" }));
   assert.equal(result.ok, false);
   if (result.ok) throw new Error("unreachable");
   assert.equal(result.code, "LAST_OWNER");
@@ -787,7 +790,7 @@ test("deleteEmployee: an admin-blocked co-owner does not count toward LAST_OWNER
       },
     ],
   });
-  const result = await core.deleteEmployee(db, { id: "admin1", tenantId: "t1", isOwner: false }, fd({ id: "o1" }));
+  const result = await core.deleteEmployee(db, { id: "admin1", tenantId: "t1", isOwner: true }, fd({ id: "o1" }));
   assert.equal(result.ok, false);
   if (result.ok) throw new Error("unreachable");
   assert.equal(result.code, "LAST_OWNER");
@@ -1074,4 +1077,80 @@ test("app/_actions/employees.ts delegates every mutation to lib/employees/core i
   // The action file must not re-implement Prisma unique/duplicate mapping —
   // that belongs to the core only.
   assert.doesNotMatch(source, /P2002|P2003/);
+});
+
+// ---------------------------------------------------------------------------
+// Owner protection: a non-owner with employees.edit must not be able to take
+// over the owner (phone swap → password-reset OTP) or lock them out.
+// ---------------------------------------------------------------------------
+
+function ownerFixture() {
+  return {
+    id: "o1",
+    tenantId: "t1",
+    firstName: "Boss",
+    lastName: "Own",
+    email: "boss@b.com",
+    phone: "99112233",
+    passwordHash: "x",
+    verified: true,
+    isOwner: true,
+    roleId: null,
+    branchId: null,
+    assignableBranchIds: [],
+    isActive: true,
+    activeUntil: null,
+  };
+}
+
+test("updateEmployee: a non-owner cannot edit an owner's profile (phone swap)", async () => {
+  const { db, users } = makeFakeDb({ users: [ownerFixture()] });
+  const result = await core.updateEmployee(
+    db,
+    ACTOR,
+    "o1",
+    fd({ firstName: "Boss", lastName: "Own", email: "boss@b.com", phone: "99112244", roleId: "r1" }),
+  );
+  assert.equal(result.ok, false);
+  if (result.ok) throw new Error("unreachable");
+  assert.equal(result.code, "OWNER_ONLY");
+  assert.equal(users[0]!.phone, "99112233");
+});
+
+test("updateEmployee: a non-owner cannot change their own role", async () => {
+  const { db, users } = makeFakeDb({
+    users: [{ ...ownerFixture(), id: "me1", isOwner: false, roleId: "r-low", email: "me@b.com", phone: "99001122" }],
+    roles: [{ id: "r-high", name: "High", isActive: true, tenantId: "t1" }],
+  });
+  const result = await core.updateEmployee(
+    db,
+    ACTOR,
+    "me1",
+    fd({ firstName: "Boss", lastName: "Own", email: "me@b.com", phone: "99001122", roleId: "r-high" }),
+  );
+  assert.equal(result.ok, false);
+  if (result.ok) throw new Error("unreachable");
+  assert.equal(result.code, "SELF_ACTION");
+  assert.equal(users[0]!.roleId, "r-low");
+});
+
+test("toggleEmployeeActive / deleteEmployee / resetEmployeePassword: non-owner gets OWNER_ONLY on an owner", async () => {
+  const { db, users } = makeFakeDb({ users: [ownerFixture(), { ...ownerFixture(), id: "o2", email: "o2@b.com", phone: "99112234" }] });
+  const toggled = await core.toggleEmployeeActive(db, ACTOR, fd({ id: "o1" }));
+  const deleted = await core.deleteEmployee(db, ACTOR, fd({ id: "o1" }));
+  const reset = await core.resetEmployeePassword(db, ACTOR, fd({ id: "o1" }));
+  for (const result of [toggled, deleted, reset]) {
+    assert.equal(result.ok, false);
+    if (result.ok) throw new Error("unreachable");
+    assert.equal(result.code, "OWNER_ONLY");
+  }
+  assert.equal(users[0]!.isActive, true);
+  assert.equal(users[0]!.passwordHash, "x");
+});
+
+test("resetEmployeePassword: an owner can still reset another owner", async () => {
+  const { db, users } = makeFakeDb({ users: [ownerFixture()] });
+  const result = await core.resetEmployeePassword(db, CO_OWNER_ACTOR, fd({ id: "o1" }));
+  assert.equal(result.ok, true);
+  assert.equal(users[0]!.passwordHash, null);
 });
