@@ -384,6 +384,14 @@ html.light .landing-ops {
   padding-top: 0;
   padding-bottom: 0;
 }
+/* Excel импортын хүснэгт (/dashboard/employees/import) — мөр бүрт Select
+   байрладаг тул форм-ийн 44px өндрийг compact-input-тэй (36px) тэнцүүлнэ. */
+.import-grid .auth-input {
+  height: 2.25rem;
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: 0.875rem;
+}
 /* `BrandWordmark`-ийн "care" хэсэг ердийн violet брэндэд зориулагдсан ч Ops
    Console (cyan) хуудсуудад (dashboard sidebar, /system/login гэх мэт)
    энд түрж дарна — /page/guide зэрэг хараахан шилжээгүй хуудсууд

@@ -15,6 +15,7 @@
 import { userTombstone } from "@/lib/account-closure/tombstone";
 import { logAudit } from "@/lib/audit";
 import { parseIdsJson } from "@/lib/bulk-action";
+import { importRowToFormData, isCalendarDate, type ImportRow, type ImportRowResult } from "./import";
 import { duplicateUserFields, ensureRoleBelongsToTenant, filterOwnBranchIds } from "./guards";
 import type { EmployeeActor, EmployeeRow, EmployeesClient, ValidatedEmployee } from "./types";
 import { s, validateCommon } from "./validate";
@@ -327,6 +328,62 @@ export async function updateEmployee(
       assignableBranchIds: data.assignableBranchIds,
     },
   };
+}
+
+// --- IMPORT (Excel-ээс олноор үүсгэх) ---------------------------------------
+
+/**
+ * Excel-ээс уншсан мөрүүдийг нэг нэгээр үүсгэнэ — all-or-nothing БИШ (харах:
+ * bulkUpdateEmployeeRoleBranch): мөр бүр ганцаар үүсгэхтэй ЯГ ижил
+ * `prepareCreateEmployee` → `createEmployee` замаар шалгагдана (үүрэг/салбар
+ * тенантынх, имэйл/утас давхцал). Импортоор хэзээ ч тенант админ (owner)
+ * үүсгэхгүй — `importRowToFormData` isOwner илгээдэггүй тул үүрэг заавал.
+ *
+ * `remaining` = багцын MAX_USERS-аас үлдсэн эрх (null = хязгааргүй); түүнээс
+ * хэтэрсэн мөрүүд "багцын хязгаар" алдаатай буцна. `onCreated` нь амжилттай
+ * мөр бүрийн audit-д (logAudit-ыг дуудагч тал өөрийн client-ээр хийнэ).
+ */
+export async function importEmployees(
+  db: EmployeesClient,
+  actor: EmployeeActor,
+  rows: readonly ImportRow[],
+  opts: {
+    remaining: number | null;
+    limitMessage: string;
+    onCreated?: (created: { id: string; summary: string; after: Record<string, unknown> }) => Promise<void>;
+  },
+): Promise<{ succeeded: number; failed: number; results: ImportRowResult[] }> {
+  const results: ImportRowResult[] = [];
+  let succeeded = 0;
+  for (const row of rows) {
+    if (opts.remaining !== null && succeeded >= opts.remaining) {
+      results.push({ key: row.key, ok: false, error: opts.limitMessage });
+      continue;
+    }
+    if (row.activeUntil && !isCalendarDate(row.activeUntil)) {
+      results.push({ key: row.key, ok: false, error: "Оруулсан мэдээлэл буруу.", fieldErrors: { activeUntil: "Огноо буруу." } });
+      continue;
+    }
+    const prep = await prepareCreateEmployee(db, { ...actor, isOwner: false }, importRowToFormData(row));
+    if (!prep.ok) {
+      results.push({ key: row.key, ok: false, error: prep.error, fieldErrors: prep.fieldErrors });
+      continue;
+    }
+    const created = await createEmployee(db, actor, prep.data, false);
+    if (!created.ok) {
+      results.push({
+        key: row.key,
+        ok: false,
+        error: created.error,
+        ...("fieldErrors" in created && created.fieldErrors ? { fieldErrors: created.fieldErrors } : {}),
+      });
+      continue;
+    }
+    succeeded++;
+    results.push({ key: row.key, ok: true });
+    await opts.onCreated?.({ id: created.id, summary: created.summary, after: created.after });
+  }
+  return { succeeded, failed: rows.length - succeeded, results };
 }
 
 // --- BULK UPDATE (role / main branch) --------------------------------------

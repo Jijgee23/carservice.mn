@@ -152,6 +152,11 @@ export default async function EmployeesPage({
             </BtnLink>
           ) : null}
           {canAdd ? (
+            <BtnLink href="/dashboard/employees/import" variant="ghost">
+              Excel-ээс оруулах
+            </BtnLink>
+          ) : null}
+          {canAdd ? (
             <AddLinkButton href="/dashboard/employees/new">Ажилтан нэмэх</AddLinkButton>
           ) : null}
         </div>
