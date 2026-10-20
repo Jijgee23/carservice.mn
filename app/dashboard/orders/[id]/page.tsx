@@ -30,7 +30,6 @@ import {
   INTERNAL_LABEL,
   INTERNAL_PAYMENT_NOTE,
   POSTPAID_BADGE,
-  POSTPAID_CLOSE_FORBIDDEN_MESSAGE,
   POSTPAID_LABEL,
   POSTPAID_SETTLEMENT_NOTE,
   type OrderStatus,
@@ -39,6 +38,7 @@ import {
   formatTugrik,
 } from "@/lib/orders";
 import { canSettlePostpaidOrder } from "@/lib/orders/order-commands";
+import { orderCompleteBlockedReason } from "@/lib/orders/order-complete-guard";
 import { prisma } from "@/lib/prisma";
 import { calculateServiceItemDurationMinutes } from "@/lib/service-duration";
 import type { QPayBankUrl } from "@/lib/qpay-tenant";
@@ -279,18 +279,14 @@ export default async function OrderDetailPage({
   const remainingDecimal = (order.totalAmount ?? new Prisma.Decimal(0)).minus(
     order.paidAmount ?? new Prisma.Decimal(0),
   );
-  const completeBlockedReason =
-    unfilledDiagnosticItems.length > 0
-      ? "Бөглөгдөөгүй оношилгоо байна."
-      : unfinishedItemsCount > 0
-        ? `Дуусаагүй ${unfinishedItemsCount} ажил байна.`
-        : order.isInternal
-          ? null
-          : remainingDecimal.gt(0) && !order.isPostpaid
-          ? `Төлбөр бүрэн төлөгдөөгүй (үлдэгдэл ${formatTugrik(remainingDecimal.toString())}).`
-          : remainingDecimal.gt(0) && !hasPermission(user, "orders.closeUnpaidPostpaid")
-            ? POSTPAID_CLOSE_FORBIDDEN_MESSAGE
-            : null;
+  const completeBlockedReason = orderCompleteBlockedReason({
+    unfilledDiagnostics: unfilledDiagnosticItems.length,
+    unfinishedItems: unfinishedItemsCount,
+    isInternal: order.isInternal,
+    isPostpaid: order.isPostpaid,
+    remaining: remainingDecimal,
+    canCloseUnpaidPostpaid: hasPermission(user, "orders.closeUnpaidPostpaid"),
+  });
   // Ижил оношилгоо нэг засварын хуудсанд давхардаж болохгүй тул аль хэдийн
   // нэмэгдсэн загваруудыг "+ Мөр нэмэх" сонголтоос хасна.
   const usedDiagnosticTemplateIds = new Set(

@@ -111,7 +111,10 @@ test("order detail page mirrors the completion guard for internal orders", () =>
   const src = read("app/dashboard/orders/[id]/page.tsx");
   const i = src.indexOf("const completeBlockedReason");
   assert.ok(i > 0);
-  assert.match(src.slice(i, i + 600), /order\.isInternal\s*\?\s*null/);
+  // The rule lives in the shared guard (also used by the list's «Төлөв өөрчлөх»).
+  assert.match(src.slice(i, i + 600), /orderCompleteBlockedReason\(\{[\s\S]*isInternal: order\.isInternal/);
+  const guard = read("lib/orders/order-complete-guard.ts");
+  assert.match(guard, /if \(input\.isInternal\) return null;/);
 });
 
 // ---- payments -------------------------------------------------------------

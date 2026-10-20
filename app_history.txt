@@ -1893,3 +1893,11 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - (нэмэлт) Тест файл `ajiltan_import_test.xlsx` (repo root, commit хийхгүй) — 20 мөр: 4 бэлэн, таараагүй үүрэг/салбар, буруу имэйл/утас/огноо, файл доторх утас/имэйл давхцал, хоосон нэр, үүрэггүй 8 мөр (олноор оноох), хоосон мөр, тааруулахгүй «Тэмдэглэл» багана. Бодит parser+validation-оор шалгав.
 - Засвар: `2026-02-30` мэт байхгүй огноог JS `new Date` 3-р сарын 2 болгож хүлээн авдаг байсан — `isCalendarDate` шалгалт client (validateImportRow) болон server (importEmployees) хоёуланд. Тест нэмэв.
 - Засвар (`app/_components/select.tsx`, бүх Select-д): жагсаалт үргэлж доош 16rem-ээр нээгддэг тул хүснэгтийн сүүлийн мөр / дэлгэцийн доод хэсэгт сонголтууд дэлгэцээс гарч харагдахгүй байв. Одоо доор зай хүрэлцэхгүй (дээр илүү) бол дээш нээнэ, өндрийг боломжит зайгаар хязгаарлана; scroll/resize-д дахин тооцоолно.
+
+[2026-10-19] Засварын хуудасны жагсаалт — мөрийн «⋯» үйлдлүүд
+- Шинэ «Үйлдэл» багана (`order-row-actions.tsx`): «Төлбөр бүртгэх» (төлөгдөөгүй, дотоод биш, цуцлагдаагүй + payments.create), «Бүх ажлыг дуусгах» (IN_PROGRESS + orders.itemStatus), «Төлөв өөрчлөх» (дуусаагүй/цуцлагдаагүй + orders.edit). Мөр бүрт урьдчилж тооцохгүй — modal нээхэд `getOrderQuickContextAction` (tenant/салбар scope, canViewOrder) үлдэгдэл, касс, шилжилт, «Дуусгах»/«Цуцлах»-ын нөхцөлийг ачаална.
+- Төлбөр: дэлгэрэнгүйтэй ижил `PaymentMethodModal` + `recordOrderPaymentAction` (бэлэн/данс/POS/бусад). QPay нь QR/хүлээгдэж буй төлөв шаарддаг тул жагсаалтаас хасав — дэлгэрэнгүй хуудсаар.
+- Төлөв: `StatusControls`-ийг modal-д дахин ашиглав (`defaultExpanded`, `onChanged` prop нэмэв). «Дуусгах»-ын нөхцөлийг `lib/orders/order-complete-guard.ts` (`orderCompleteBlockedReason`) болгон гаргаж дэлгэрэнгүй хуудас ч үүнийг ашиглана (drift үгүй).
+- Бүх ажлыг дуусгах: `completeAllOrderItemsCommand` — нэг order lock дотор PENDING/IN_PROGRESS ажил+оношилгоог COMPLETED, мөр бүрт audit; бөглөгдөөгүй оношилгоог алгасаж тоолно; захиалгын төлөвийг өөрчлөхгүй.
+- `RowActionsMenu`: доор багтахгүй бол дээш нээнэ (Select-ийн адил); `RowMenuButton` (modal нээх энгийн item) нэмэв.
+- Тест: `tests/order-row-actions.test.ts` 5/5; `order-internal.test.ts`-ийн guard тестийг shared guard руу шинэчлэв. Бүтэн suite шинэ fail үгүй, `next build` амжилттай. Гарын авлага `order-list-row-actions`.

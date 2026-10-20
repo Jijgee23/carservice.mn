@@ -14,7 +14,7 @@ import { Pagination } from "@/app/_components/pagination";
 import { buildMeta, getPageInfo } from "@/lib/pagination";
 import { customerLabel, orgRegnumLabel } from "@/lib/customers";
 import { requireUser } from "@/lib/auth";
-import { canCreate, canEdit, canView, orderAssignableWhere, workingBranchScopeId } from "@/lib/auth/roles";
+import { canCreate, canEdit, canView, hasPermission, orderAssignableWhere, workingBranchScopeId } from "@/lib/auth/roles";
 import { canAssignOrders, orderReadWhere } from "@/lib/auth/order-access";
 import { redirect } from "next/navigation";
 import {
@@ -384,6 +384,11 @@ export default async function OrdersPage({
             canAssign={canAssign}
             currentUserId={user.id}
             sort={sort}
+            rowActions={{
+              canRecordPayments: canCreate(user, "payments"),
+              canChangeItemStatus: hasPermission(user, "orders.itemStatus"),
+              canEditOrders: canBulkEdit,
+            }}
           />
         )}
 

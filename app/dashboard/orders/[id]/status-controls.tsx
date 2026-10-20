@@ -37,6 +37,8 @@ export function StatusControls({
   serviceItemDurationMinutes = null,
   completeBlockedReason = null,
   cancelBlockedReason = null,
+  defaultExpanded = false,
+  onChanged,
 }: {
   orderId: string;
   transitions: OrderStatus[];
@@ -48,6 +50,10 @@ export function StatusControls({
   completeBlockedReason?: string | null;
   /** Set when a paid payment sits in a closed cash session (PAID_PAYMENT_LOCKED): cancel is disabled with this reason. */
   cancelBlockedReason?: string | null;
+  /** Шилжилтийн товчуудыг анхнаасаа дэлгэж харуулах (жагсаалтын «Төлөв өөрчлөх» modal). */
+  defaultExpanded?: boolean;
+  /** Амжилттай шилжилтийн дараа (жагсаалтын modal-ыг хаахад). */
+  onChanged?: () => void;
 }) {
   const toast = useToast();
   const [state, formAction, pending] = useActionState<
@@ -57,7 +63,7 @@ export function StatusControls({
   // Бүх статус шилжилтийн товчийг нэг л "Үйлдэл" товчийн ард нуух —
   // дарахад доор нь гулсаж гарна (grid-template-rows 0fr→1fr trick, өндрийг
   // JS-ээр хэмжихгүйгээр гөлгөр анимацилна).
-  const [showActions, setShowActions] = useState(false);
+  const [showActions, setShowActions] = useState(defaultExpanded);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmStart, setConfirmStart] = useState(false);
   const [startHours, setStartHours] = useState("");
@@ -70,9 +76,11 @@ export function StatusControls({
     handled.current = state;
     // Цуцлах амжилттай бол захиалга эцсийн төлөвт орох тул энэ компонент өөрөө
     // unmount болж диалог хаагдана — тусдаа хаах шаардлагагүй.
-    if (state.ok) toast.success(state.message ?? "Статус шинэчлэгдлээ.");
-    else toast.error(state.message ?? "Алдаа гарлаа.");
-  }, [state, toast]);
+    if (state.ok) {
+      toast.success(state.message ?? "Статус шинэчлэгдлээ.");
+      onChanged?.();
+    } else toast.error(state.message ?? "Алдаа гарлаа.");
+  }, [state, toast, onChanged]);
 
   // React-ийн зөвлөдөг "render-ийн үед нөхцөлт setState" загвар (useEffect
   // биш) — амжилттай шилжилтийн дараа "Үйлдэл" жагсаалтыг хаана.

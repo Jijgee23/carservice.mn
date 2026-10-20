@@ -37,6 +37,7 @@ import {
 import { SortableTh } from "@/app/_components/sortable-th";
 import type { SortDir } from "@/lib/list-sort";
 import { OrderRow } from "./order-row";
+import { OrderRowActions, type OrderRowActionsPerms } from "./order-row-actions";
 
 export type BulkOrderRow = {
   id: string;
@@ -71,6 +72,7 @@ export function BulkOrdersTable({
   canAssign,
   currentUserId,
   sort,
+  rowActions,
 }: {
   rows: BulkOrderRow[];
   employees: AssignableEmployee[];
@@ -78,6 +80,8 @@ export function BulkOrdersTable({
   canAssign: boolean;
   currentUserId: string;
   sort: { key: string; dir: SortDir };
+  /** Мөрийн «⋯» үйлдлүүдийн (төлбөр, бүх ажлыг дуусгах, төлөв) эрхүүд. */
+  rowActions: OrderRowActionsPerms;
 }) {
   const selection = useRowSelection(rows);
   const [statusPickerOpen, setStatusPickerOpen] = useState(false);
@@ -129,6 +133,9 @@ export function BulkOrdersTable({
               <SortableTh label="Дүн" sortKey="amount" current={sort} className="text-left text-xs text-[var(--oc-muted3)] font-medium px-5 py-3" />
               <th className="text-left text-xs text-[var(--oc-muted3)] font-medium px-5 py-3">
                 Статус
+              </th>
+              <th className="text-right text-xs text-[var(--oc-muted3)] font-medium px-3 py-3">
+                Үйлдэл
               </th>
             </tr>
           </thead>
@@ -229,6 +236,9 @@ export function BulkOrdersTable({
                   >
                     {ORDER_STATUS_LABEL[o.status]}
                   </span>
+                </td>
+                <td className="px-3 py-4 text-right" data-stop-row-click>
+                  <OrderRowActions order={o} perms={rowActions} />
                 </td>
               </OrderRow>
             ))}

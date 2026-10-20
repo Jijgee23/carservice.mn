@@ -19,14 +19,24 @@ const CloseCtx = createContext<() => void>(() => {});
 
 export function RowActionsMenu({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  // Доош багтахгүй (хүснэгтийн сүүлийн мөр) бол дээш нээнэ — `bottom`-оор.
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   function toggle() {
     if (!open && btnRef.current) {
       const r = btnRef.current.getBoundingClientRect();
-      setPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+      const right = window.innerWidth - r.right;
+      // Цэсний өндрийн ойролцоо тооцоо: item тус бүр ~36px + padding.
+      const items = Array.isArray(children) ? children.filter(Boolean).length : 1;
+      const wanted = items * 36 + 16;
+      const below = window.innerHeight - r.bottom - 8;
+      setPos(
+        below < wanted && r.top > below
+          ? { bottom: window.innerHeight - r.top + 4, right }
+          : { top: r.bottom + 4, right },
+      );
     }
     setOpen((v) => !v);
   }
@@ -80,7 +90,7 @@ export function RowActionsMenu({ children }: { children: ReactNode }) {
         <div
           ref={menuRef}
           role="menu"
-          style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 50 }}
+          style={{ position: "fixed", top: pos.top, bottom: pos.bottom, right: pos.right, zIndex: 50 }}
           className="min-w-40 rounded-xl border border-white/10 bg-[var(--surface)] shadow-2xl p-1"
         >
           <CloseCtx.Provider value={() => setOpen(false)}>
@@ -131,5 +141,41 @@ export function RowMenuFormItem({
         {children}
       </button>
     </ConfirmForm>
+  );
+}
+
+/* Цэсний энгийн товч item (modal нээх г.м) — дарахад цэс хаагдана. */
+export function RowMenuButton({
+  onClick,
+  disabled,
+  title,
+  destructive,
+  children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  title?: string;
+  destructive?: boolean;
+  children: ReactNode;
+}) {
+  const close = useContext(CloseCtx);
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      disabled={disabled}
+      title={title}
+      onClick={() => {
+        close();
+        onClick();
+      }}
+      className={`w-full text-left text-sm px-3 py-2 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+        destructive
+          ? "text-red-400 hover:bg-red-500/10 light:text-red-600"
+          : "text-white/80 hover:bg-white/[0.06]"
+      }`}
+    >
+      {children}
+    </button>
   );
 }

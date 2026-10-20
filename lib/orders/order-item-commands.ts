@@ -550,6 +550,41 @@ export async function changeOrderItemStatusCommand(input: { actor: OrderCommandA
   });
 }
 
+/**
+ * «Бүх ажлыг дуусгах» (жагсаалтын мөрийн үйлдэл): ажиллаж буй захиалгын
+ * дуусаагүй (PENDING/IN_PROGRESS) ажил/оношилгооны мөрүүдийг нэг order lock
+ * дотор COMPLETED болгоно — мөр бүрт changeOrderItemStatusCommand-тай ижил
+ * дүрэм. Бөглөгдөөгүй оношилгоог алгасаж тоог буцаана (тайлангүй дуусгах
+ * боломжгүй). Захиалгын өөрийн төлөвийг өөрчлөхгүй — «Дуусгах» тусдаа.
+ */
+export async function completeAllOrderItemsCommand(input: { actor: OrderCommandActor; orderId: string; scope?: string | null }): Promise<{ completed: number; skippedDiagnostics: number }> {
+  const { actor, orderId, scope } = input;
+  return withOrderTransaction(actor.tenantId, orderId, { id: true, branchId: true, status: true, assignedToId: true }, async (tx, raw) => {
+    const order = raw as ItemOrder | null;
+    if (!order) throw new OrderCommandError("Засварын хуудас олдсонгүй.", 404, "ORDER_NOT_FOUND");
+    if (!canChangeOrderItemStatus(actor, order)) throw new OrderCommandError("Танд үйлчилгээний мөрийн явц өөрчлөх эрх байхгүй.", 403, "ITEM_STATUS_FORBIDDEN");
+    if (!isOrderBranchInScope(actor, order.branchId, scope)) throw new OrderCommandError("Зөвхөн өөрийн салбарын засварын хуудсыг удирдана.", 404, "ORDER_OUT_OF_SCOPE");
+    assertOrderInProgressForItemStatus(order.status);
+    const items = await tx.serviceItem.findMany({
+      where: { orderId, status: { in: ["PENDING", "IN_PROGRESS"] }, kind: { in: ["LABOR", "DIAGNOSTIC"] } },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, kind: true, status: true, startedAt: true, diagnosticReportId: true },
+    });
+    let completed = 0;
+    let skippedDiagnostics = 0;
+    for (const item of items) {
+      if (item.kind === "DIAGNOSTIC" && !item.diagnosticReportId) {
+        skippedDiagnostics++;
+        continue;
+      }
+      await tx.serviceItem.update({ where: { id: item.id }, data: { status: "COMPLETED", ...serviceItemTimingPatch("COMPLETED", item.startedAt) } });
+      await logAudit({ tenantId: actor.tenantId, userId: actor.id, entity: "ServiceOrder", entityId: orderId, action: "ITEM_STATUS_CHANGE", summary: `${item.status} → COMPLETED (мөр ${item.id}) · бүгдийг дуусгав`, before: { status: item.status }, after: { status: "COMPLETED" } }, tx);
+      completed++;
+    }
+    return { completed, skippedDiagnostics };
+  });
+}
+
 export function assertOrderInProgressForItemStatus(status: OrderStatus): void {
   if (status !== "IN_PROGRESS") {
     throw new OrderCommandError(

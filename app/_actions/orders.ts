@@ -60,6 +60,7 @@ import {
   cancelOrderItemCommand,
   changeOrderItemPriceCommand,
   changeOrderItemStatusCommand,
+  completeAllOrderItemsCommand,
 } from "@/lib/orders/order-item-commands";
 import {
   reviseExpectedFinishCommand,
@@ -1013,6 +1014,30 @@ export async function changeOrderItemStatusAction(formData: FormData): Promise<v
   if (!orderId) return;
   await changeOrderItemStatusCommand({ actor: user, orderId, itemId, nextStatus: next as Exclude<ServiceItemStatus, "CANCELLED"> });
   revalidatePath(`/dashboard/orders/${orderId}`);
+}
+
+export type CompleteAllItemsResult =
+  | { ok: true; completed: number; skippedDiagnostics: number }
+  | { ok: false; message: string };
+
+/** Жагсаалтын «Бүх ажлыг дуусгах» — ажиллаж буй захиалгын дуусаагүй мөрүүдийг дуусгана. */
+export async function completeAllOrderItemsAction(orderId: string): Promise<CompleteAllItemsResult> {
+  let user;
+  try {
+    user = await authorizeItemStatus();
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
+  }
+  if (typeof orderId !== "string" || !orderId) return { ok: false, message: "Буруу хүсэлт." };
+  try {
+    const result = await completeAllOrderItemsCommand({ actor: user, orderId });
+    revalidatePath("/dashboard/orders");
+    revalidatePath(`/dashboard/orders/${orderId}`);
+    return { ok: true, ...result };
+  } catch (e) {
+    const r = orderActionErrorResult(e);
+    return { ok: false, message: r?.message ?? ACTION_GENERIC_ERROR_MESSAGE };
+  }
 }
 
 export async function changeOrderItemPriceAction(formData: FormData): Promise<void> {
