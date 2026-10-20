@@ -41,11 +41,11 @@ export function Hero() {
         <div>
           <StatusPill>100+ сервис төв carservice дээр ажиллаж байна</StatusPill>
           <h1 className="mt-7 text-4xl sm:text-5xl lg:text-[60px] font-semibold leading-[1.08] lg:leading-[1.04] tracking-[-0.03em] text-[var(--oc-ink)] text-balance">
-            Автосервисийн ажлыг <span className="text-[var(--oc-accent)]">нэг урсгал</span> болгоно.
+            Автозасвар, автосервисийн ажлыг <span className="text-[var(--oc-accent)]">нэг урсгал</span> болгоно.
           </h1>
           <p className="mt-6 max-w-[520px] text-lg leading-relaxed text-[var(--oc-muted)] text-pretty">
-            carservice нь засварын газруудад засварын хуудас, ажлын хуваарь, нөөц, тайланг; жолоочид цаг
-            товлолт, засварын түүхийг нэг платформ дээр нэгтгэдэг.
+            carservice нь автозасвар, автосервисийн газруудад засварын хуудас, ажлын хуваарь, нөөц, тайланг;
+            жолоочид ойролцоох автозасварт цаг захиалах, засварын түүхээ харахыг нэг платформ дээр нэгтгэдэг.
           </p>
           <div className="mt-9 flex flex-col sm:flex-row gap-3">
             <ButtonPrimary href="/page/signup">Үнэгүй эхлүүлэх</ButtonPrimary>

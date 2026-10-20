@@ -126,12 +126,12 @@ export function orgJsonLd(org: SeoOrg, branches: readonly SeoBranch[]) {
 export function orgDescription(org: { name: string }, branches: readonly SeoBranch[]): string {
   const places = [...new Set(branches.map((b) => b.district?.trim() || b.city?.trim()).filter(Boolean))].slice(0, 4);
   const where = places.length ? ` — ${places.join(", ")}` : "";
-  return `${org.name}${where}. Авто засвар, оношилгоо, үйлчилгээ. carservice.mn-ээр онлайнаар цаг захиалаарай.`;
+  return `${org.name}${where}. Автозасвар, автосервис, оношилгоо, засвар үйлчилгээ. carservice.mn-ээр онлайнаар цаг захиалаарай.`;
 }
 
 export function branchDescription(org: { name: string }, branch: SeoBranch): string {
   const addr = formatAddress(branch);
-  return `${org.name}${branch.name && branch.name !== org.name ? ` (${branch.name})` : ""}${addr ? ` — ${addr}` : ""}. Ажлын цаг, байршил, онлайн цаг захиалга.`;
+  return `${org.name}${branch.name && branch.name !== org.name ? ` (${branch.name})` : ""} — автозасвар, автосервис${addr ? `, ${addr}` : ""}. Ажлын цаг, байршил, онлайн цаг захиалга.`;
 }
 
 /** `<script type="application/ld+json">`-д аюулгүй JSON (`</script>` тасалдахгүй). */

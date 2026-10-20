@@ -28,7 +28,7 @@ const plexMono = IBM_Plex_Mono({
 // Нүүр хуудас «/» дээр шууд (өмнө нь /page/landing руу 307 redirect хийдэг
 // байсан — Google нүүр хуудсыг сул үнэлж, хайлтад /page/landing гардаг байв).
 export const metadata = {
-  title: { absolute: "carservice.mn — Авто засвар, үйлчилгээний цаг онлайнаар захиалах" },
+  title: { absolute: "carservice.mn — Автозасвар, автосервисийн цаг онлайнаар захиалах" },
   alternates: { canonical: "/" },
 };
 

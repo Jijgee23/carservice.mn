@@ -55,7 +55,7 @@ export async function generateMetadata({
   const org = await loadOrg(slug);
   if (!org) return { title: "Олдсонгүй", robots: { index: false } };
   const description = orgDescription(org, org.branches);
-  const title = `${org.name} — Авто засвар, цаг захиалах`;
+  const title = `${org.name} — Автозасвар, автосервис · Цаг захиалах`;
   return {
     title,
     description,
