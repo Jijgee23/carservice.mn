@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireSuperAdmin } from "@/lib/auth/system";
 import { prisma } from "@/lib/prisma";
 import { validateStoreUrl } from "@/lib/app-store-links";
+import { parseContactPhones } from "@/lib/contact";
 
 export type SettingsActionState = {
   ok: boolean;
@@ -37,6 +38,10 @@ export async function updatePlatformSettings(
   if (!isUrlOrEmpty(youtubeUrl))
     fieldErrors.youtubeUrl = "http(s):// эхэлсэн хаяг оруулна уу.";
 
+  const phonesParsed = parseContactPhones(s(formData, "contactPhones"));
+  if (!phonesParsed.ok) fieldErrors.contactPhones = phonesParsed.error;
+  const contactPhones = phonesParsed.ok ? phonesParsed.phones : [];
+
   const storeUrls: Record<string, string | null> = {};
   for (const [field, store] of [
     ["customerAppStoreUrl", "appStore"],
@@ -64,6 +69,7 @@ export async function updatePlatformSettings(
       appointmentFeeEnabled,
       appointmentFeeAmount,
       ...storeUrls,
+      contactPhones,
     },
     update: {
       facebookUrl: facebookUrl || null,
@@ -71,6 +77,7 @@ export async function updatePlatformSettings(
       appointmentFeeEnabled,
       appointmentFeeAmount,
       ...storeUrls,
+      contactPhones,
     },
   });
 

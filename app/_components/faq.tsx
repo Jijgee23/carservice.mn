@@ -9,7 +9,8 @@ type FaqItem = { q: string; a: string };
 // Харилцагчийн (цаг захиалагч) асуултууд — хариулт бүр одоогийн ажиллагаатай
 // таарна (account-auth, appointment-commands, appointment-payments, feedback).
 // Ажиллагаа өөрчлөгдвөл энд ч шинэчилнэ.
-const CUSTOMER_ITEMS: FaqItem[] = [
+function customerItems(phones: readonly string[]): FaqItem[] {
+  return [
   {
     q: "Хэрхэн бүртгүүлж, нэвтрэх вэ?",
     a: "Утасны дугаараа оруулаад SMS-ээр ирсэн 6 оронтой кодоор нэвтэрнэ. Анх нэвтрэхэд бүртгэл автоматаар үүсдэг тул тусдаа бүртгүүлэх шаардлагагүй. Хүсвэл «Нууц үг» хэсэгт нууц үг тохируулаад дараа нь утас, нууц үгээрээ нэвтэрч болно.",
@@ -36,13 +37,14 @@ const CUSTOMER_ITEMS: FaqItem[] = [
   },
   {
     q: "Санал, сэтгэгдэл, гомдлоо хэрхэн мэдээлэх вэ?",
-    a: `Нэвтэрсний дараа цэсний «Санал хүсэлт» товчоор алдаа, санал хүсэлтээ илгээнэ — хариуг мэдэгдлээр авна. Мөн ${CONTACT.email} хаяг эсвэл ${CONTACT.phones.join(", ")} утсаар холбогдож болно.`,
+    a: `Нэвтэрсний дараа цэсний «Санал хүсэлт» товчоор алдаа, санал хүсэлтээ илгээнэ — хариуг мэдэгдлээр авна. Мөн ${CONTACT.email} хаяг эсвэл ${phones.join(", ")} утсаар холбогдож болно.`,
   },
   {
     q: "Бүртгэлээ устгах боломжтой юу?",
     a: "Тийм. «Бүртгэл устгах» хуудаснаас SMS кодоор баталгаажуулж бүртгэлээ устгана. Хадгалсан машин, төхөөрөмж, мэдэгдлүүд хамт устна.",
   },
-];
+  ];
+}
 
 // Засварын газарт (бизнес) зориулсан асуултууд.
 const BUSINESS_ITEMS: FaqItem[] = [
@@ -73,13 +75,14 @@ const BUSINESS_ITEMS: FaqItem[] = [
 ];
 
 const TABS = [
-  { key: "customer", label: "Харилцагч", items: CUSTOMER_ITEMS },
-  { key: "business", label: "Засварын газар", items: BUSINESS_ITEMS },
+  { key: "customer", label: "Харилцагч" },
+  { key: "business", label: "Засварын газар" },
 ] as const;
 
-export function Faq() {
+/** `phones` — super admin-ийн тохируулсан холбоо барих утаснууд (server-ээс). */
+export function Faq({ phones }: { phones: readonly string[] }) {
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("customer");
-  const items = TABS.find((t) => t.key === tab)!.items;
+  const items = tab === "customer" ? customerItems(phones) : BUSINESS_ITEMS;
 
   return (
     <Container className="pt-24">
@@ -115,18 +118,35 @@ export function Faq() {
           </div>
         </div>
         <div className="flex flex-col" role="tabpanel">
+          {/* Асуулт бүр анхнаасаа хаалттай, дарахад нээгдэнэ. Native <details> —
+              гар/screen reader-т ажиллана, JS шаардахгүй, хариулт DOM-д байх тул
+              хайлтын системд индекслэгдэнэ. */}
           {items.map((it, i) => (
-            <div
-              key={it.q}
-              className={`border-t border-[var(--oc-line)] py-[22px] ${
-                i === items.length - 1 ? "border-b" : ""
-              }`}
+            <details
+              key={`${tab}:${it.q}`}
+              className={`group border-t border-[var(--oc-line)] ${i === items.length - 1 ? "border-b" : ""}`}
             >
-              <div className="text-[16.5px] font-semibold text-[var(--oc-ink2)]">{it.q}</div>
-              <div className="mt-2.5 max-w-[700px] text-[14.5px] leading-relaxed text-[var(--oc-muted2)]">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-[20px] text-[16.5px] font-semibold text-[var(--oc-ink2)] hover:text-[var(--oc-accent)] transition-colors [&::-webkit-details-marker]:hidden">
+                <span>{it.q}</span>
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  className="shrink-0 text-[var(--oc-muted3)] transition-transform duration-200 group-open:rotate-180"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </summary>
+              <div className="pb-[22px] -mt-1 max-w-[700px] text-[14.5px] leading-relaxed text-[var(--oc-muted2)]">
                 {it.a}
               </div>
-            </div>
+            </details>
           ))}
         </div>
       </div>

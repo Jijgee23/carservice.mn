@@ -2149,6 +2149,9 @@ model PlatformSetting {
   id          String  @id @default("default")
   facebookUrl String?
   youtubeUrl  String?
+  // Нүүр хуудас/footer/холбоо барих/нөхцөлийн хуудсанд харагдах утаснууд
+  // (super admin). Хоосон бол lib/contact.ts-ийн CONTACT.phones.
+  contactPhones String[] @default([])
 
   // Мобайл аппуудын store холбоос (super admin) — хоосон бол тухайн товч
   // хаана ч харагдахгүй (нүүр хуудас, footer, хэрэглэгч/ажилтны sidebar).

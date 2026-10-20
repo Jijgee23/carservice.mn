@@ -1,4 +1,5 @@
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { getContactPhones } from "@/lib/platform-settings";
 import { AppDownload } from "./_components/app-download";
 import { CtaBanner } from "./_components/cta-banner";
 import { Faq } from "./_components/faq";
@@ -35,7 +36,8 @@ export const metadata = {
 // Үнэ (PlanPrice/PlanFeature) backend-аас ирдэг тул цаг тутам сэргээнэ (ISR).
 export const revalidate = 3600;
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const phones = await getContactPhones();
   return (
     <div
       className={`${plexSans.variable} ${plexMono.variable} landing-ops relative flex flex-col min-h-screen overflow-x-clip`}
@@ -50,7 +52,7 @@ export default function LandingPage() {
         <HowItWorks />
         <Pricing />
         <AppDownload />
-        <Faq />
+        <Faq phones={phones} />
         <CtaBanner />
       </main>
       <Footer />

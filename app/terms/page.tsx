@@ -3,6 +3,7 @@ import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { Brand } from "@/app/_components/brand";
 import { Footer } from "@/app/_components/footer";
 import { CONTACT } from "@/lib/contact";
+import { getContactPhones } from "@/lib/platform-settings";
 
 const plexSans = IBM_Plex_Sans({
   subsets: ["latin", "cyrillic"],
@@ -52,7 +53,9 @@ function Sub({ children }: { children: React.ReactNode }) {
   return <p className="font-medium text-[var(--oc-ink2)] pt-1">{children}</p>;
 }
 
-export default function TermsPage() {
+export default async function TermsPage() {
+  // Утаснууд super admin-ийн тохиргооноос (/system/settings), хоосон бол phones.
+  const phones = await getContactPhones();
   return (
     <div
       className={`${plexSans.variable} ${plexMono.variable} landing-ops min-h-screen flex flex-col`}
@@ -351,7 +354,7 @@ export default function TermsPage() {
                 {CONTACT.email}
               </a>
             </li>
-            <li>Утас: {CONTACT.phones.join(", ")}</li>
+            <li>Утас: {phones.join(", ")}</li>
             <li>Хаяг: {CONTACT.address}</li>
           </ul>
         </Section>

@@ -54,7 +54,7 @@ const PLAN_META: Record<
   },
   ENTERPRISE: {
     name: "Энтерпрайз",
-    desc: "Сүлжээ, олон улсын байгууллагуудад.",
+    desc: "Сүлжээ, олон салбартай байгууллагуудад.",
     cta: "Холбоо барих",
     href: "/contact",
     highlighted: false,

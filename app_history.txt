@@ -1962,3 +1962,10 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 [2026-10-20] SEO: «автозасвар» (нэг үг) хайлт
 - Асуудал: «автосервис» хайлтад гардаг ч «автозасвар»-т гардаггүй — H1 нь «Автосервисийн…», харагдах текстэд «автозасвар» огт байгаагүй (зөвхөн Google уншдаггүй keywords meta-д), бусад газар «авто засвар» (2 үг).
 - «автозасвар» + «автосервис» хоёуланг: үндсэн/нүүр/OG гарчиг ба тайлбар, hero H1 («Автозасвар, автосервисийн ажлыг…») ба тайлбар, /discover гарчиг/тайлбар, байгууллагын гарчиг, `orgDescription`/`branchDescription` (lib/seo.ts).
+- (нэмэлт) FAQ (`app/_components/faq.tsx`) асуулт бүрийг native `<details>/<summary>` accordion болгов — анхдагч хаалттай, сум эргэнэ, гар/screen reader-т ажиллана, хариулт DOM-д тул индекслэгдэнэ; таб солиход хаагдана (key = tab:q).
+
+[2026-10-20] Холбоо барих утсыг super admin тохируулна
+- `PlatformSetting.contactPhones String[]` (migration `20261020150000_platform_contact_phones`); `/system/settings` зүүн картад «Холбоо барих утас» (таслалаар, 6 хүртэл; `parseContactPhones` — цифр/зай/+/-/(), 6–15 цифр, давхардал хасна). Хоосон бол `CONTACT.phones` (`contactPhonesOrDefault`).
+- Харагдах бүх газар нэг эх сурвалжаас: нүүр хуудасны FAQ (`<Faq phones>` — server-ээс), footer, /contact, /privacy, /terms (`getContactPhones()` — tenant context-ыг өөрчлөхгүй). Хадгалахад `revalidatePath("/", "layout")`.
+- Тест `tests/contact-phones.test.ts` 4/4.
+- Анхаар: C: диск 0 байт болж дүүрсэн — `.next/dev/cache` (15GB Turbopack cache) хэрэглэгчийн зөвшөөрлөөр устгав (дахин үүснэ); дискэнд ~3.8GB л үлдсэн.

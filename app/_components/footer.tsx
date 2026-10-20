@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { CONTACT } from "@/lib/contact";
 import { hasStoreLinks } from "@/lib/app-store-links";
-import { getPlatformSettings } from "@/lib/platform-settings";
+import { contactPhonesOrDefault, getPlatformSettings } from "@/lib/platform-settings";
 import { StoreBadges } from "./app-store-badges";
 import { Brand } from "./brand";
 import { LogoMarquee } from "./logo-marquee";
 
 export async function Footer() {
-  const { facebookUrl, youtubeUrl, appLinks } = await getPlatformSettings();
+  const { facebookUrl, youtubeUrl, appLinks, contactPhones } = await getPlatformSettings();
+  const phones = contactPhonesOrDefault(contactPhones);
   const apps = [
     { key: "customer", label: "Хэрэглэгчийн апп", links: appLinks.customer },
     { key: "business", label: "Засварын газрын апп", links: appLinks.business },
@@ -103,7 +104,7 @@ export async function Footer() {
             {CONTACT.email}
           </a>
           <div className="flex flex-wrap gap-x-3 gap-y-1 tabular-nums text-[var(--oc-muted)]">
-            {CONTACT.phones.map((p) => (
+            {phones.map((p) => (
               <a
                 key={p}
                 href={`tel:${p}`}

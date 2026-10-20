@@ -7,6 +7,7 @@ import {
 } from "@/app/_actions/system-settings";
 import { Field, FormError } from "@/app/_components/landing-ops-ui";
 import type { AppStoreLinks } from "@/lib/app-store-links";
+import { CONTACT } from "@/lib/contact";
 
 export function SettingsForm({
   initial,
@@ -14,6 +15,7 @@ export function SettingsForm({
   initial: {
     facebookUrl: string | null;
     youtubeUrl: string | null;
+    contactPhones: string[];
     appointmentFeeEnabled: boolean;
     appointmentFeeAmount: number;
     appLinks: AppStoreLinks;
@@ -37,7 +39,23 @@ export function SettingsForm({
 
       <div className="grid gap-4 lg:grid-cols-2 items-start">
         <section className="rounded-xl border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 sm:p-5 flex flex-col gap-4">
-          <div className="text-sm font-medium text-[var(--oc-ink2)]">Сошиал холбоос</div>
+          <div className="text-sm font-medium text-[var(--oc-ink2)]">Холбоо барих, сошиал</div>
+          <Field
+            label="Холбоо барих утас"
+            htmlFor="contactPhones"
+            hint={`Таслалаар тусгаарлана (6 хүртэл). Нүүр хуудас, footer, «Холбоо барих», нөхцөл/нууцлалын хуудсанд харагдана. Хоосон бол: ${CONTACT.phones.join(", ")}`}
+            error={fe.contactPhones}
+          >
+            <input
+              id="contactPhones"
+              name="contactPhones"
+              type="text"
+              inputMode="tel"
+              defaultValue={initial.contactPhones.join(", ")}
+              className={`compact-input font-plex-mono ${fe.contactPhones ? "border-red-500/50" : ""}`}
+              placeholder={CONTACT.phones.join(", ")}
+            />
+          </Field>
           <Field
             label="Facebook URL"
             htmlFor="facebookUrl"
