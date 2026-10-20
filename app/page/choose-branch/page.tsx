@@ -20,6 +20,8 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata = {
   title: "Ажиллах салбар сонгох",
+  // Хувийн/нэвтрэлтийн хуудас — хайлтад оруулахгүй (app/robots.ts).
+  robots: { index: false, follow: false },
 };
 
 export const dynamic = "force-dynamic";

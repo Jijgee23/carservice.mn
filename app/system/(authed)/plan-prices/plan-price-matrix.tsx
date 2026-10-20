@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { upsertPlanPriceAction } from "@/app/_actions/system-plan-prices";
+import { Btn } from "@/app/_components/landing-ops-ui";
+import { formatPriceInput, liveFormatPriceInput } from "@/lib/orders";
 import { BILLING_PERIOD_LABEL, PLAN_LABEL } from "@/lib/subscription";
 
 const PLANS = ["BUSINESS", "ENTERPRISE"] as const;
@@ -34,7 +36,8 @@ export function PlanPriceMatrix({ prices }: { prices: PlanPriceMatrixRow[] }) {
       <div className="px-4 py-3 border-b border-[var(--oc-line2)]">
         <h2 className="font-semibold text-sm text-[var(--oc-ink)]">Үнэ ({CURRENCY})</h2>
         <p className="text-xs text-[var(--oc-muted3)] mt-0.5">
-          Багц × хугацаа. Утга оруулаад фокусаас гарах үед автоматаар хадгална.
+          Багц × хугацаа. Утгаа өөрчлөөд «Хадгалах» дарна — нүүр хуудасны үнэ
+          (сарын) болон тенантын «Захиалга» хуудас шууд шинэчлэгдэнэ.
           <span className="text-[var(--oc-muted3)]">
             {" "}
             FREE багц нь зөвхөн бүртгүүлэх үед 14 хоногийн туршилт — үнэ
@@ -95,57 +98,78 @@ function PriceCell({
   period: Period;
   row: PlanPriceMatrixRow | null;
 }) {
-  const [amount, setAmount] = useState<string>(row?.amount ?? "");
-  const [isActive, setIsActive] = useState<boolean>(row?.isActive ?? true);
-  const [notes, setNotes] = useState<string>(row?.notes ?? "");
+  // Хадгалагдсан утга — «өөрчлөгдсөн эсэх»-ийг тооцоход.
+  const [saved, setSaved] = useState({
+    amount: row ? formatPriceInput(row.amount) : "",
+    isActive: row?.isActive ?? true,
+    notes: row?.notes ?? "",
+  });
+  const [amount, setAmount] = useState<string>(saved.amount);
+  const [isActive, setIsActive] = useState<boolean>(saved.isActive);
+  const [notes, setNotes] = useState<string>(saved.notes);
   const [pending, setPending] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const dirty = amount !== saved.amount || isActive !== saved.isActive || notes !== saved.notes;
+
   async function save() {
-    if (!amount.trim()) return; // хоосон утга — хадгалахгүй
+    if (!amount.trim()) {
+      setError("Үнээ оруулна уу.");
+      return;
+    }
     setPending(true);
     setError(null);
     setSavedAt(null);
     try {
+      const normalized = formatPriceInput(amount);
       const fd = new FormData();
       fd.set("plan", plan);
       fd.set("period", period);
       fd.set("currency", CURRENCY);
-      fd.set("amount", amount);
+      fd.set("amount", normalized.replace(/,/g, ""));
       if (isActive) fd.set("isActive", "on");
       if (notes) fd.set("notes", notes);
       const res = await upsertPlanPriceAction(null, fd);
       if (res && !res.ok) {
-        setError(res.message ?? "Алдаа");
+        setError(res.fieldErrors?.amount ?? res.message ?? "Алдаа");
         return;
       }
+      setAmount(normalized);
+      setSaved({ amount: normalized, isActive, notes });
       setSavedAt(Date.now());
-      setTimeout(() => setSavedAt(null), 2000);
+      setTimeout(() => setSavedAt(null), 2500);
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <input
-        type="text"
-        inputMode="decimal"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-        onBlur={save}
-        placeholder="0"
-        className="compact-input !py-1 !text-sm w-full max-w-[8rem]"
-      />
+    <form
+      className="flex flex-col gap-1.5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+    >
+      <div className="relative w-full max-w-[9rem]">
+        <input
+          type="text"
+          inputMode="decimal"
+          value={amount}
+          onChange={(e) => setAmount(liveFormatPriceInput(e.target.value))}
+          onBlur={() => setAmount((v) => (v ? formatPriceInput(v) : v))}
+          placeholder="0"
+          aria-label={`${PLAN_LABEL[plan]} · ${BILLING_PERIOD_LABEL[period]} үнэ`}
+          className="compact-input !py-1 !text-sm w-full pr-6 font-plex-mono tabular-nums"
+        />
+        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[var(--oc-muted3)]">₮</span>
+      </div>
       <label className="inline-flex items-center gap-1.5 cursor-pointer text-[11px] text-[var(--oc-muted)]">
         <input
           type="checkbox"
           checked={isActive}
-          onChange={(e) => {
-            setIsActive(e.target.checked);
-          }}
-          onBlur={save}
+          onChange={(e) => setIsActive(e.target.checked)}
           className="accent-[var(--oc-accent)]"
         />
         Идэвхтэй
@@ -154,19 +178,23 @@ function PriceCell({
         type="text"
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
-        onBlur={save}
         placeholder="Тэмдэглэл (заавал биш)"
         className="compact-input !py-1 !text-[11px] w-full max-w-[14rem]"
       />
-      <div className="text-[10px] h-3">
-        {pending ? (
-          <span className="text-[var(--oc-muted3)]">Хадгалж...</span>
-        ) : error ? (
-          <span className="text-red-400 light:text-red-700">{error}</span>
-        ) : savedAt ? (
-          <span className="text-emerald-400 light:text-emerald-700">✓ Хадгалав</span>
-        ) : null}
+      <div className="flex items-center gap-2">
+        <Btn type="submit" size="sm" disabled={pending || !dirty}>
+          {pending ? "Хадгалж..." : "Хадгалах"}
+        </Btn>
+        <span className="text-[10px]">
+          {error ? (
+            <span className="text-red-400 light:text-red-700">{error}</span>
+          ) : savedAt ? (
+            <span className="text-emerald-400 light:text-emerald-700">✓ Хадгалав</span>
+          ) : dirty ? (
+            <span className="text-[var(--oc-warn)]">Хадгалаагүй</span>
+          ) : null}
+        </span>
       </div>
-    </div>
+    </form>
   );
 }

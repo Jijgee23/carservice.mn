@@ -13,6 +13,7 @@ import { requireUser } from "@/lib/auth";
 import { canChooseAllBranches, eligibleBranchIds } from "@/lib/auth/roles";
 import { ALL_BRANCHES } from "@/lib/auth/session";
 import { resolveTodayLockedBranch } from "@/lib/employee-branch-lock";
+import { getAppStoreLinks } from "@/lib/platform-settings";
 import { prisma } from "@/lib/prisma";
 import { getSubscriptionState } from "@/lib/subscription-server";
 import { setTenantContext } from "@/lib/tenant-context";
@@ -29,6 +30,10 @@ const plexMono = IBM_Plex_Mono({
   weight: ["400", "500", "600"],
   variable: "--font-plex-mono",
 });
+
+
+// Хувийн хэсэг — хайлтын системд индекслэхгүй (app/robots.ts-ийн Disallow-тай хамт).
+export const metadata = { robots: { index: false, follow: false } };
 
 export default async function DashboardLayout({
   children,
@@ -51,7 +56,7 @@ export default async function DashboardLayout({
   const eligible = eligibleBranchIds(user);
   const restrictToEligible = !user.isOwner && eligible.length > 0;
 
-  const [subState, unreadNotifications, switchableBranches, lockedBranch] = await Promise.all([
+  const [subState, unreadNotifications, switchableBranches, lockedBranch, appLinks] = await Promise.all([
     getSubscriptionState(user.tenantId),
     prisma.notification.count({
       where: { userId: user.id, readAt: null },
@@ -69,6 +74,8 @@ export default async function DashboardLayout({
     // switcher-ийг унтраагаад, session хуучирсан бол автоматаар шинэчилнэ
     // (харах: ./branch-roster-sync.tsx, lib/employee-branch-lock.ts).
     resolveTodayLockedBranch(user),
+    // Засварын газрын аппын store холбоос — tenant context-ыг өөрчлөхгүй уншина.
+    getAppStoreLinks().then((l) => l.business),
   ]);
 
   return (
@@ -85,6 +92,7 @@ export default async function DashboardLayout({
           isOwner={user.isOwner}
           permissions={user.role?.permissions ?? []}
           notificationUnread={unreadNotifications}
+          appLinks={appLinks}
         />
         <div className="app-content-offset flex-1 min-w-0 min-h-screen flex flex-col relative isolate">
           <MobileTopbar
@@ -96,6 +104,7 @@ export default async function DashboardLayout({
             isOwner={user.isOwner}
             permissions={user.role?.permissions ?? []}
             notificationUnread={unreadNotifications}
+          appLinks={appLinks}
           />
           <SubscriptionGuard locked={subState.locked} isOwner={user.isOwner} />
           <div className="px-4 sm:px-6 lg:px-8 pt-3">

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { setBypassContext } from "@/lib/tenant-context";
+import { getTenantContext, setBypassContext } from "@/lib/tenant-context";
+import type { AppStoreLinks } from "@/lib/app-store-links";
 
 export type PlatformSettings = {
   facebookUrl: string | null;
@@ -7,6 +8,8 @@ export type PlatformSettings = {
   // Цаг захиалгын хураамж — false бол үнэгүй (invoice үүсэхгүй).
   appointmentFeeEnabled: boolean;
   appointmentFeeAmount: number;
+  // Мобайл аппуудын store холбоос (хоосон бол харагдахгүй).
+  appLinks: AppStoreLinks;
 };
 
 const SETTING_ID = "default";
@@ -21,6 +24,11 @@ const DEFAULT_APPOINTMENT_FEE_AMOUNT = 1000;
  */
 export async function getPlatformSettings(): Promise<PlatformSettings> {
   setBypassContext();
+  return readPlatformSettings();
+}
+
+/** Context-ыг өөрчлөхгүйгээр уншина (PlatformSetting RLS-гүй глобал мөр). */
+async function readPlatformSettings(): Promise<PlatformSettings> {
   const row = await prisma.platformSetting.findUnique({
     where: { id: SETTING_ID },
     select: {
@@ -28,6 +36,10 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
       youtubeUrl: true,
       appointmentFeeEnabled: true,
       appointmentFeeAmount: true,
+      customerAppStoreUrl: true,
+      customerPlayStoreUrl: true,
+      businessAppStoreUrl: true,
+      businessPlayStoreUrl: true,
     },
   });
   return {
@@ -37,5 +49,19 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
     appointmentFeeAmount: row
       ? Number.parseFloat(row.appointmentFeeAmount.toString())
       : DEFAULT_APPOINTMENT_FEE_AMOUNT,
+    appLinks: {
+      customer: { appStore: row?.customerAppStoreUrl ?? null, playStore: row?.customerPlayStoreUrl ?? null },
+      business: { appStore: row?.businessAppStoreUrl ?? null, playStore: row?.businessPlayStoreUrl ?? null },
+    },
   };
+}
+
+/**
+ * Зөвхөн store холбоосууд (layout/sidebar-д). Tenant context (RLS) тавигдсан
+ * ажилтны layout-оос дуудахад bypass руу ШИЛЖҮҮЛЭХГҮЙ — context байхгүй үед л
+ * (нийтийн хуудас) bypass тавина.
+ */
+export async function getAppStoreLinks(): Promise<AppStoreLinks> {
+  if (!getTenantContext()) setBypassContext();
+  return (await readPlatformSettings()).appLinks;
 }

@@ -24,6 +24,7 @@ export async function GET(
       slug,
       acceptsOnlineBooking: true,
       suspended: false,
+      isTest: false,
       plan: { in: allowedPlans },
     },
     select: {

@@ -9,6 +9,8 @@ import { Brand, BrandMark } from "./brand";
 import { FeedbackButton } from "./feedback-button";
 import { HoverFlyoutPortal, useHoverFlyout } from "./nav-hover-flyout";
 import { StaffNotificationBell } from "./staff-notification-bell";
+import { SidebarAppLinks } from "./app-store-badges";
+import type { StoreLinks } from "@/lib/app-store-links";
 import { ThemeToggle } from "./theme-toggle";
 import { useSidebarCollapse } from "./use-sidebar-collapse";
 
@@ -558,6 +560,7 @@ export function AdminSidebar({
   isOwner,
   permissions,
   notificationUnread,
+  appLinks,
 }: {
   userName: string;
   userEmail: string;
@@ -567,6 +570,8 @@ export function AdminSidebar({
   isOwner: boolean;
   permissions: string[];
   notificationUnread: number;
+  /** Засварын газрын аппын store холбоос (super admin) — хоосон бол харагдахгүй. */
+  appLinks?: StoreLinks;
 }) {
   const { collapsed, toggle } = useSidebarCollapse();
 
@@ -609,6 +614,8 @@ export function AdminSidebar({
         permissions={permissions}
         collapsed={collapsed}
       />
+
+      <SidebarAppLinks links={appLinks} title="Апп татах" appName="carservice засварын газрын апп" collapsed={collapsed} />
 
       <SidebarUserFooter
         initials={initials}
@@ -802,6 +809,7 @@ export function MobileTopbar({
   isOwner,
   permissions,
   notificationUnread,
+  appLinks,
 }: {
   userName: string;
   userEmail: string;
@@ -811,6 +819,7 @@ export function MobileTopbar({
   isOwner: boolean;
   permissions: string[];
   notificationUnread: number;
+  appLinks?: StoreLinks;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -934,6 +943,8 @@ export function MobileTopbar({
             permissions={permissions}
             onNavigate={() => setOpen(false)}
           />
+
+          <SidebarAppLinks links={appLinks} title="Апп татах" appName="carservice засварын газрын апп" />
 
           <SidebarUserFooter
             initials={initials}

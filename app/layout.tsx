@@ -8,11 +8,12 @@ const geist = Geist({
   display: "swap",
 });
 
-// <html>-д `light` class болон хумигдсан sidebar-ийн өргөнийг localStorage-оос
-// уншаад тавьдаг богино script. Өөрчлөгдвөл src (data: URL) өөрчлөгдөж React
+// Анхдагч theme нь light (`<html>`-д серверээс `light` class — анивчихгүй);
+// хэрэглэгч бараан горим сонгосон (localStorage theme=dark) бол энэ богино script
+// class-ыг авна. Хумигдсан sidebar-ийн өргөнийг ч мөн тавина. Өөрчлөгдвөл src (data: URL) өөрчлөгдөж React
 // шинэ resource гэж үзнэ.
 const THEME_INIT_CODE =
-  "(function(){try{if(localStorage.getItem('theme')==='light')document.documentElement.classList.add('light');if(localStorage.getItem('carcare:sidebar:collapsed')==='1')document.documentElement.style.setProperty('--sidebar-w','4.5rem')}catch(e){}})()";
+  "(function(){try{if(localStorage.getItem('theme')==='dark')document.documentElement.classList.remove('light');if(localStorage.getItem('carcare:sidebar:collapsed')==='1')document.documentElement.style.setProperty('--sidebar-w','4.5rem')}catch(e){}})()";
 const THEME_INIT_SRC = `data:text/javascript,${encodeURIComponent(THEME_INIT_CODE)}`;
 
 export const metadata: Metadata = {
@@ -21,13 +22,20 @@ export const metadata: Metadata = {
     default: "carservice.mn — Авто үйлчилгээний ухаалаг платформ",
     template: "%s · carservice.mn",
   },
+  // Хэрэглэгч (цаг захиалагч) болон засварын газар хоёуланд — хайлтын
+  // үгстэй («авто засвар», «цаг захиалах», «автосервис») таарахаар.
   description:
-    "Автомашины оношилгоо, засвар үйлчилгээ эрхэлдэг байгууллагуудад зориулсан олон салбарын PaaS. Засварын хуудас, түүх, нөөц, тайлан — нэг дороос.",
+    "Ойролцоох авто засвар, оношилгоо, үйлчилгээний газрыг олж онлайнаар цаг захиалаарай. Засварын газруудад — засварын хуудас, цаг захиалга, касс, нөөц, тайлан нэг дороос.",
   keywords: [
     "carservice",
     "carservice.mn",
     "авто засвар",
     "авто оношилгоо",
+    "автозасвар",
+    "автосервис",
+    "авто сервис",
+    "авто угаалга",
+    "дугуй засвар",
     "сервис менежмент",
     "OBD",
     "Mongolia",
@@ -37,7 +45,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "carservice.mn — Авто үйлчилгээний ухаалаг платформ",
     description:
-      "Олон салбарт ажиллах сервис төвүүдэд зориулсан орчин үеийн PaaS систем.",
+      "Авто засвар, үйлчилгээний цагийг онлайнаар захиалах платформ. Засварын газруудад зориулсан бүрэн удирдлагын систем.",
     url: "https://carservice.mn",
     siteName: "carservice.mn",
     locale: "mn_MN",
@@ -47,11 +55,17 @@ export const metadata: Metadata = {
     //   { url: "/favicon-32x32.png", type: "image/png", sizes: "32x32" },
     //   { url: "/favicon-16x16.png", type: "image/png", sizes: "16x16" },
     // ],
+    // Зураг: app/opengraph-image.png (файлын конвенц — бүх хуудсанд анхдагч).
   },
+  twitter: { card: "summary_large_image" },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0f",
+  // Анхдагч theme light (app/layout <html class="light">); dark сонгосон үед бараан.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f6f5f2" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0d10" },
+  ],
   width: "device-width",
   initialScale: 1,
 };
@@ -64,7 +78,7 @@ export default function RootLayout({
   return (
     <html
       lang="mn"
-      className={`${geist.variable} h-full antialiased`}
+      className={`${geist.variable} light h-full antialiased`}
       suppressHydrationWarning
     >
       <body

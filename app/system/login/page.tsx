@@ -18,6 +18,8 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata = {
   title: "Системийн нэвтрэх",
+  // Хувийн/нэвтрэлтийн хуудас — хайлтад оруулахгүй (app/robots.ts).
+  robots: { index: false, follow: false },
 };
 
 export default async function SystemLoginPage() {
@@ -38,7 +40,7 @@ export default async function SystemLoginPage() {
           </span>
         </Link>
         <Link
-          href="/page/landing"
+          href="/"
           className="text-[13px] text-[var(--oc-muted2)] hover:text-[var(--oc-ink)] transition-colors"
         >
           ← Нүүр

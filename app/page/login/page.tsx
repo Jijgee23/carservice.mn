@@ -20,6 +20,8 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata = {
   title: "Нэвтрэх",
+  // Хувийн/нэвтрэлтийн хуудас — хайлтад оруулахгүй (app/robots.ts).
+  robots: { index: false, follow: false },
 };
 
 export default async function LoginPage() {

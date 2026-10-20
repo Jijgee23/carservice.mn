@@ -313,11 +313,11 @@ export async function POST(req: Request) {
     select: {
       id: true,
       tenantId: true,
-      tenant: { select: { acceptsOnlineBooking: true, suspended: true } },
+      tenant: { select: { acceptsOnlineBooking: true, suspended: true, isTest: true } },
     },
   });
   if (!branch) return jsonError(404, "Салбар олдсонгүй.");
-  if (!branch.tenant.acceptsOnlineBooking || branch.tenant.suspended) {
+  if (!branch.tenant.acceptsOnlineBooking || branch.tenant.suspended || branch.tenant.isTest) {
     return jsonError(403, "Энэ байгууллага онлайн цаг захиалга хүлээн авахгүй.");
   }
   if (!(await isFeatureEnabled(branch.tenantId, PLAN_LIMIT_CODES.ONLINE_BOOKING))) {

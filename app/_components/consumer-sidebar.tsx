@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { accountSignOutAction } from "@/app/_actions/account-auth";
 import { submitAccountFeedback } from "@/app/_actions/feedback";
 import { AccountNotificationBell } from "./account-notification-bell";
+import { SidebarAppLinks } from "./app-store-badges";
+import type { StoreLinks } from "@/lib/app-store-links";
 import { Brand, BrandMark } from "./brand";
 import { FeedbackButton } from "./feedback-button";
 import { ThemeToggle } from "./theme-toggle";
@@ -343,12 +345,15 @@ export function ConsumerSidebar({
   accountPhone,
   initial,
   notificationUnread,
+  appLinks,
 }: {
   loggedIn: boolean;
   accountName: string;
   accountPhone: string;
   initial: string | null;
   notificationUnread: number;
+  /** Хэрэглэгчийн аппын store холбоос (super admin) — хоосон бол харагдахгүй. */
+  appLinks?: StoreLinks;
 }) {
   const { collapsed, toggle } = useSidebarCollapse();
 
@@ -388,6 +393,8 @@ export function ConsumerSidebar({
 
       <ConsumerPromoCard collapsed={collapsed} />
 
+      <SidebarAppLinks links={appLinks} title="Апп татах" appName="carservice апп" collapsed={collapsed} />
+
       <ConsumerFooter
         loggedIn={loggedIn}
         accountName={accountName}
@@ -405,12 +412,14 @@ export function ConsumerMobileTopbar({
   accountPhone,
   initial,
   notificationUnread,
+  appLinks,
 }: {
   loggedIn: boolean;
   accountName: string;
   accountPhone: string;
   initial: string | null;
   notificationUnread: number;
+  appLinks?: StoreLinks;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -529,6 +538,8 @@ export function ConsumerMobileTopbar({
           <ConsumerNavList loggedIn={loggedIn} onNavigate={() => setOpen(false)} />
 
           <ConsumerPromoCard collapsed={false} />
+
+          <SidebarAppLinks links={appLinks} title="Апп татах" appName="carservice апп" />
 
           <ConsumerFooter
             loggedIn={loggedIn}

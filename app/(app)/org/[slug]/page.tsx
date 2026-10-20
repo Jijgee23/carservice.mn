@@ -7,15 +7,18 @@ import { branchScheduleDisplaySelect } from "@/lib/branch-effective-schedule-ser
 import { resolveCategoryDurationMinutes } from "@/lib/category-duration";
 import { prisma } from "@/lib/prisma";
 import { setBypassContext } from "@/lib/tenant-context";
+import { absoluteUrl, orgDescription, orgJsonLd, orgUrl } from "@/lib/seo";
+import { JsonLd } from "@/app/_components/json-ld";
 import { BookingForm } from "./booking-form";
 
 export const dynamic = "force-dynamic";
 
 async function loadOrg(slug: string) {
   return await prisma.tenant.findFirst({
-    where: { slug, acceptsOnlineBooking: true, suspended: false },
+    where: { slug, acceptsOnlineBooking: true, suspended: false, isTest: false },
     select: {
       id: true,
+      slug: true,
       name: true,
       logoUrl: true,
       phone1: true,
@@ -25,6 +28,14 @@ async function loadOrg(slug: string) {
         select: {
           id: true,
           name: true,
+          // SEO (тайлбар, JSON-LD хаяг/байршил/утас).
+          phone: true,
+          city: true,
+          district: true,
+          khoroo: true,
+          address: true,
+          latitude: true,
+          longitude: true,
           ...branchScheduleDisplaySelect(),
         },
       },
@@ -42,7 +53,21 @@ export async function generateMetadata({
   setBypassContext();
   const { slug } = await params;
   const org = await loadOrg(slug);
-  return { title: org ? `${org.name} — Цаг захиалах` : "Олдсонгүй" };
+  if (!org) return { title: "Олдсонгүй", robots: { index: false } };
+  const description = orgDescription(org, org.branches);
+  const title = `${org.name} — Авто засвар, цаг захиалах`;
+  return {
+    title,
+    description,
+    alternates: { canonical: orgUrl(org) },
+    openGraph: {
+      title,
+      description,
+      url: orgUrl(org),
+      type: "website",
+      ...(org.logoUrl ? { images: [{ url: absoluteUrl(org.logoUrl), alt: org.name }] } : {}),
+    },
+  };
 }
 
 export default async function OrgPage({
@@ -113,6 +138,7 @@ export default async function OrgPage({
 
   return (
     <div className="flex flex-col gap-6">
+      <JsonLd data={orgJsonLd(org, org.branches)} />
       <Link
         href="/discover"
         className="text-sm text-white/40 hover:text-white/70 transition-colors"

@@ -2,9 +2,9 @@ import Link from "next/link";
 import { IBM_Plex_Sans } from "next/font/google";
 import { BtnLink } from "@/app/_components/landing-ops-ui";
 
-// Root 404 — /page/landing доторх route-уудад тохирохгүй бүх URL-д
+// Root 404 — нүүр («/») доторх route-уудад тохирохгүй бүх URL-д
 // харагдана (app/layout.tsx-ийн доторх, app/page.tsx redirect хийдэг тул
-// логик "нүүр" нь /page/landing).
+// логик "нүүр" нь «/»).
 const plexSans = IBM_Plex_Sans({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600", "700"],
@@ -28,7 +28,7 @@ export default function NotFound() {
           Нүүр хуудас руу
         </BtnLink>
         <p className="mt-4 text-xs text-[var(--oc-muted4)]">
-          эсвэл <Link href="/page/landing" className="underline hover:text-[var(--oc-ink2)]">carservice.mn</Link>
+          эсвэл <Link href="/" className="underline hover:text-[var(--oc-ink2)]">carservice.mn</Link>
         </p>
       </div>
     </div>

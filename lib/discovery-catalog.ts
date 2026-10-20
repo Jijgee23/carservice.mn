@@ -220,6 +220,7 @@ export async function getDiscoveryCatalog(
     where: {
       acceptsOnlineBooking: true,
       suspended: false,
+      isTest: false, // тест/демо тенант олон нийтэд харагдахгүй (lib/tenant-visibility.ts)
       plan: { in: allowedPlans },
       branches: { some: branchWhere },
       ...(filters.query
@@ -378,7 +379,7 @@ export async function getDiscoveryCatalog(
   // since otherwise it re-runs on every map pan/zoom for no reason.
   const facetBranches = includeFacets
     ? await prisma.branch.findMany({
-        where: { isActive: true, tenant: { acceptsOnlineBooking: true, suspended: false, plan: { in: allowedPlans } } },
+        where: { isActive: true, tenant: { acceptsOnlineBooking: true, suspended: false, isTest: false, plan: { in: allowedPlans } } },
         select: { city: true, district: true },
       })
     : [];

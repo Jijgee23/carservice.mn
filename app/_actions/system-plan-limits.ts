@@ -11,6 +11,14 @@ import {
 } from "@/lib/plan-limits";
 import { prisma } from "@/lib/prisma";
 
+// Нүүр хуудасны үнэ/боломжийн хэсэг (ISR, revalidate=3600) болон тенантын
+// «Захиалга» хуудас ч энэ өгөгдлөөс уншдаг — хадгалмагц шууд шинэчилнэ.
+function revalidatePlanPages() {
+  revalidatePath("/system/plan-prices");
+  revalidatePath("/");
+  revalidatePath("/dashboard/settings/subscription");
+}
+
 export type PlanLimitActionState = {
   ok: boolean;
   message?: string;
@@ -112,7 +120,7 @@ export async function updatePlanLimitAction(
     };
   }
 
-  revalidatePath("/system/plan-prices");
+  revalidatePlanPages();
   return { ok: true, message: "Хадгалагдлаа." };
 }
 
@@ -149,5 +157,5 @@ export async function resetPlanLimitsAction(formData: FormData): Promise<void> {
     });
   }
 
-  revalidatePath("/system/plan-prices");
+  revalidatePlanPages();
 }

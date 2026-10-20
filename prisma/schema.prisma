@@ -26,6 +26,10 @@ model Tenant {
   logoUrl                        String?
   plan                           Plan     @default(FREE)
   suspended                      Boolean  @default(false) // super admin-аар түр зогсоосон эсэх
+  // Тест/демо тенант (зөвхөн super admin тохируулна): олон нийтэд (discover,
+  // апп-ын байгууллагын жагсаалт, онлайн захиалга) харагдахгүй, системийн
+  // статистикаас хасагдана. Ажилтны тал хэвийн ажиллана (lib/tenant-visibility.ts).
+  isTest                         Boolean  @default(false)
   acceptsOnlineBooking           Boolean  @default(false) // Онлайн цаг захиалгын каталогт харагдах эсэх
   // Цаг захиалгын сануулга SMS/мэдэгдлийг товлосон цагаас хэдэн минутын
   // өмнө илгээхийг тенант өөрөө тохируулна — 24 цагаас (1440) их байж болно
@@ -2145,6 +2149,13 @@ model PlatformSetting {
   id          String  @id @default("default")
   facebookUrl String?
   youtubeUrl  String?
+
+  // Мобайл аппуудын store холбоос (super admin) — хоосон бол тухайн товч
+  // хаана ч харагдахгүй (нүүр хуудас, footer, хэрэглэгч/ажилтны sidebar).
+  customerAppStoreUrl  String?
+  customerPlayStoreUrl String?
+  businessAppStoreUrl  String?
+  businessPlayStoreUrl String?
 
   // Цаг захиалгын хураамж (AppointmentPayment) — super admin засна. false бол
   // үнэгүй (хэрэглэгч захиалахдаа QPay invoice-гүй, шууд захиална).

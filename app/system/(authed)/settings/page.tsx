@@ -15,9 +15,10 @@ export default async function SystemSettingsPage() {
     <div className="p-4 sm:p-6 max-w-full flex-1 flex flex-col min-h-0 w-full">
       <PageHeader
         title="Тохиргоо"
-        description="Платформын сошиал холбоос болон цаг захиалгын хураамж."
+        description="Платформын сошиал холбоос, цаг захиалгын хураамж, мобайл аппын store холбоос."
       />
-      <div className="rounded-xl border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 sm:p-5 max-w-xl">
+      {/* 2 багана: зүүн — сошиал + хураамж, баруун — мобайл апп холбоос (нэг форм, нэг Хадгалах). */}
+      <div className="max-w-6xl">
         <SettingsForm initial={settings} />
       </div>
     </div>

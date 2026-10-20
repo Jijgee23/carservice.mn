@@ -12,7 +12,7 @@ import { Btn } from "@/app/_components/landing-ops-ui";
 import { QPayBankGrid } from "@/app/_components/qpay-bank-grid";
 import { QPayDrawer } from "@/app/_components/qpay-drawer";
 import { useToast } from "@/app/_components/toast";
-import { currencySymbol } from "@/lib/orders";
+import { currencySymbol, formatPriceInput } from "@/lib/orders";
 import type { QPayBankUrl } from "@/lib/qpay";
 import {
   BILLING_PERIOD_LABEL,
@@ -97,7 +97,7 @@ function PlanList({ prices }: { prices: PlanPriceOption[] }) {
               </div>
             </div>
             <div className="font-plex-mono text-2xl font-bold text-[var(--oc-accent)]">
-              {Number.parseFloat(p.amount).toLocaleString("mn-MN")}{" "}
+              {formatPriceInput(p.amount)}{" "}
               <span className="text-sm text-[var(--oc-muted3)]">{currencySymbol(p.currency)}</span>
             </div>
             {p.notes ? (
@@ -156,7 +156,7 @@ function QRPanel({ pending }: { pending: PendingPayment }) {
             {BILLING_PERIOD_LABEL[pending.period]} · {PLAN_LABEL[pending.plan]}
           </div>
           <div className="mt-1 font-plex-mono text-2xl font-bold text-[var(--oc-accent)]">
-            {Number.parseFloat(pending.amount).toLocaleString("mn-MN")}{" "}
+            {formatPriceInput(pending.amount)}{" "}
             <span className="text-sm text-[var(--oc-muted3)]">{currencySymbol(pending.currency)}</span>
           </div>
         </div>
@@ -226,7 +226,7 @@ function QRPanelContent({ pending }: { pending: PendingPayment }) {
           {BILLING_PERIOD_LABEL[pending.period]} · {PLAN_LABEL[pending.plan]}
         </div>
         <div className="mt-1 font-plex-mono text-2xl font-bold text-[var(--oc-accent)]">
-          {Number.parseFloat(pending.amount).toLocaleString("mn-MN")}{" "}
+          {formatPriceInput(pending.amount)}{" "}
           <span className="text-sm text-[var(--oc-muted3)]">{currencySymbol(pending.currency)}</span>
         </div>
       </div>

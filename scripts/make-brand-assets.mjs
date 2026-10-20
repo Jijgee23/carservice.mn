@@ -1,7 +1,5 @@
-// Шинэ брэнд лого (app/carservice-icon-cyan.png, app/carservice-1f-cyan.png)-оос
-// UI asset-уудыг үүсгэнэ (нэг л өнгийн хувилбар — cyan, dark/light хуваагдалгүй):
-//   - public/brand/mark.png  (тэмдэг дангаараа, 512x512)
-//   - public/brand/logo.png  (бүтэн lockup — тэмдэг + Carservice үг)
+// Брэнд тэмдэг (public/brand/mark.svg — vector эх)-ээс raster asset-уудыг үүсгэнэ:
+//   - public/brand/mark.png  (тэмдэг дангаараа, 512x512 — vector дэмждэггүй газарт)
 //   - app/icon.png           (favicon-ы эх)
 // Ажиллуулах: node scripts/make-brand-assets.mjs && node scripts/make-favicons.mjs
 import { mkdir } from "node:fs/promises";
@@ -33,18 +31,13 @@ async function toSquare(buffer, size) {
 async function main() {
   await mkdir(OUT, { recursive: true });
 
-  // Бүтэн lockup (тэмдэг + "carservice" үг нэг зурагт) — тунгалаг захыг л тайрна.
-  const logoSrc = path.join(root, "app", "carservice-1f-cyan.png");
-  await sharp(logoSrc).trim().png().toFile(path.join(OUT, "logo.png"));
-  console.log("✓ public/brand/logo.png");
-
-  // Тэмдэг дангаараа — аль хэдийн квадрат ирсэн ч, тайрч/төвлөрүүлж 512x512 болгоно.
-  const iconSrc = path.join(root, "app", "carservice-icon-cyan.png");
-  const mark = await toSquare(await sharp(iconSrc).toBuffer(), 512);
+  // Vector тэмдгийг өндөр density-ээр raster болгож, тайрч/төвлөрүүлж 512x512.
+  const svg = path.join(OUT, "mark.svg");
+  const mark = await toSquare(await sharp(svg, { density: 1200 }).png().toBuffer(), 512);
   await sharp(mark).toFile(path.join(OUT, "mark.png"));
   console.log("✓ public/brand/mark.png");
 
-  // Favicon-ы эх — cyan тэмдэг цагаан ч, бараан ч tab дээр уншигдана (тунгалаг арктай).
+  // Favicon-ы эх — тунгалаг дэвсгэртэй тэмдэг.
   await sharp(mark).toFile(path.join(root, "app", "icon.png"));
   console.log("✓ app/icon.png (favicon-ы эх)");
 }

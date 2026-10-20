@@ -8,6 +8,7 @@ import {
   activateTenantAction,
   deleteTenantAction,
   suspendTenantAction,
+  setTenantTestAction,
 } from "@/app/_actions/system-tenants";
 import { DatePicker } from "@/app/_components/date-picker";
 import { PageHeader } from "@/app/_components/page-header";
@@ -112,12 +113,18 @@ export default async function SystemTenantDetailPage({
   const todayISO = today.toISOString().slice(0, 10);
 
   return (
-    <div className="p-6 sm:p-8 max-w-6xl">
+    <div className="p-6 sm:p-8 max-w-screen">
       <PageHeader
         title={tenant.name}
         description={`#${tenant.registerNumber} · ${tenant.email}`}
         actions={
-          tenant.suspended ? (
+          <div className="flex items-center gap-2">
+          {tenant.isTest ? (
+            <span className="text-xs px-3 py-1.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/25 light:bg-sky-100 light:border-sky-300 light:text-sky-700">
+              Тест
+            </span>
+          ) : null}
+          {tenant.suspended ? (
             <span className="text-xs px-3 py-1.5 rounded-full bg-[var(--oc-warn)]/15 text-[var(--oc-warn)] border border-[var(--oc-warn)]/25">
               Зогссон
             </span>
@@ -125,7 +132,8 @@ export default async function SystemTenantDetailPage({
             <span className="text-xs px-3 py-1.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 light:bg-emerald-100 light:border-emerald-300 light:text-emerald-700">
               Идэвхтэй
             </span>
-          )
+          )}
+          </div>
         }
       />
 
@@ -485,6 +493,31 @@ export default async function SystemTenantDetailPage({
               </button>
             </form>
           </section>
+
+          <ConfirmForm
+            action={setTenantTestAction}
+            className="rounded-[10px] border border-sky-500/20 bg-[var(--oc-panel)] p-5"
+            message={
+              tenant.isTest
+                ? "Тест тэмдгийг арилгах уу? Байгууллага онлайн захиалга авдаг бол олон нийтэд харагдаж, системийн статистикт орно."
+                : "Тест тенант болгох уу? Олон нийтэд (discover, апп, онлайн захиалга) харагдахгүй, системийн статистикаас хасагдана."
+            }
+          >
+            <h2 className="font-semibold mb-1 text-sm text-sky-300 light:text-sky-700">Тест тенант</h2>
+            <p className="text-xs text-[var(--oc-muted3)] mb-4">
+              {tenant.isTest
+                ? "Олон нийтээс нуугдсан, статистикаас хасагдсан. Ажилтны тал хэвийн ажиллана. Эрхийг доорх «Subscription нэмэх»-ээр гараар олгоно."
+                : "Демо/туршилтын байгууллага бол асаана — олон нийтэд харагдахгүй, онлайн захиалга авахгүй, системийн тоо/орлогод орохгүй."}
+            </p>
+            <input type="hidden" name="id" value={tenant.id} />
+            <input type="hidden" name="isTest" value={tenant.isTest ? "off" : "on"} />
+            <button
+              type="submit"
+              className="w-full bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 transition-colors py-2.5 rounded-xl text-sm font-medium light:bg-sky-100 light:hover:bg-sky-200 light:border-sky-300 light:text-sky-700"
+            >
+              {tenant.isTest ? "Тест тэмдгийг арилгах" : "Тест тенант болгох"}
+            </button>
+          </ConfirmForm>
 
           {tenant.suspended ? (
             <form

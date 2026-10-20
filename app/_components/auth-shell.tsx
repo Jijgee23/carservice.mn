@@ -26,7 +26,7 @@ function BrandPanel() {
       <Link href="/" className="relative flex items-center gap-2.5">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/brand/mark.png"
+          src="/brand/mark.svg"
           alt="carservice"
           className="w-9 h-9 object-contain"
         />
@@ -148,7 +148,7 @@ function FormPanel({
         </Link>
         <span className="hidden lg:block" />
         <Link
-          href="/page/landing"
+          href="/"
           className="text-sm text-white/70 hover:text-white transition-colors"
         >
           ← Нүүр

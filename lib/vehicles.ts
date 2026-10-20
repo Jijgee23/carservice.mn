@@ -49,11 +49,14 @@ export function customerOwnershipFilters(
   accountId: string,
   phone: string | null | undefined,
 ): { customer: Prisma.CustomerWhereInput }[] {
+  // Тест/демо тенантын засвар жинхэнэ хэрэглэгчийн апп-д харагдахгүй (тест
+  // тенантад жинхэнэ хүний утас ашигласан ч) — lib/tenant-visibility.ts.
+  const publicTenant = { tenant: { isTest: false } } as const;
   const or: { customer: Prisma.CustomerWhereInput }[] = [
-    { customer: { accountId } },
+    { customer: { accountId, ...publicTenant } },
   ];
   const pm = phoneMatch(phone);
-  if (pm) or.push(...pm.map((phone) => ({ customer: { phone } })));
+  if (pm) or.push(...pm.map((phone) => ({ customer: { phone, ...publicTenant } })));
   return or;
 }
 

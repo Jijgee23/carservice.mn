@@ -27,6 +27,8 @@ export default async function SystemTenantsPage({
   const where = {
     ...(filter === "suspended" ? { suspended: true } : {}),
     ...(filter === "active" ? { suspended: false } : {}),
+    ...(filter === "test" ? { isTest: true } : {}),
+    ...(filter === "real" ? { isTest: false } : {}),
     ...(q
       ? {
           OR: [
@@ -89,6 +91,8 @@ export default async function SystemTenantsPage({
                 { v: "", label: "Бүгд" },
                 { v: "active", label: "Идэвхтэй" },
                 { v: "suspended", label: "Зогссон" },
+                { v: "real", label: "Жинхэнэ" },
+                { v: "test", label: "Тест" },
               ] as const
             ).map((f) => {
               const href =
@@ -181,6 +185,11 @@ export default async function SystemTenantsPage({
                         <div>
                           <div className="text-sm font-medium text-[var(--oc-ink2)] group-hover:text-[var(--oc-accent)] transition-colors">
                             {t.name}
+                            {t.isTest ? (
+                              <span className="ml-2 align-middle text-[10px] px-1.5 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/25 light:bg-sky-100 light:border-sky-300 light:text-sky-700">
+                                Тест
+                              </span>
+                            ) : null}
                           </div>
                           <div className="text-xs text-[var(--oc-muted3)]">
                             {t.email}

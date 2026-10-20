@@ -51,6 +51,7 @@ export async function getBookingBranchResults(
     where: {
       acceptsOnlineBooking: true,
       suspended: false,
+      isTest: false, // тест/демо тенант олон нийтэд харагдахгүй (lib/tenant-visibility.ts)
       plan: { in: allowedPlans },
       // Сонгосон үйлчилгээ бүрийн идэвхтэй ангилалтай tenant-уудыг л DB-ээс
       // авна (салбар түвшний шалгалт доор хэвээр) — бүх tenant-ийг ачаалахгүй.

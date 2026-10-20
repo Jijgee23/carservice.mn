@@ -1901,3 +1901,60 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - Бүх ажлыг дуусгах: `completeAllOrderItemsCommand` — нэг order lock дотор PENDING/IN_PROGRESS ажил+оношилгоог COMPLETED, мөр бүрт audit; бөглөгдөөгүй оношилгоог алгасаж тоолно; захиалгын төлөвийг өөрчлөхгүй.
 - `RowActionsMenu`: доор багтахгүй бол дээш нээнэ (Select-ийн адил); `RowMenuButton` (modal нээх энгийн item) нэмэв.
 - Тест: `tests/order-row-actions.test.ts` 5/5; `order-internal.test.ts`-ийн guard тестийг shared guard руу шинэчлэв. Бүтэн suite шинэ fail үгүй, `next build` амжилттай. Гарын авлага `order-list-row-actions`.
+
+[2026-10-20] Tenant.isTest — прод дээрх тест/демо тенант
+- Шийдвэр (хэрэглэгч): олон нийтээс бүрэн нуух; платформын төлбөрийг super admin тохируулна (кодонд тусгай мөнгөний логик үгүй — онлайн захиалга хаагдсан тул хураамж үүсэхгүй, эрхийг «Subscription нэмэх»-ээр гараар).
+- Schema: `Tenant.isTest Boolean @default(false)` + migration `20261020100000_tenant_is_test` (нэмэлт багана). `lib/tenant-visibility.ts` (`PUBLIC_TENANT_WHERE`, `isTenantPublic`).
+- Олон нийтээс нуух: discovery catalog (discover + апп orgs/map), /discover, /org/[slug](+branch), /book/branch, апп orgs/[slug], book action; онлайн захиалгын guard-ууд (public-availability, appointment-reservations — ажилтны бүртгэл хэвээр, account web action, апп appointments API); нүүр хуудасны logo; `customerOwnershipFilters` (тест тенантын засвар жинхэнэ хэрэглэгчийн апп-д харагдахгүй).
+- Super admin: тенант дэлгэрэнгүйд «Тест тенант болгох / тэмдгийг арилгах» (`setTenantTestAction`, audit), badge; жагсаалтад «Тест» badge + «Жинхэнэ/Тест» шүүлтүүр; /system нийт тоо, орлого, plan, сүүлийн тенант болон booking-revenue нийт дүн/жагсаалтаас хасав (буцаалт/дутуу төлбөрийн ажлын дараалал шүүгдэхгүй).
+- Өөрчлөхгүй: subscription/plan limit/cron, тенантын QPay/push/SMS.
+- Тест: `tests/tenant-is-test.test.ts` 13/13; бүтэн suite шинэ fail үгүй; `next build` OK. Local DB-д онлайн захиалга авдаг тенант байхгүй тул каталогийн бодит шалгалт хийгдээгүй.
+- (нэмэлт) `/system/tenants/[id]` — `max-w-6xl` → `max-w-screen` (бусад system хуудастай адил бүтэн өргөн).
+- (нэмэлт) Мэдэгдлийн хонх + popup (`app/_components/notification-bell.tsx`, staff/account/system бүгд): хуучин violet + white/opacity hardcode → `--oc-*` token (badge/уншаагүй цэг accent, panel/line/ink/muted). Popup body руу portal тул `.landing-ops` wrapper нэмж dark/light token-ыг уламжлуулав.
+
+[2026-10-20] Брэнд тэмдэг солив (new_logo.svg)
+- `new_logo.svg`-ээс ЗӨВХӨН тэмдгийг (2 path, 38×38; өнгийг хэрэглэгчийн хүсэлтээр хуучин cyan #22D3EE болгов) `public/brand/mark.svg` болгон гаргав — «GarageBox» бичвэрийн path-уудыг огт ашиглаагүй (хэрэглэгчийн шаардлага); үг нь «carservice» хэвээр (BrandWordmark).
+- `BrandMark` (бүх sidebar, nav, footer, auth shell-ууд) болон `auth-shell.tsx` → `/brand/mark.svg` (vector).
+- `scripts/make-brand-assets.mjs` эхийг mark.svg болгож дахин үүсгэв: `public/brand/mark.png` (512), `app/icon.png`, `app/favicon.ico`, `app/apple-icon.png`.
+- Хуучин эх зураг `app/carservice-*-cyan.png`, ашиглагдаагүй `public/brand/logo.png` хөндөгдөөгүй; `new_logo.svg` (GarageBox бичвэртэй) repo-д commit хийхгүй.
+
+[2026-10-20] /system/plan-prices — нүүр хуудас шинэчлэгдэхгүй байсныг засав, Хадгалах товч, үнийн формат
+- Шалтгаан: `/page/landing` нь ISR (`revalidate = 3600`) — үнэ/боломж/хязгаарын system action-ууд зөвхөн `/system/plan-prices`-ийг revalidate хийдэг тул нүүр хуудас 1 цаг хүртэл хуучин үнэ харуулдаг байв. `system-plan-prices/-features/-limits.ts` бүгд `revalidatePlanPages()` (system + `/page/landing` + `/dashboard/settings/subscription`).
+- Үнийн матриц (`plan-price-matrix.tsx`): blur дээр автоматаар хадгалдагийг болиулж нүд бүрт «Хадгалах» товч (өөрчлөлтгүй бол идэвхгүй, «Хадгалаагүй» тэмдэг, Enter-ээр ч хадгална); үнэ бичих үед мянгатын таслалтай (`liveFormatPriceInput`), ₮ тэмдэгтэй, хадгалсан утга форматтай харагдана.
+- Тенантын «Захиалга» хуудасны (`plan-checkout.tsx`) 3 үнэ `toLocaleString("mn-MN")` → `formatPriceInput` (server/client ижил формат, hydration зөрөхгүй). Нүүр хуудас `formatTugrik` хэвээр.
+- (нэмэлт) Анхдагч theme → light: `<html>`-д серверээс `light` class (анивчихгүй), init script зөвхөн localStorage theme=dark үед авна; ThemeToggle анхны state light. Өмнө нь dark сонголт хадгалсан хэрэглэгч dark хэвээр.
+- (нэмэлт) `/page/guide` theming: хуучин `--bg-primary` + `text-white/..` + violet холбоос (light горимд цагаан текст харагдахгүй) → privacy/terms-тэй ижил `.landing-ops` shell (Plex фонт, `--oc-*` token: ink/muted/line, accent холбоос). Агуулга өөрчлөгдөөгүй.
+
+[2026-10-20] Мобайл аппуудын launcher icon (шинэ тэмдэг)
+- `scripts/make-app-icons.mjs`: `public/brand/mark.svg` (cyan) → Flutter аппуудын icon эх зураг, өмнөх хэмжээ/padding-ийг хадгалан: staff `../carcare_service_app/asset/icons/{app_icon (1024, цагаан, 80%), app_icon_foreground (62% safe zone), icon, logo}.png`; customer `../carservice_customer/assets/brand/{mark-padded (1651, 59%), mark}.png`.
+- Апп бүрт `dart run flutter_launcher_icons` → iOS AppIcon (21 хэмжээ, 1024 alpha-гүй) + Android mipmap/adaptive foreground. Багаж staff-ын `project.pbxproj`-ийн `ASSETCATALOG_COMPILER_*` = YES-ийг `AppIcon` болгож эвдсэн тул config файлуудыг (pbxproj, ic_launcher.xml, colors.xml) буцааж зөвхөн PNG-ууд үлдээв.
+- Хөндөгдөөгүй (үг агуулсан lockup): staff `logo_with_appname.png`, customer `logo-wordmark.png`, `carservice_logo.png` (splash) — хуучин тэмдэгтэй.
+
+[2026-10-20] Нүүр хуудасны «Түгээмэл асуултууд» — Харилцагч / Засварын газар таб
+- `app/_components/faq.tsx` client component болж 2 табтай (анхдагч «Харилцагч»). Харилцагчийн 8 асуулт: бүртгүүлэх/нэвтрэх (SMS код, нууц үг заавал биш), нууц үг мартсан, захиалга баталгаажих (PENDING → ажилтан баталгаажуулна, хураамж QPay, хугацаа өнгөрвөл автоматаар цуцлагдана, сануулга), цуцлах/цаг шилжүүлэх (засварын хуудас нээгдсэн бол болохгүй, хураамж шалгаад буцаана), төлбөр (хураамж QPay; засварын төлбөр засварын газарт), машин/түүх, санал хүсэлт (цэсний товч + CONTACT), бүртгэл устгах. Хариулт бүрийг кодоос шалгав.
+- Шийдвэр (хэрэглэгч): И-баримт (платформ олгодоггүй) ба Хүргэлт (үйлчилгээ байхгүй) асуултуудыг хассан. Холбоо барих имэйл `CONTACT`-аас.
+
+[2026-10-20] Мобайл аппын App Store / Google Play холбоос
+- Шийдвэр (хэрэглэгч): super admin холбоосыг хадгална; хадгалсан холбоостой store-ийн товч л харагдана.
+- `PlatformSetting`: `customerAppStoreUrl/customerPlayStoreUrl/businessAppStoreUrl/businessPlayStoreUrl` (migration `20261020120000_platform_app_store_links`). `/system/settings`-д «Мобайл апп холбоос» 4 талбар; `validateStoreUrl` (`lib/app-store-links.ts`) зөвхөн `https://apps.apple.com` / `https://play.google.com` зөвшөөрнө; хадгалахад `revalidatePath("/", "layout")`.
+- Харагдах газар: нүүр хуудасны «Аппаа татаж аваарай» хэсэг (`app-download.tsx`, Үнэ-ний дараа; холбоосгүй бол бүхэлдээ нуугдана), footer-ийн брэнд баганад (хоёр апп), хэрэглэгчийн sidebar (desktop + mobile; /discover, /account) — хэрэглэгчийн апп, ажилтны dashboard sidebar (desktop + mobile) — засварын газрын апп. `StoreBadges`/`SidebarAppLinks` (`app-store-badges.tsx`).
+- `getAppStoreLinks()` tenant context (RLS) байвал bypass руу шилжүүлэхгүй (PlatformSetting RLS-гүй) — dashboard layout-д аюулгүй.
+- Тест `tests/app-store-links.test.ts` 5/5; бүтэн suite шинэ fail үгүй; `next build` OK. Store ID-гүй тул local-д холбоос хоосон — товч харагдахгүй.
+
+[2026-10-20] Цэвэр lockup лого SVG
+- `scripts/make-logo-svg.mjs` → `public/brand/carservice_mn_logo.svg` (цайвар дэвсгэрт: «car» #16171B) ба `carservice_mn_logo_dark.svg` (бараан дэвсгэрт: «car» цагаан); тэмдэг + «service» cyan #22D3EE. Бичвэр IBM Plex Sans Bold-оос PATH болгон хувиргасан (фонтгүй орчинд ч ижил), viewBox 156×38, sidebar-ын харьцаатай (32px тэмдэг ↔ 18px bold).
+- Фонт: IBM-ийн албан ёсны IBMPlexSans-Bold.ttf (OFL) — repo-д хадгалаагүй; дахин үүсгэхдээ `node scripts/make-logo-svg.mjs <IBMPlexSans-Bold.ttf>` (fontkit WOFF2 variable-аас Bold гаргадаггүй).
+
+[2026-10-20] SEO — 1-р шат (техник) + 2-р шат (байршлын хайлт)
+- `app/robots.ts`: хувийн хэсгүүдийг (dashboard, system, account, api, login/forgot/activate/choose-branch, api-docs) Disallow, sitemap заана. `app/sitemap.ts` (revalidate 3600): нүүр, discover, signup, guide, contact, privacy, terms + онлайн захиалга авдаг олон нийтийн (isTest/suspended биш, ONLINE_BOOKING багц) байгууллага бүр, салбар бүрийн хуудас (updatedAt-аар).
+- Нүүр хуудас `/` дээр шууд (canonical «/», гарчиг «Авто засвар, үйлчилгээний цаг онлайнаар захиалах»); `/page/landing` → `permanentRedirect("/")` (308). Дотоод холбоос, `revalidatePath`-ууд «/» руу.
+- noindex (`robots: { index: false, follow: false }`): dashboard/system(authed)/account layout (шинэ `app/(app)/account/layout.tsx`), бүх нэвтрэлтийн хуудас.
+- Үндсэн description/OG тайлбар хэрэглэгч+бизнест; `twitter: summary_large_image`; `themeColor` light/dark. OG зураг `app/opengraph-image.png` (1200×630, лого + уриа, `scripts/make-og-image.mjs` — бүрэн IBMPlexSans-Regular.ttf шаардана, subset WOFF2-д «ү», «,» дутуу) + alt.
+- Байгууллага/салбарын хуудас: description (дүүрэг/хаяг), canonical, OG (тенантын лого), schema.org `AutoRepair` JSON-LD (`lib/seo.ts`: хаяг, GeoCoordinates, утас, долоо хоногийн ажлын цаг OpeningHoursSpecification, parentOrganization / department). `/discover` description + canonical.
+- Тест `tests/seo.test.ts` 8/8; бүтэн suite шинэ fail үгүй; `next build` OK (robots.txt, sitemap.xml 1h revalidate, opengraph-image static). Dev server-ээр шалгав: `/` 200, `/page/landing` 308 → `/`, robots/sitemap 200, og:image 1200×630, /login `noindex, nofollow`. Local-д олон нийтийн тенант байхгүй тул JSON-LD-г зөвхөн unit тестээр шалгав.
+- (нэмэлт) `/system/settings` 2 багана: зүүн карт — сошиал холбоос + цаг захиалгын хураамж, баруун карт — мобайл апп холбоос (`lg:grid-cols-2`, гар утсанд 1 багана); нэг форм, нэг «Хадгалах».
+
+[2026-10-20] Subscription түүх
+- Тенант (`/dashboard/settings/subscription`): «Төлбөрийн түүх» хүснэгт — өөрийн SubscriptionPayment (огноо, багц, хугацаа, дүн, арга, төлөв, төлсөн огноо), сүүлийн 50.
+- Super admin `/system/subscriptions` (sidebar «Санхүү → Subscription түүх»): «Эрх» / «Төлбөр» таб, шүүлтүүр (байгууллага/регистр/имэйл, багц, төлөв — табаар whitelist, огноо UB +08:00), хуудаслалт, «Тест» badge, карт: төлөгдсөн орлого/тоо (тест тенантгүй), хүлээгдэж буй нэхэмжлэл эсвэл идэвхтэй эрх. Excel `/system/subscriptions/export` (ижил шүүлтүүр, 20k мөр). Шүүлтүүр `lib/subscription-history.ts`.
+- Тест `tests/subscription-history.test.ts` 5/5.

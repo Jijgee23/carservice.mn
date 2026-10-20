@@ -4,6 +4,14 @@ import { revalidatePath } from "next/cache";
 import { requireSuperAdmin } from "@/lib/auth/system";
 import { prisma } from "@/lib/prisma";
 
+// Нүүр хуудасны үнэ/боломжийн хэсэг (ISR, revalidate=3600) болон тенантын
+// «Захиалга» хуудас ч энэ өгөгдлөөс уншдаг — хадгалмагц шууд шинэчилнэ.
+function revalidatePlanPages() {
+  revalidatePath("/system/plan-prices");
+  revalidatePath("/");
+  revalidatePath("/dashboard/settings/subscription");
+}
+
 export type PlanFeatureActionState = {
   ok: boolean;
   message?: string;
@@ -78,8 +86,7 @@ export async function createPlanFeatureAction(
       message: e instanceof Error ? e.message : "Үүсгэх явцад алдаа.",
     };
   }
-  revalidatePath("/system/plan-prices");
-  revalidatePath("/dashboard/settings/subscription");
+  revalidatePlanPages();
   return { ok: true, message: "Боломж нэмэгдлээ." };
 }
 
@@ -100,8 +107,7 @@ export async function updatePlanFeatureAction(
       message: e instanceof Error ? e.message : "Шинэчлэх явцад алдаа.",
     };
   }
-  revalidatePath("/system/plan-prices");
-  revalidatePath("/dashboard/settings/subscription");
+  revalidatePlanPages();
   return { ok: true, message: "Хадгалагдлаа." };
 }
 
@@ -110,6 +116,5 @@ export async function deletePlanFeatureAction(formData: FormData): Promise<void>
   const id = s(formData, "id");
   if (!id) return;
   await prisma.planFeature.delete({ where: { id } });
-  revalidatePath("/system/plan-prices");
-  revalidatePath("/dashboard/settings/subscription");
+  revalidatePlanPages();
 }

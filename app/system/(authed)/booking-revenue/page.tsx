@@ -14,6 +14,9 @@ export const metadata = {
   title: "Цаг захиалгын орлого",
 };
 
+
+const REAL_TENANT_PAYMENT = { tenant: { isTest: false } } as const;
+
 export default async function BookingRevenuePage({
   searchParams,
 }: {
@@ -29,7 +32,11 @@ export default async function BookingRevenuePage({
       // Мөр бүр аль хэдийн ТӨЛӨГДСӨН (Invoice зөвхөн PAID болсны дараа л
       // үүснэ — lib/appointment-payments.ts), status нь дараа REFUNDED болж
       // болно.
+      // Тест/демо тенантын (isTest) хураамж нийт орлого/жагсаалтад орохгүй.
+      // Буцаалт/дутуу төлбөрийн ажлын дараалал (доор) шүүгдэхгүй — жинхэнэ
+      // мөнгө хэзээ ч нуугдах ёсгүй.
       prisma.appointmentPayment.findMany({
+        where: REAL_TENANT_PAYMENT,
         orderBy: { paidAt: "desc" },
         skip,
         take,
@@ -38,16 +45,16 @@ export default async function BookingRevenuePage({
           account: { select: { name: true, phone: true } },
         },
       }),
-      prisma.appointmentPayment.count(),
+      prisma.appointmentPayment.count({ where: REAL_TENANT_PAYMENT }),
       prisma.appointmentPayment.aggregate({
-        where: { status: "PAID" },
+        where: { status: "PAID", ...REAL_TENANT_PAYMENT },
         _sum: { amount: true },
       }),
       prisma.appointmentPayment.aggregate({
-        where: { status: "REFUNDED" },
+        where: { status: "REFUNDED", ...REAL_TENANT_PAYMENT },
         _sum: { amount: true },
       }),
-      prisma.appointmentPayment.count({ where: { status: "REFUNDED" } }),
+      prisma.appointmentPayment.count({ where: { status: "REFUNDED", ...REAL_TENANT_PAYMENT } }),
       // Дутуу төлбөр (0 < төлсөн < шаардлагатай) илэрсэн боловч Invoice
       // ҮҮСЭЭГҮЙ хэвээр буй захиалгууд — confirmAppointmentPayment тэмдэглэсэн.
       prisma.appointment.findMany({

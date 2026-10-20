@@ -141,13 +141,13 @@ export async function createAppointment(
     select: {
       id: true,
       tenantId: true,
-      tenant: { select: { acceptsOnlineBooking: true, suspended: true } },
+      tenant: { select: { acceptsOnlineBooking: true, suspended: true, isTest: true } },
     },
   });
   if (!branch) {
     return { ok: false, fieldErrors: { branchId: "Салбар олдсонгүй." } };
   }
-  if (!branch.tenant.acceptsOnlineBooking || branch.tenant.suspended) {
+  if (!branch.tenant.acceptsOnlineBooking || branch.tenant.suspended || branch.tenant.isTest) {
     return {
       ok: false,
       message: "Энэ байгууллага онлайн цаг захиалга хүлээн авахгүй байна.",

@@ -5,6 +5,14 @@ import { Prisma } from "@/app/generated/prisma/client";
 import { requireSuperAdmin } from "@/lib/auth/system";
 import { prisma } from "@/lib/prisma";
 
+// Нүүр хуудасны үнэ/боломжийн хэсэг (ISR, revalidate=3600) болон тенантын
+// «Захиалга» хуудас ч энэ өгөгдлөөс уншдаг — хадгалмагц шууд шинэчилнэ.
+function revalidatePlanPages() {
+  revalidatePath("/system/plan-prices");
+  revalidatePath("/");
+  revalidatePath("/dashboard/settings/subscription");
+}
+
 export type PlanPriceActionState = {
   ok: boolean;
   message?: string;
@@ -90,7 +98,7 @@ export async function createPlanPriceAction(
       message: e instanceof Error ? e.message : "Үүсгэх явцад алдаа.",
     };
   }
-  revalidatePath("/system/plan-prices");
+  revalidatePlanPages();
   return { ok: true, message: "Үнэ нэмэгдлээ." };
 }
 
@@ -122,7 +130,7 @@ export async function updatePlanPriceAction(
       message: e instanceof Error ? e.message : "Шинэчлэх явцад алдаа.",
     };
   }
-  revalidatePath("/system/plan-prices");
+  revalidatePlanPages();
   return { ok: true, message: "Хадгалагдлаа." };
 }
 
@@ -131,7 +139,7 @@ export async function deletePlanPriceAction(formData: FormData): Promise<void> {
   const id = s(formData, "id");
   if (!id) return;
   await prisma.planPrice.delete({ where: { id } });
-  revalidatePath("/system/plan-prices");
+  revalidatePlanPages();
 }
 
 /**
@@ -190,6 +198,6 @@ export async function upsertPlanPriceAction(
     };
   }
 
-  revalidatePath("/system/plan-prices");
+  revalidatePlanPages();
   return { ok: true, message: "Хадгалагдлаа." };
 }

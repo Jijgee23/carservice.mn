@@ -17,7 +17,7 @@ const MoonIcon = (
 
 /**
  * Light/Dark theme toggle. Theme нь <html>-ийн `light` class-аар тодорхойлогдоно
- * (default dark). Сонголтыг localStorage-д хадгална. Анхны төлвийг mount-ийн
+ * (default light — app/layout.tsx). Сонголтыг localStorage-д хадгална. Анхны төлвийг mount-ийн
  * дараа DOM-оос уншиж hydration зөрчлөөс сэргийлнэ.
  */
 export function ThemeToggle({
@@ -25,7 +25,7 @@ export function ThemeToggle({
 }: {
   variant?: "full" | "icon";
 }) {
-  const [light, setLight] = useState(false);
+  const [light, setLight] = useState(true);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {

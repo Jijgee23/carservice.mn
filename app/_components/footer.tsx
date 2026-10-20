@@ -1,11 +1,17 @@
 import Link from "next/link";
 import { CONTACT } from "@/lib/contact";
+import { hasStoreLinks } from "@/lib/app-store-links";
 import { getPlatformSettings } from "@/lib/platform-settings";
+import { StoreBadges } from "./app-store-badges";
 import { Brand } from "./brand";
 import { LogoMarquee } from "./logo-marquee";
 
 export async function Footer() {
-  const { facebookUrl, youtubeUrl } = await getPlatformSettings();
+  const { facebookUrl, youtubeUrl, appLinks } = await getPlatformSettings();
+  const apps = [
+    { key: "customer", label: "Хэрэглэгчийн апп", links: appLinks.customer },
+    { key: "business", label: "Засварын газрын апп", links: appLinks.business },
+  ].filter((a) => hasStoreLinks(a.links));
   const hasSocial = Boolean(facebookUrl || youtubeUrl);
 
   return (
@@ -43,6 +49,18 @@ export async function Footer() {
                   <YoutubeIcon />
                 </a>
               ) : null}
+            </div>
+          ) : null}
+          {apps.length > 0 ? (
+            <div className="mt-5 flex flex-col gap-3">
+              {apps.map((a) => (
+                <div key={a.key} className="flex flex-col gap-1.5">
+                  <span className="font-plex-mono text-[11px] uppercase tracking-[0.1em] text-[var(--oc-muted3)]">
+                    {a.label}
+                  </span>
+                  <StoreBadges links={a.links} size="sm" appName={`carservice ${a.label.toLowerCase()}`} />
+                </div>
+              ))}
             </div>
           ) : null}
         </div>

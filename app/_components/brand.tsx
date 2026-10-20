@@ -1,11 +1,11 @@
-/* Брэнд лого — нэг л (cyan) хувилбар, theme-ээс үл хамааран.
-   Эх зураг: app/carservice-icon-cyan.png → scripts/make-brand-assets.mjs. */
+/* Брэнд тэмдэг — vector (public/brand/mark.svg), theme-ээс үл хамааран нэг
+   өнгө. PNG/favicon хувилбаруудыг scripts/make-brand-assets.mjs үүсгэнэ. */
 export function BrandMark({ size = "md" }: { size?: "sm" | "md" }) {
   const cls = size === "sm" ? "w-7 h-7" : "w-8 h-8";
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src="/brand/mark.png"
+      src="/brand/mark.svg"
       alt="Carservice"
       className={`${cls} object-contain`}
     />

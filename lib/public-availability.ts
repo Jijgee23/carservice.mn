@@ -83,7 +83,7 @@ export async function resolvePublicAvailability(
       tenantId: true,
       slotMinutes: true,
       slotCapacity: true,
-      tenant: { select: { acceptsOnlineBooking: true, suspended: true } },
+      tenant: { select: { acceptsOnlineBooking: true, suspended: true, isTest: true } },
       ...branchScheduleForDateSelect(dateStr),
     },
   });
@@ -92,6 +92,7 @@ export async function resolvePublicAvailability(
   }
   if (
     branch.tenant.suspended ||
+    branch.tenant.isTest ||
     !branch.tenant.acceptsOnlineBooking ||
     !(await isFeatureEnabled(branch.tenantId, PLAN_LIMIT_CODES.ONLINE_BOOKING))
   ) {

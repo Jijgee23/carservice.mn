@@ -7,6 +7,7 @@ import {
 import { ToastProvider } from "@/app/_components/toast";
 import { getAccount } from "@/lib/auth/account";
 import { formatPhone } from "@/lib/phone";
+import { getAppStoreLinks } from "@/lib/platform-settings";
 import { prisma } from "@/lib/prisma";
 import { setBypassContext } from "@/lib/tenant-context";
 
@@ -42,6 +43,7 @@ export default async function ConsumerLayout({
     })
     : 0;
 
+  const appLinks = (await getAppStoreLinks()).customer;
   const loggedIn = Boolean(account);
   const accountName = account?.name?.trim() ?? "";
   const accountPhone = account ? formatPhone(account.phone) : "";
@@ -58,6 +60,7 @@ export default async function ConsumerLayout({
           accountPhone={accountPhone}
           initial={initial}
           notificationUnread={unreadNotifications}
+          appLinks={appLinks}
         />
         <div className="app-content-offset flex-1 min-w-0 min-h-screen flex flex-col relative isolate">
           <ConsumerMobileTopbar
@@ -66,6 +69,7 @@ export default async function ConsumerLayout({
             accountPhone={accountPhone}
             initial={initial}
             notificationUnread={unreadNotifications}
+            appLinks={appLinks}
           />
 
           <main className="flex-1 w-full">

@@ -15,13 +15,15 @@ import {
 } from "@/lib/branches";
 import { prisma } from "@/lib/prisma";
 import { setBypassContext } from "@/lib/tenant-context";
+import { absoluteUrl, branchDescription, branchJsonLd, branchUrl } from "@/lib/seo";
+import { JsonLd } from "@/app/_components/json-ld";
 import { HoursDisclosure } from "./hours-disclosure";
 
 export const dynamic = "force-dynamic";
 
 async function loadOrg(slug: string) {
   return await prisma.tenant.findFirst({
-    where: { slug, acceptsOnlineBooking: true, suspended: false },
+    where: { slug, acceptsOnlineBooking: true, suspended: false, isTest: false },
     select: { id: true, slug: true, name: true, logoUrl: true, phone1: true },
   });
 }
@@ -68,8 +70,20 @@ export async function generateMetadata({
   const { slug, branchId } = await params;
   const org = await loadOrg(slug);
   const branch = org ? await loadBranch(org.id, branchId) : null;
+  if (!org || !branch) return { title: "Олдсонгүй", robots: { index: false } };
+  const title = `${branch.name} — ${org.name}${branch.district ? `, ${branch.district}` : ""}`;
+  const description = branchDescription(org, branch);
   return {
-    title: branch && org ? `${branch.name} — ${org.name}` : "Олдсонгүй",
+    title,
+    description,
+    alternates: { canonical: branchUrl(org, branch) },
+    openGraph: {
+      title,
+      description,
+      url: branchUrl(org, branch),
+      type: "website",
+      ...(org.logoUrl ? { images: [{ url: absoluteUrl(org.logoUrl), alt: org.name }] } : {}),
+    },
   };
 }
 
@@ -159,6 +173,7 @@ export default async function BranchDetailPage({
 
   return (
     <div className="flex flex-col gap-6">
+      <JsonLd data={branchJsonLd(org, branch)} />
       <Link
         href="/discover"
         className="text-sm text-white/40 hover:text-white/70 transition-colors"

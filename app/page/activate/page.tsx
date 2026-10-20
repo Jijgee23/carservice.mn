@@ -17,6 +17,8 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata = {
   title: "Анх удаа нэвтрэх",
+  // Хувийн/нэвтрэлтийн хуудас — хайлтад оруулахгүй (app/robots.ts).
+  robots: { index: false, follow: false },
 };
 
 export default function ActivatePage() {

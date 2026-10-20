@@ -181,7 +181,7 @@ export function NotificationBell({
         aria-label="Мэдэгдэл"
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="relative w-9 h-9 flex items-center justify-center rounded-lg text-white/60 hover:text-white hover:bg-white/[0.06] transition-colors"
+        className="relative w-9 h-9 flex items-center justify-center rounded-lg text-[var(--oc-muted3)] hover:text-[var(--oc-ink2)] hover:bg-white/[0.06] light:hover:bg-black/[0.05] transition-colors"
       >
         <svg
           width="19"
@@ -197,7 +197,7 @@ export function NotificationBell({
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
         {unread > 0 ? (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-violet-500 text-[10px] font-bold text-white">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-[var(--oc-accent)] text-[10px] font-bold text-[var(--oc-on-accent)]">
             {unread > 99 ? "99+" : unread}
           </span>
         ) : null}
@@ -205,7 +205,10 @@ export function NotificationBell({
 
       {open && typeof document !== "undefined"
         ? createPortal(
-            <>
+            // Portal (`document.body`) нь `.landing-ops`-ийн гадна тул `--oc-*`
+            // token-ууд (dark/light) уламжлагдахгүй — Modal/Select-тэй адил
+            // wrapper-аар дахин тодорхойлно.
+            <div className="landing-ops">
               <button
                 type="button"
                 tabIndex={-1}
@@ -216,22 +219,22 @@ export function NotificationBell({
               <div
                 role="dialog"
                 style={!isMobile && pos ? { top: pos.top, left: pos.left } : undefined}
-                className={`fixed z-[70] border border-white/10 bg-[var(--surface)] shadow-2xl backdrop-blur-xl overflow-hidden ${
+                className={`fixed z-[70] border border-[var(--oc-line)] bg-[var(--oc-panel)] text-[var(--oc-ink)] shadow-2xl overflow-hidden ${
                   isMobile || !pos
                     ? "inset-x-0 bottom-0 w-full rounded-t-2xl pb-[env(safe-area-inset-bottom)]"
                     : "w-80 max-w-[calc(100vw-1rem)] rounded-xl"
                 }`}
               >
                 {/* mobile grabber */}
-                <div className="mx-auto mt-2 mb-1 h-1 w-10 rounded-full bg-white/15 sm:hidden" />
+                <div className="mx-auto mt-2 mb-1 h-1 w-10 rounded-full bg-[var(--oc-line)] sm:hidden" />
 
-                <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
-                  <span className="text-sm font-medium text-white/80">Мэдэгдэл</span>
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--oc-line)]">
+                  <span className="text-sm font-medium text-[var(--oc-ink)]">Мэдэгдэл</span>
                   {unread > 0 ? (
                     <button
                       type="button"
                       onClick={onMarkAll}
-                      className="text-xs text-violet-300 hover:text-violet-200 light:text-violet-700 light:hover:text-violet-800 transition-colors"
+                      className="text-xs text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)] transition-colors"
                     >
                       Бүгдийг уншсан
                     </button>
@@ -240,11 +243,11 @@ export function NotificationBell({
 
                 <div className="max-h-[60vh] overflow-y-auto sm:max-h-96">
                   {loading && !items ? (
-              <div className="px-4 py-6 text-center text-sm text-white/40">
+              <div className="px-4 py-6 text-center text-sm text-[var(--oc-muted3)]">
                 Уншиж байна...
               </div>
             ) : !items || items.length === 0 ? (
-              <div className="px-4 py-6 text-center text-sm text-white/40">
+              <div className="px-4 py-6 text-center text-sm text-[var(--oc-muted3)]">
                 Мэдэгдэл алга байна.
               </div>
             ) : (
@@ -253,24 +256,24 @@ export function NotificationBell({
                   key={n.id}
                   href={n.href}
                   onClick={() => onItemClick(n)}
-                  className={`block px-4 py-3 border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors ${
-                    n.read ? "" : "bg-violet-500/[0.06]"
+                  className={`block px-4 py-3 border-b border-[var(--oc-line2)] hover:bg-[var(--oc-panel2)] transition-colors ${
+                    n.read ? "" : "bg-[var(--oc-accent)]/[0.07]"
                   }`}
                 >
                   <div className="flex items-start gap-2">
                     {!n.read ? (
-                      <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-violet-400 shrink-0" />
+                      <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[var(--oc-accent)] shrink-0" />
                     ) : (
                       <span className="mt-1.5 w-1.5 h-1.5 shrink-0" />
                     )}
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium text-white/85 truncate">
+                      <div className="text-sm font-medium text-[var(--oc-ink2)] truncate">
                         {n.title}
                       </div>
-                      <div className="text-xs text-white/50 line-clamp-2">
+                      <div className="text-xs text-[var(--oc-muted2)] line-clamp-2">
                         {n.body}
                       </div>
-                      <div className="text-[10px] text-white/30 mt-0.5">
+                      <div className="text-[10px] text-[var(--oc-muted3)] mt-0.5">
                         {timeAgo(n.createdAt)}
                       </div>
                     </div>
@@ -283,12 +286,12 @@ export function NotificationBell({
                 <Link
                   href={historyHref}
                   onClick={() => setOpen(false)}
-                  className="block px-4 py-2.5 text-center text-xs text-white/50 hover:text-white hover:bg-white/[0.03] transition-colors border-t border-white/[0.06]"
+                  className="block px-4 py-2.5 text-center text-xs text-[var(--oc-muted2)] hover:text-[var(--oc-ink)] hover:bg-[var(--oc-panel2)] transition-colors border-t border-[var(--oc-line)]"
                 >
                   Бүх мэдэгдэл
                 </Link>
               </div>
-            </>,
+            </div>,
             document.body,
           )
         : null}

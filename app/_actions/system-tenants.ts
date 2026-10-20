@@ -6,6 +6,7 @@ import type { ConfirmActionResult } from "@/lib/confirm-action";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireSuperAdmin } from "@/lib/auth/system";
+import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 
 function s(fd: FormData, key: string): string {
@@ -37,6 +38,34 @@ export async function activateTenantAction(formData: FormData): Promise<void> {
   revalidatePath("/system/tenants");
   revalidatePath(`/system/tenants/${id}`);
   revalidatePath("/system");
+}
+
+/**
+ * Тест/демо тенант (isTest) асаах/унтраах — зөвхөн super admin. Тест тенант
+ * олон нийтэд харагдахгүй, онлайн захиалга авахгүй, системийн статистикаас
+ * хасагдана (lib/tenant-visibility.ts). Ажилтны тал хэвийн ажиллана.
+ */
+export async function setTenantTestAction(formData: FormData): Promise<void> {
+  await requireSuperAdmin();
+  const id = s(formData, "id");
+  if (!id) return;
+  const isTest = s(formData, "isTest") === "on";
+  const before = await prisma.tenant.findUnique({ where: { id }, select: { isTest: true } });
+  if (!before || before.isTest === isTest) return;
+  await prisma.tenant.update({ where: { id }, data: { isTest } });
+  await logAudit({
+    tenantId: id,
+    entity: "Tenant",
+    entityId: id,
+    action: "UPDATE",
+    summary: isTest ? "Тест тенант болгов (super admin)" : "Тест тенант тэмдгийг арилгав (super admin)",
+    before: { isTest: before.isTest },
+    after: { isTest },
+  });
+  revalidatePath("/system/tenants");
+  revalidatePath(`/system/tenants/${id}`);
+  revalidatePath("/system");
+  revalidatePath("/discover");
 }
 
 export async function changeTenantPlanAction(formData: FormData): Promise<void> {

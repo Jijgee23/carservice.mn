@@ -8,6 +8,9 @@ export const metadata = {
   title: "Системийн тойм",
 };
 
+
+const REAL_TENANT = { isTest: false } as const;
+
 export default async function SystemOverviewPage() {
   const admin = await requireSuperAdmin();
 
@@ -22,29 +25,32 @@ export default async function SystemOverviewPage() {
     planCounts,
     recentTenants,
   ] = await Promise.all([
-    prisma.tenant.count(),
-    prisma.tenant.count({ where: { suspended: false } }),
-    prisma.tenant.count({ where: { suspended: true } }),
-    prisma.user.count(),
-    prisma.serviceOrder.count(),
+    // Тест/демо тенант (isTest) системийн тоо, орлогод орохгүй.
+    prisma.tenant.count({ where: REAL_TENANT }),
+    prisma.tenant.count({ where: { ...REAL_TENANT, suspended: false } }),
+    prisma.tenant.count({ where: { ...REAL_TENANT, suspended: true } }),
+    prisma.user.count({ where: { tenant: REAL_TENANT } }),
+    prisma.serviceOrder.count({ where: { tenant: REAL_TENANT } }),
     // Платформын өөрийн орлого — байгууллагуудаас авсан багцын (subscription)
     // ТӨЛӨГДСӨН төлбөрийн нийлбэр. Өмнө нь энд буруугаар бүх тенантын
     // ДУУССАН засварын хуудасны нийлбэр (тэдгээрийн ӨӨРСДИЙН орлого, платформын
     // орлого биш) харагдаж байсныг засав.
     prisma.subscriptionPayment.aggregate({
-      where: { status: "PAID" },
+      where: { status: "PAID", tenant: REAL_TENANT },
       _sum: { amount: true },
     }),
     // Цэвэр орлого — буцаагдсаныг (REFUNDED) хасна.
     prisma.appointmentPayment.aggregate({
-      where: { status: "PAID" },
+      where: { status: "PAID", tenant: REAL_TENANT },
       _sum: { amount: true },
     }),
     prisma.tenant.groupBy({
       by: ["plan"],
+      where: REAL_TENANT,
       _count: { _all: true },
     }),
     prisma.tenant.findMany({
+      where: REAL_TENANT,
       orderBy: { createdAt: "desc" },
       take: 5,
       select: {

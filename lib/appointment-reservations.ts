@@ -78,10 +78,11 @@ export async function reserveAppointmentInTransaction(
       slotMinutes: true,
       slotCapacity: true,
       ...branchScheduleForDateSelect(dateStr),
-      tenant: { select: { suspended: true, acceptsOnlineBooking: true } },
+      tenant: { select: { suspended: true, acceptsOnlineBooking: true, isTest: true } },
     },
   });
-  if (!branch || branch.tenant.suspended || (!input.staffUserId && !branch.tenant.acceptsOnlineBooking)) {
+  // Тест тенант онлайнаар захиалга авахгүй; ажилтны (staffUserId) бүртгэл хэвийн.
+  if (!branch || branch.tenant.suspended || (!input.staffUserId && (!branch.tenant.acceptsOnlineBooking || branch.tenant.isTest))) {
     throw new ReservationError(403, "Энэ салбар цаг захиалга хүлээн авахгүй.");
   }
   if (input.accountVehicleId) {

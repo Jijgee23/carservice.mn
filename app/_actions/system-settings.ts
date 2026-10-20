@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireSuperAdmin } from "@/lib/auth/system";
 import { prisma } from "@/lib/prisma";
+import { validateStoreUrl } from "@/lib/app-store-links";
 
 export type SettingsActionState = {
   ok: boolean;
@@ -36,6 +37,18 @@ export async function updatePlatformSettings(
   if (!isUrlOrEmpty(youtubeUrl))
     fieldErrors.youtubeUrl = "http(s):// эхэлсэн хаяг оруулна уу.";
 
+  const storeUrls: Record<string, string | null> = {};
+  for (const [field, store] of [
+    ["customerAppStoreUrl", "appStore"],
+    ["customerPlayStoreUrl", "playStore"],
+    ["businessAppStoreUrl", "appStore"],
+    ["businessPlayStoreUrl", "playStore"],
+  ] as const) {
+    const r = validateStoreUrl(s(formData, field), store);
+    if (r.ok) storeUrls[field] = r.value;
+    else fieldErrors[field] = r.error;
+  }
+
   const appointmentFeeAmount = Number.parseFloat(appointmentFeeAmountRaw);
   if (!Number.isFinite(appointmentFeeAmount) || appointmentFeeAmount <= 0) {
     fieldErrors.appointmentFeeAmount = "0-ээс их дүн оруулна уу.";
@@ -50,17 +63,20 @@ export async function updatePlatformSettings(
       youtubeUrl: youtubeUrl || null,
       appointmentFeeEnabled,
       appointmentFeeAmount,
+      ...storeUrls,
     },
     update: {
       facebookUrl: facebookUrl || null,
       youtubeUrl: youtubeUrl || null,
       appointmentFeeEnabled,
       appointmentFeeAmount,
+      ...storeUrls,
     },
   });
 
   revalidatePath("/system/settings");
   revalidatePath("/system");
-  revalidatePath("/page/landing");
+  // Store холбоос нүүр хуудас, footer, хэрэглэгч/ажилтны layout-д харагддаг.
+  revalidatePath("/", "layout");
   return { ok: true, message: "Хадгалагдлаа." };
 }

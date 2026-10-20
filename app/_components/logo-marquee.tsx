@@ -1,3 +1,4 @@
+import { PUBLIC_TENANT_WHERE } from "@/lib/tenant-visibility";
 import type { CSSProperties } from "react";
 import { prisma } from "@/lib/prisma";
 import { setBypassContext } from "@/lib/tenant-context";
@@ -10,7 +11,7 @@ import { setBypassContext } from "@/lib/tenant-context";
 export async function LogoMarquee() {
   setBypassContext();
   const tenants = await prisma.tenant.findMany({
-    where: { suspended: false },
+    where: PUBLIC_TENANT_WHERE,
     select: { id: true, name: true, logoUrl: true },
     orderBy: { createdAt: "asc" },
   });

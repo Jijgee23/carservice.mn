@@ -20,6 +20,10 @@ const plexMono = IBM_Plex_Mono({
   variable: "--font-plex-mono",
 });
 
+
+// Хувийн хэсэг — хайлтын системд индекслэхгүй (app/robots.ts-ийн Disallow-тай хамт).
+export const metadata = { robots: { index: false, follow: false } };
+
 export default async function SystemAdminLayout({
   children,
 }: {

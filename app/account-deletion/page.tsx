@@ -31,7 +31,7 @@ export default function AccountDeletionPage() {
             <Brand />
           </Link>
           <Link
-            href="/page/landing"
+            href="/"
             className="text-sm text-[var(--oc-muted2)] hover:text-[var(--oc-accent-hi)] transition-colors"
           >
             ← Нүүр

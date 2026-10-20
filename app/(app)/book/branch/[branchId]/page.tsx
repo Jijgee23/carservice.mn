@@ -16,7 +16,7 @@ async function loadBranch(branchId: string) {
     where: {
       id: branchId,
       isActive: true,
-      tenant: { acceptsOnlineBooking: true, suspended: false },
+      tenant: { acceptsOnlineBooking: true, suspended: false, isTest: false },
     },
     select: {
       id: true,

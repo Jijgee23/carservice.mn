@@ -8,6 +8,10 @@ import {
   SUBSCRIPTION_STATUS_LABEL,
   formatDaysLeft,
   resolveActiveSubscription,
+  BILLING_PERIOD_LABEL,
+  SUBSCRIPTION_PAYMENT_METHOD_LABEL,
+  SUBSCRIPTION_PAYMENT_STATUS_BADGE,
+  SUBSCRIPTION_PAYMENT_STATUS_LABEL,
 } from "@/lib/subscription";
 import { PlanCheckout } from "./plan-checkout";
 
@@ -24,7 +28,7 @@ export default async function SubscriptionPage() {
   const user = await requireUser();
   const isOwner = user.isOwner;
 
-  const [subscriptions, planPrices, planFeatures, pendingPayment] = await Promise.all([
+  const [subscriptions, planPrices, planFeatures, pendingPayment, payments] = await Promise.all([
     prisma.subscription.findMany({
       where: { tenantId: user.tenantId },
       orderBy: { createdAt: "desc" },
@@ -42,6 +46,13 @@ export default async function SubscriptionPage() {
     prisma.subscriptionPayment.findFirst({
       where: { tenantId: user.tenantId, status: "PENDING" },
       orderBy: { createdAt: "desc" },
+    }),
+    // Төлбөрийн түүх (QPay нэхэмжлэл, гараар баталгаажуулсан) — сүүлийн 50.
+    prisma.subscriptionPayment.findMany({
+      where: { tenantId: user.tenantId },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      select: { id: true, plan: true, period: true, amount: true, method: true, status: true, createdAt: true, paidAt: true },
     }),
   ]);
 
@@ -230,6 +241,52 @@ export default async function SubscriptionPage() {
                           ? `${s.createdBy.firstName} ${s.createdBy.lastName}`
                           : "Систем"}
                       </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] overflow-hidden">
+          <div className="px-5 py-4 border-b border-[var(--oc-line)]">
+            <h2 className="font-semibold text-[var(--oc-ink)]">Төлбөрийн түүх</h2>
+            <p className="text-xs text-[var(--oc-muted3)] mt-0.5">
+              Багцын төлбөрийн нэхэмжлэл, төлөлт{payments.length === 50 ? " · сүүлийн 50" : ` · нийт ${payments.length}`}
+            </p>
+          </div>
+          {payments.length === 0 ? (
+            <div className="px-5 py-10 text-center text-sm text-[var(--oc-muted3)]">Төлбөрийн түүх алга.</div>
+          ) : (
+            <div className="overflow-auto">
+              <table className="w-full min-w-[720px]">
+                <thead>
+                  <tr className="border-b border-[var(--oc-line)]">
+                    {["Огноо", "Багц", "Хугацаа", "Дүн", "Арга", "Төлөв", "Төлсөн"].map((h) => (
+                      <th
+                        key={h}
+                        className="text-left font-plex-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--oc-muted3)] font-medium px-5 py-3"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--oc-line)]">
+                  {payments.map((p) => (
+                    <tr key={p.id} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="px-5 py-3 font-plex-mono text-xs text-[var(--oc-muted2)]">{fmtDate(p.createdAt)}</td>
+                      <td className="px-5 py-3 text-sm text-[var(--oc-ink)]">{PLAN_LABEL[p.plan]}</td>
+                      <td className="px-5 py-3 text-xs text-[var(--oc-muted2)]">{BILLING_PERIOD_LABEL[p.period]}</td>
+                      <td className="px-5 py-3 font-plex-mono text-xs text-[var(--oc-ink2)]">{formatTugrik(p.amount.toString())}</td>
+                      <td className="px-5 py-3 text-xs text-[var(--oc-muted2)]">{SUBSCRIPTION_PAYMENT_METHOD_LABEL[p.method]}</td>
+                      <td className="px-5 py-3">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${SUBSCRIPTION_PAYMENT_STATUS_BADGE[p.status]}`}>
+                          {SUBSCRIPTION_PAYMENT_STATUS_LABEL[p.status]}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 font-plex-mono text-xs text-[var(--oc-muted2)]">{fmtDate(p.paidAt)}</td>
                     </tr>
                   ))}
                 </tbody>

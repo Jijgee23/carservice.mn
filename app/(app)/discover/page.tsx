@@ -12,7 +12,10 @@ import { setBypassContext } from "@/lib/tenant-context";
 import { DiscoverClient, type DiscoverOrg } from "./discover-client";
 
 export const metadata = {
-  title: "Автосервисүүд — Цаг захиалга",
+  title: "Авто засвар, автосервисүүд — Цаг захиалга",
+  description:
+    "Ойролцоох авто засвар, оношилгоо, дугуй, угаалгын газруудыг газрын зураг дээрээс олж, ажлын цаг, байршлыг харж онлайнаар цаг захиалаарай.",
+  alternates: { canonical: "/discover" },
 };
 
 // Каталог нь нийтэд нээлттэй (нэвтрэхгүйгээр үзнэ).
@@ -28,6 +31,7 @@ export default async function DiscoverPage() {
     where: {
       acceptsOnlineBooking: true,
       suspended: false,
+      isTest: false, // тест/демо тенант олон нийтэд харагдахгүй (lib/tenant-visibility.ts)
       plan: { in: allowedPlans },
     },
     orderBy: { name: "asc" },
