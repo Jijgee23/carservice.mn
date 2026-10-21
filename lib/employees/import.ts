@@ -4,11 +4,29 @@
 // the server re-validates every row through `prepareCreateEmployee`, so these
 // checks are UX only, never the security boundary.
 
+import {
+  guessFieldMapping,
+  isCalendarDate,
+  matchByName,
+  MAX_IMPORT_ROWS,
+  normalizeDateCell,
+  type NamedOption,
+  type ParsedSheet,
+} from "@/lib/import/mapping";
 import { normalizePhone } from "@/lib/phone";
-import { validateCommon } from "./validate";
 
-export const MAX_IMPORT_ROWS = 500;
-export const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
+// Ерөнхий туслахуудыг (lib/import/mapping.ts) хуучин импортын замаар ч хүртээмжтэй.
+export {
+  isCalendarDate,
+  matchByName,
+  MAX_IMPORT_BYTES,
+  MAX_IMPORT_ROWS,
+  normalizeDateCell,
+  normalizeLabel,
+  type NamedOption,
+  type ParsedSheet,
+} from "@/lib/import/mapping";
+import { validateCommon } from "./validate";
 
 export type ImportField =
   | "lastName"
@@ -43,12 +61,6 @@ export const IMPORT_FIELDS: ReadonlyArray<{
 /** Column index per field; null = not mapped. */
 export type ImportMapping = Record<ImportField, number | null>;
 
-export type ParsedSheet = {
-  headers: string[];
-  /** Data rows (header excluded), every cell already a trimmed string. */
-  rows: Array<{ excelRow: number; cells: string[] }>;
-};
-
 /** One editable row in the wizard (and the payload sent to the server). */
 export type ImportRow = {
   key: string;
@@ -66,65 +78,9 @@ export type ImportRow = {
   branchRaw: string;
 };
 
-export type NamedOption = { id: string; name: string };
-
-export function normalizeLabel(value: string): string {
-  return value.normalize("NFC").toLowerCase().replace(/[\s_]+/g, " ").replace(/[.:*]/g, "").trim();
-}
-
-/** Auto-map Excel headers to fields; each column is used at most once. */
+/** Auto-map Excel headers to employee fields; each column is used at most once. */
 export function guessMapping(headers: readonly string[]): ImportMapping {
-  const mapping = Object.fromEntries(IMPORT_FIELDS.map((f) => [f.key, null])) as ImportMapping;
-  const used = new Set<number>();
-  const normalized = headers.map(normalizeLabel);
-  // Exact alias match first, then "header contains alias" — so "Утасны дугаар"
-  // still maps but an exact "Нэр" wins over "Овог нэр".
-  for (const pass of ["exact", "contains"] as const) {
-    for (const field of IMPORT_FIELDS) {
-      if (mapping[field.key] !== null) continue;
-      const idx = normalized.findIndex(
-        (h, i) =>
-          !used.has(i) &&
-          h.length > 0 &&
-          field.aliases.some((a) => (pass === "exact" ? h === a : h.includes(a))),
-      );
-      if (idx >= 0) {
-        mapping[field.key] = idx;
-        used.add(idx);
-      }
-    }
-  }
-  return mapping;
-}
-
-/** Match an Excel role/branch name to an option (case/space-insensitive). */
-export function matchByName(options: readonly NamedOption[], raw: string): string {
-  const needle = normalizeLabel(raw);
-  if (!needle) return "";
-  return options.find((o) => normalizeLabel(o.name) === needle)?.id ?? "";
-}
-
-/**
- * Excel date cell / typed text → "YYYY-MM-DD". Accepts 2026-12-31,
- * 2026.12.31, 2026/12/31 (the parser already turns real date cells into
- * ISO). Anything else is returned unchanged so validation flags it.
- */
-export function normalizeDateCell(raw: string): string {
-  const v = raw.trim();
-  if (!v) return "";
-  const m = /^(\d{4})[-./](\d{1,2})[-./](\d{1,2})(?:[T\s].*)?$/.exec(v);
-  if (!m) return v;
-  const [, y, mo, d] = m;
-  const iso = `${y}-${mo!.padStart(2, "0")}-${d!.padStart(2, "0")}`;
-  const date = new Date(`${iso}T00:00:00Z`);
-  // Reject 2026-02-31 etc. (Date would roll it over silently).
-  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === iso ? iso : v;
-}
-
-export function isCalendarDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00Z`);
-  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  return guessFieldMapping(IMPORT_FIELDS, headers);
 }
 
 export function buildImportRows(

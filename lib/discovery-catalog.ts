@@ -1,3 +1,4 @@
+import { BOOKABLE_CATEGORY_WHERE } from "@/lib/categories";
 import "server-only";
 
 import { distanceKm, nowInZone } from "@/lib/branch-filters";
@@ -228,7 +229,7 @@ export async function getDiscoveryCatalog(
             OR: [
               { name: { contains: filters.query, mode: "insensitive" as const } },
               { branches: { some: searchBranchWhere } },
-              { categories: { some: { isActive: true, name: { contains: filters.query, mode: "insensitive" as const } } } },
+              { categories: { some: { isActive: true, ...BOOKABLE_CATEGORY_WHERE, name: { contains: filters.query, mode: "insensitive" as const } } } },
             ],
           }
         : {}),
@@ -257,7 +258,7 @@ export async function getDiscoveryCatalog(
         },
       },
       categories: {
-        where: { isActive: true },
+        where: { isActive: true, ...BOOKABLE_CATEGORY_WHERE },
         orderBy: { name: "asc" },
         select: { name: true, systemServiceKeyId: true, branches: { select: { id: true } } },
       },

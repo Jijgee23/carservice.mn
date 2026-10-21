@@ -116,7 +116,8 @@ export async function startStockCount(input: { actor: StockCountActor; categoryI
       }
       let categoryName: string | null = null;
       if (categoryId) {
-        const category = await tx.category.findFirst({ where: { id: categoryId, tenantId }, select: { name: true } });
+        // Өөрийн эсвэл системийн (сэлбэгийн) ангилал.
+        const category = await tx.category.findFirst({ where: { id: categoryId, OR: [{ tenantId }, { tenantId: null }] }, select: { name: true } });
         if (!category) throw new StockCountError("Ангилал олдсонгүй.", "STOCK_COUNT_INVALID", 422, { categoryId: "Ангилал олдсонгүй." });
         categoryName = category.name;
       }

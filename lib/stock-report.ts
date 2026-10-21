@@ -102,7 +102,8 @@ export async function loadStockReport(tenantId: string, filters: StockReportFilt
       _sum: { quantity: true, total: true },
     }),
     client.category.findMany({
-      where: { tenantId, services: { some: { tenantId, type: "GOODS" } } },
+      // Өөрийн + системийн (сэлбэгийн) ангилал — энэ тенантын бараатай нь.
+      where: { OR: [{ tenantId }, { tenantId: null }], services: { some: { tenantId, type: "GOODS" } } },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),

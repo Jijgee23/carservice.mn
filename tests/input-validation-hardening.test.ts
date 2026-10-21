@@ -22,7 +22,7 @@ before(async () => {
 test("services POST checks tenant ownership of refs before creating", () => {
   const src = read("../app/api/v1/services/route.ts");
   const post = src.slice(src.indexOf("export async function POST"));
-  const check = post.indexOf("serviceRefFieldErrors(auth.user.tenantId, refs)");
+  const check = post.indexOf("serviceRefFieldErrors(auth.user.tenantId, refs, ");
   const create = post.indexOf("prisma.service.create");
   assert.ok(check > 0 && create > check);
   assert.doesNotMatch(post, /Number\([a-zA-Z]+\) \|\| null/);
@@ -33,7 +33,8 @@ test("updateServiceCommand uses the same shared ref check", () => {
   const src = read("../lib/services/service-commands.ts");
   assert.match(src, /export async function serviceRefFieldErrors/);
   const update = src.slice(src.indexOf("export async function updateServiceCommand"));
-  assert.match(update, /serviceRefFieldErrors\(actor\.tenantId, refs\)/);
+  // Ангиллын төрөл (Category.kind) үйлчилгээний төрөлтэй таарахыг ч шалгана.
+  assert.match(update, /serviceRefFieldErrors\(actor\.tenantId, refs, data\?\.type \?\? null\)/);
 });
 
 test("diagnostic mileage rejects Infinity on web and API", () => {

@@ -30,10 +30,11 @@ export default async function NewServicePage({
 
   const [categories, units] = await Promise.all([
     prisma.category.findMany({
-      where: { tenantId: user.tenantId },
+      // Өөрийн + системийн (сэлбэгийн) ангилал; төрлөөр формд шүүнэ.
+      where: { OR: [{ tenantId: user.tenantId }, { tenantId: null }] },
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
-      select: { id: true, name: true, isActive: true },
-    }),
+      select: { id: true, name: true, isActive: true, kind: true, tenantId: true },
+    }).then((rows) => rows.map(({ tenantId, ...c }) => ({ ...c, isSystem: tenantId === null }))),
     prisma.unit.findMany({
       where: { tenantId: user.tenantId },
       orderBy: [{ isActive: "desc" }, { name: "asc" }],

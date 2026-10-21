@@ -9,6 +9,7 @@ import { requireUser } from "@/lib/auth";
 import { type BulkActionState, parseIdsJson } from "@/lib/bulk-action";
 import { parseDurationInput } from "@/lib/category-duration";
 import { prisma } from "@/lib/prisma";
+import { CATEGORY_KINDS, categoryKindLabel, type CategoryKind } from "@/lib/categories";
 
 export type CategoryActionState = {
   ok: boolean;
@@ -40,6 +41,7 @@ function validate(fd: FormData): {
     durationMinutes: number | null;
     systemServiceKeyId: string | null;
     concurrentCapacity: number;
+    kind: CategoryKind | null;
   } | null;
   errors: Record<string, string>;
 } {
@@ -50,9 +52,15 @@ function validate(fd: FormData): {
     .getAll("branchIds")
     .filter((v): v is string => typeof v === "string" && v.length > 0);
   const systemServiceKeyId = s(fd, "systemServiceKeyId") || null;
+  // Төрөл: "" = бүх төрөлд (хуучин), эсвэл зөвхөн ажил / сэлбэг / оношилгоо.
+  const kindRaw = s(fd, "kind");
+  const kind = (CATEGORY_KINDS as readonly string[]).includes(kindRaw) ? (kindRaw as CategoryKind) : null;
   const errors: Record<string, string> = {};
+  if (kindRaw && !kind) errors.kind = "Төрөл буруу.";
 
-  if (!systemServiceKeyId)
+  // Онлайн захиалга/discover-т (ажил үйлчилгээ) системийн түлхүүр хэрэгтэй;
+  // зөвхөн сэлбэг/оношилгооны ангилалд заавал биш.
+  if (!systemServiceKeyId && (kind === null || kind === "LABOR"))
     errors.systemServiceKeyId = "Системийн ангилал сонгоно уу.";
 
   if (!name) errors.name = "Ангилалын нэрээ оруулна уу.";
@@ -95,9 +103,50 @@ function validate(fd: FormData): {
       durationMinutes,
       systemServiceKeyId,
       concurrentCapacity,
+      kind,
     },
     errors,
   };
+}
+
+/**
+ * Төрлийн нэмэлт шалгалт: (1) системийн сэлбэгийн ангилалтай ижил нэр
+ * хориглоно (сонголтод хоёр ижил нэр гарахгүй), (2) засахдаа тухайн ангиллыг
+ * ашиглаж буй үйлчилгээ/загварын төрөлтэй зөрчилдөх төрөл сонгохгүй.
+ */
+async function kindFieldErrors(
+  tenantId: string,
+  data: { name: string; kind: CategoryKind | null },
+  categoryId: string | null,
+): Promise<Record<string, string>> {
+  const errors: Record<string, string> = {};
+  if (data.kind === null || data.kind === "GOODS") {
+    const clash = await prisma.category.findFirst({
+      where: { tenantId: null, name: { equals: data.name, mode: "insensitive" } },
+      select: { id: true },
+    });
+    if (clash) errors.name = "Ийм нэртэй системийн сэлбэгийн ангилал бий — түүнийг ашиглана уу.";
+  }
+  if (categoryId && data.kind) {
+    const [badServices, diagTemplates] = await Promise.all([
+      prisma.service.count({ where: { tenantId, categoryId, type: { not: data.kind } } }),
+      data.kind === "DIAGNOSTIC"
+        ? Promise.resolve(0)
+        : prisma.diagnosticTemplate.count({ where: { tenantId, categoryId } }),
+    ]);
+    if (badServices > 0 || diagTemplates > 0) {
+      errors.kind = `Энэ ангиллыг өөр төрлийн ${badServices + diagTemplates} мөр ашиглаж байна — «${categoryKindLabel(data.kind)}» болгох боломжгүй.`;
+    }
+  }
+  return errors;
+}
+
+/** Системийн түлхүүр: заавал бол шалгана; сэлбэг/оношилгоонд хоосон байж болно. */
+async function resolveServiceKey(data: { systemServiceKeyId: string | null; kind: CategoryKind | null }) {
+  const optional = data.kind === "GOODS" || data.kind === "DIAGNOSTIC";
+  if (!data.systemServiceKeyId) return optional ? { ok: true as const, id: null } : { ok: false as const };
+  const id = await validServiceKeyId(data.systemServiceKeyId);
+  return id ? { ok: true as const, id } : { ok: false as const };
 }
 
 // Систем admin-аас үүсгэсэн, идэвхтэй ажлын түлхүүр мөн эсэхийг шалгана
@@ -139,14 +188,17 @@ export async function createCategoryAction(
   const { data, errors } = validate(formData);
   if (!data) return { ok: false, fieldErrors: errors };
 
+  const kindErrors = await kindFieldErrors(user.tenantId, data, null);
+  if (Object.keys(kindErrors).length > 0) return { ok: false, fieldErrors: kindErrors };
   const branchIds = await validBranchIds(user.tenantId, data.branchIds);
-  const systemServiceKeyId = await validServiceKeyId(data.systemServiceKeyId);
-  if (!systemServiceKeyId) {
+  const key = await resolveServiceKey(data);
+  if (!key.ok) {
     return {
       ok: false,
       fieldErrors: { systemServiceKeyId: "Сонгосон системийн ангилал олдсонгүй." },
     };
   }
+  const systemServiceKeyId = key.id;
 
   let created;
   try {
@@ -159,6 +211,7 @@ export async function createCategoryAction(
         durationMinutes: data.durationMinutes,
         concurrentCapacity: data.concurrentCapacity,
         systemServiceKeyId,
+        kind: data.kind,
         branches: { connect: branchIds.map((id) => ({ id })) },
       },
       select: { id: true },
@@ -206,16 +259,20 @@ export async function updateCategoryAction(
   const { data, errors } = validate(formData);
   if (!data) return { ok: false, fieldErrors: errors };
 
+  const kindErrors = await kindFieldErrors(user.tenantId, data, id);
+  if (Object.keys(kindErrors).length > 0) return { ok: false, fieldErrors: kindErrors };
   const branchIds = await validBranchIds(user.tenantId, data.branchIds);
-  const systemServiceKeyId = await validServiceKeyId(data.systemServiceKeyId);
-  if (!systemServiceKeyId) {
+  const key = await resolveServiceKey(data);
+  if (!key.ok) {
     return {
       ok: false,
       fieldErrors: { systemServiceKeyId: "Сонгосон системийн ангилал олдсонгүй." },
     };
   }
+  const systemServiceKeyId = key.id;
 
-  // Тенантынх мөн эсэхийг шалгана (set-д хэрэгтэй).
+  // Тенантынх мөн эсэхийг шалгана (set-д хэрэгтэй). Системийн ангилал (tenantId
+  // null) энд олдохгүй тул тенант хэзээ ч засахгүй.
   const existing = await prisma.category.findFirst({
     where: { id, tenantId: user.tenantId },
     select: { id: true },
@@ -232,6 +289,7 @@ export async function updateCategoryAction(
         durationMinutes: data.durationMinutes,
         concurrentCapacity: data.concurrentCapacity,
         systemServiceKeyId,
+        kind: data.kind,
         branches: { set: branchIds.map((bid) => ({ id: bid })) },
       },
     });

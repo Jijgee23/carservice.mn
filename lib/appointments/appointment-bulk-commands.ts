@@ -1,3 +1,4 @@
+import { BOOKABLE_CATEGORY_WHERE } from "@/lib/categories";
 import { resolveCategoryDurations } from "@/lib/category-duration";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
@@ -67,6 +68,7 @@ export async function changeAppointmentCategoryCommand(input: {
       // Match reservation/create eligibility: a category is valid for this
       // appointment's branch only when it is assigned there or is global.
       OR: [{ branches: { some: { id: appt.branchId } } }, { branches: { none: {} } }],
+      AND: [BOOKABLE_CATEGORY_WHERE],
     },
     select: { id: true, name: true },
   });

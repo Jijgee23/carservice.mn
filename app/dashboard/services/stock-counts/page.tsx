@@ -32,9 +32,13 @@ export default async function StockCountsPage({ searchParams }: { searchParams: 
     listStockCounts(user.tenantId, page),
     mayCount
       ? prisma.category.findMany({
-          where: { tenantId: user.tenantId, services: { some: { type: "GOODS", isActive: true } } },
+          where: {
+            OR: [{ tenantId: user.tenantId }, { tenantId: null }],
+            // Системийн ангилалд бусад тенантын бараа ч холбогдсон байж болох тул тенантаар шүүнэ.
+            services: { some: { type: "GOODS", isActive: true, tenantId: user.tenantId } },
+          },
           orderBy: { name: "asc" },
-          select: { id: true, name: true, _count: { select: { services: { where: { type: "GOODS", isActive: true } } } } },
+          select: { id: true, name: true, _count: { select: { services: { where: { type: "GOODS", isActive: true, tenantId: user.tenantId } } } } },
         })
       : Promise.resolve([]),
   ]);

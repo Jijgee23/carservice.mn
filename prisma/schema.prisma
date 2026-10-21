@@ -984,8 +984,13 @@ model DiagnosticReport {
   @@index([templateId])
 }
 
-// --- Category (үйлчилгээний ангилал — Ажил/Оношилгоо/Сэлбэг бүгдэд) -------
-// Урьд "ажлын ангилал" байсныг өргөтгөж бүх төрлийн Service-д ашиглана.
+// --- Category (үйлчилгээний ангилал) ---------------------------------------
+// `kind` — LABOR (зөвхөн ажил үйлчилгээ), GOODS (зөвхөн сэлбэг), DIAGNOSTIC
+// (зөвхөн оношилгоо); null = бүх төрөлд (хуучин ангиллууд хэвээр).
+// `tenantId` null = СИСТЕМИЙН ангилал (super admin, бүх тенантад харагдана,
+// тенант засахгүй — RLS: уншихад IS NULL зөвшөөрнө, бичихэд хориглоно;
+// нэр давтагдахгүй: partial unique index "Category_system_name_key").
+// Онлайн цаг захиалга зөвхөн LABOR / null ангиллыг ашиглана (lib/categories.ts).
 // Салбартай олон-олон холбоотой: тухайн ангилал аль салбаруудад санал
 // болгогдох вэ. Салбар оноогоогүй бол БҮХ салбарт хамаарна (нээлттэй). Онлайн
 // цаг захиалгад үйлчлүүлэгч тухайн салбарын ангиллаас сонгож болно.
@@ -1004,8 +1009,10 @@ model Category {
   // үүсгэхэд 1-ээр урьдчилан бөглөгдөж, засах боломжтой.
   concurrentCapacity Int @default(1)
 
-  tenantId String
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  kind ServiceKind?
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   // Системийн ангилал (system admin удирддаг, платформ даяарх нэгдсэн
   // "ажлын" түлхүүр — ж: "Моторын тос солих") — ЗААВАЛ, ангилал бүр яг нэг
@@ -1015,8 +1022,9 @@ model Category {
   // түлхүүрээр хайж, аль салбар тухайн ажлыг хийдгийг олоход ашиглана.
   // onDelete Restrict — ашиглагдаж буй түлхүүрийг устгаж болохгүй (харах:
   // app/_actions/system-service-keys.ts-ийн archive-if-used).
-  systemServiceKeyId String
-  systemServiceKey   SystemServiceKey @relation(fields: [systemServiceKeyId], references: [id], onDelete: Restrict)
+  // Тенантын ангилалд app түвшинд заавал; системийн (сэлбэгийн) ангилалд null.
+  systemServiceKeyId String?
+  systemServiceKey   SystemServiceKey? @relation(fields: [systemServiceKeyId], references: [id], onDelete: Restrict)
 
   // Олон-олон: ангилал санал болгогдох салбарууд (хоосон бол бүх салбарт).
   branches            Branch[]
@@ -1032,6 +1040,7 @@ model Category {
   @@unique([tenantId, name])
   @@index([tenantId, isActive])
   @@index([systemServiceKeyId])
+  @@index([kind])
 }
 
 // --- SystemServiceKey (систем admin удирддаг, платформ даяарх ажлын ----------

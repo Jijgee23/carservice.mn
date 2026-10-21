@@ -1,5 +1,6 @@
 "use server";
 
+import { BOOKABLE_CATEGORY_WHERE } from "@/lib/categories";
 import {
   type Weekday,
   branchStatusNow,
@@ -55,7 +56,7 @@ export async function getBookingBranchResults(
       plan: { in: allowedPlans },
       // Сонгосон үйлчилгээ бүрийн идэвхтэй ангилалтай tenant-уудыг л DB-ээс
       // авна (салбар түвшний шалгалт доор хэвээр) — бүх tenant-ийг ачаалахгүй.
-      AND: ids.map((id) => ({ categories: { some: { isActive: true, systemServiceKeyId: id } } })),
+      AND: ids.map((id) => ({ categories: { some: { isActive: true, ...BOOKABLE_CATEGORY_WHERE, systemServiceKeyId: id } } })),
     },
     orderBy: { name: "asc" },
     select: {
@@ -76,7 +77,7 @@ export async function getBookingBranchResults(
       },
       categories: {
         // Зөвхөн сонгосон түлхүүрүүд хэрэгтэй (доор `every(ids)` л шалгана).
-        where: { isActive: true, systemServiceKeyId: { in: ids } },
+        where: { isActive: true, ...BOOKABLE_CATEGORY_WHERE, systemServiceKeyId: { in: ids } },
         select: {
           systemServiceKeyId: true,
           branches: { select: { id: true } },

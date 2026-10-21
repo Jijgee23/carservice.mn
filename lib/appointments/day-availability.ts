@@ -15,6 +15,7 @@
 // under `requireApiUser`/`requirePermission` and must never depend on that
 // plan gate. Both fetch and authorize the branch themselves, then hand the
 // already-fetched row here.
+import { BOOKABLE_CATEGORY_WHERE } from "@/lib/categories";
 import type { EffectiveScheduleSource, ScheduleException, ScheduleRule, ScheduleSeason } from "@/lib/branch-effective-schedule";
 import { resolveEffectiveSchedule } from "@/lib/branch-effective-schedule";
 import {
@@ -78,6 +79,7 @@ export async function computeBranchDayAvailability(
         tenantId: branch.tenantId,
         isActive: true,
         OR: [{ branches: { some: { id: branch.id } } }, { branches: { none: {} } }],
+        AND: [BOOKABLE_CATEGORY_WHERE],
       },
       select: { id: true },
     });

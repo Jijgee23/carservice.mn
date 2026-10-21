@@ -113,7 +113,7 @@ export async function POST(req: Request) {
     categoryId: typeof categoryId === "string" && categoryId ? categoryId : null,
     durationUnitId: typeof durationUnitId === "string" && durationUnitId ? durationUnitId : null,
   };
-  const refErrors = await serviceRefFieldErrors(auth.user.tenantId, refs);
+  const refErrors = await serviceRefFieldErrors(auth.user.tenantId, refs, type as "LABOR" | "GOODS" | "DIAGNOSTIC");
   if (Object.keys(refErrors).length > 0) {
     return jsonError(400, Object.values(refErrors)[0], { fieldErrors: refErrors });
   }

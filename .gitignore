@@ -56,3 +56,6 @@ image.png
 # DB dumps — never commit (contain PII and credentials)
 /*.sql
 /*.dump
+
+# Local import test spreadsheets
+/*_import_test.xlsx

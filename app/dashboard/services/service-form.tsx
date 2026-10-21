@@ -1,5 +1,6 @@
 "use client";
 
+import { categoryAllowsKind, type CategoryKind } from "@/lib/categories";
 import { useActionState, useState } from "react";
 import {
   type ServiceActionState,
@@ -40,6 +41,10 @@ export type CategoryOption = {
   id: string;
   name: string;
   isActive: boolean;
+  /** null = бүх төрөлд; өөр бол зөвхөн тухайн төрөлд (lib/categories.ts). */
+  kind: CategoryKind | null;
+  /** Системийн (бүх байгууллагад нийтлэг) ангилал. */
+  isSystem: boolean;
 };
 
 export type UnitOption = {
@@ -123,8 +128,9 @@ export function ServiceForm({
 
   const backHref = `/dashboard/services/${SERVICE_KIND_SLUG[type]}`;
 
+  // Сонгосон төрөлд тохирох ангилал (сэлбэгт системийн ангиллууд ч орно).
   const visibleCategories = categories.filter(
-    (c) => c.isActive || c.id === initial?.categoryId,
+    (c) => (c.isActive && categoryAllowsKind(c.kind, type)) || c.id === initial?.categoryId,
   );
   const hasAnyCategory = categories.length > 0;
 
@@ -206,9 +212,13 @@ export function ServiceForm({
             placeholder={
               hasAnyCategory ? "— Ангилал —" : "Ангилал бүртгэгдээгүй"
             }
+            // Сэлбэгт системийн 34 + өөрийн ангилал — шууд бичиж хайна.
+            searchable
+            searchPlaceholder="Ангиллын нэрээр хайх…"
             options={visibleCategories.map((c) => ({
               value: c.id,
               label: `${c.name}${c.isActive ? "" : " (идэвхгүй)"}`,
+              hint: c.isSystem ? "систем" : undefined,
             }))}
           />
         </Field>

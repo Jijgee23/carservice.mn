@@ -465,7 +465,8 @@ test("every prisma.service/category/unit call inside the command module is tenan
   assert.match(commandSource, /prisma\.service\.updateMany\(\{\s*where:\s*\{\s*id:\s*serviceId,\s*tenantId:\s*actor\.tenantId/);
   assert.match(commandSource, /prisma\.service\.findFirst\(\{\s*where:\s*\{\s*id:\s*serviceId,\s*tenantId:\s*actor\.tenantId\s*\}/);
   assert.match(commandSource, /prisma\.service\.findFirst\(\{\s*where:\s*\{\s*id:\s*serviceId,\s*tenantId:\s*actor\.tenantId,\s*type:\s*"GOODS"/);
-  assert.match(commandSource, /prisma\.category\.findFirst\(\{\s*where:\s*\{\s*id:\s*categoryId,\s*tenantId:\s*actor\.tenantId\s*\}/);
+  // Өөрийн эсвэл системийн (tenantId null, бүх тенантад нийтлэг) ангилал — өөр тенантынх хэзээ ч биш.
+  assert.match(commandSource, /prisma\.category\.findFirst\(\{\s*where:\s*\{\s*id:\s*categoryId,\s*OR:\s*\[\{\s*tenantId:\s*actor\.tenantId\s*\},\s*\{\s*tenantId:\s*null\s*\}\]\s*\}/);
   assert.match(commandSource, /prisma\.service\.findMany\(\{\s*where:\s*\{\s*id:\s*\{\s*in:\s*ids\s*\},\s*tenantId:\s*actor\.tenantId/);
 });
 
@@ -499,11 +500,13 @@ test("the four web actions delegate to the shared commands and no longer impleme
   assert.doesNotMatch(bulkBody, /prisma\.(service|category)\./);
 });
 
-test("createServiceAction is untouched — still uses its own local validate(), out of this slice's scope", () => {
+test("createServiceAction delegates to the shared create rules + command (also used by the Excel import)", () => {
   const actions = src("../app/_actions/services.ts");
   const createStart = actions.indexOf("export async function createServiceAction");
   const updateStart = actions.indexOf("export async function updateServiceAction");
   const createBody = actions.slice(createStart, updateStart);
-  assert.match(createBody, /await validate\(formData, user\.tenantId\)/);
-  assert.match(createBody, /prisma\.service\.create\(/);
+  assert.match(createBody, /validateServiceCreate\(raw, await loadServiceRefs\(user\.tenantId, raw\.type\)\)/);
+  assert.match(createBody, /enforceCountLimit\(/);
+  assert.match(createBody, /createServiceCommand\(user, data\)/);
+  assert.doesNotMatch(createBody, /prisma\.service\.create\(/);
 });

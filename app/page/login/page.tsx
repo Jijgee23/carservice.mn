@@ -46,7 +46,7 @@ export default async function LoginPage() {
             >
               бүртгүүлэх хүсэлт
             </Link>{" "}
-            илгээнэ үү — 1 хоногт нээгдэнэ.
+            илгээнэ үү.
           </>
         }
       >

@@ -34,7 +34,8 @@ export default async function EditDiagnosticTemplatePage({
       where: { id, ...tenantVisibleTemplateWhere(user.tenantId) },
     }),
     prisma.category.findMany({
-      where: { tenantId: user.tenantId },
+      // Оношилгооны загварт — «Оношилгоо» эсвэл «Бүх төрөлд» ангилал.
+      where: { tenantId: user.tenantId, OR: [{ kind: "DIAGNOSTIC" }, { kind: null }] },
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
       select: { id: true, name: true, isActive: true },
     }),

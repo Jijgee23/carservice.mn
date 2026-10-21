@@ -4,8 +4,6 @@
 import type { ConfirmActionResult } from "@/lib/confirm-action";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { Prisma } from "@/app/generated/prisma/client";
-import { logAudit } from "@/lib/audit";
 import { requireUser } from "@/lib/auth";
 import { canCreate, canDelete, canEdit } from "@/lib/auth/roles";
 import { assertActiveSubscription } from "@/lib/subscription-server";
@@ -13,7 +11,7 @@ import { type BulkActionState, parseIdsJson } from "@/lib/bulk-action";
 import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
 import { enforceCountLimit } from "@/lib/plan-limits-server";
 import { prisma } from "@/lib/prisma";
-import { SERVICE_KINDS, SERVICE_KIND_SLUG, type ServiceKind } from "@/lib/services";
+import { SERVICE_KIND_SLUG, type ServiceKind } from "@/lib/services";
 import {
   ServiceCommandError,
   adjustServiceStockCommand,
@@ -21,7 +19,8 @@ import {
   deleteServiceCommand,
   updateServiceCommand,
 } from "@/lib/services/service-commands";
-import { parseNonNegativeDecimal } from "@/lib/decimal-input";
+import { validateServiceCreate, type ServiceCreateRaw } from "@/lib/services/service-create-rules";
+import { createServiceCommand, loadServiceRefs } from "@/lib/services/service-create";
 
 export type ServiceActionState = {
   ok: boolean;
@@ -34,7 +33,6 @@ function s(fd: FormData, key: string): string {
   return typeof v === "string" ? v.trim() : "";
 }
 
-const parseDecimal = parseNonNegativeDecimal;
 
 async function authorize(action: "create" | "edit" | "delete") {
   const user = await requireUser();
@@ -51,157 +49,22 @@ async function authorize(action: "create" | "edit" | "delete") {
   return user;
 }
 
-type Parsed = {
-  type: ServiceKind;
-  name: string;
-  code: string | null;
-  unitId: string | null;
-  price: Prisma.Decimal;
-  costPrice: Prisma.Decimal | null;
-  stock: Prisma.Decimal | null;
-  durationValue: Prisma.Decimal | null;
-  durationUnitId: string | null;
-  reminderIntervalMonths: number | null;
-  description: string | null;
-  isActive: boolean;
-  categoryId: string | null;
-};
-
-async function validate(
-  fd: FormData,
-  tenantId: string,
-): Promise<{
-  data: Parsed | null;
-  errors: Record<string, string>;
-}> {
-  const typeRaw = s(fd, "type");
-  const name = s(fd, "name");
-  const code = s(fd, "code").toUpperCase();
-  const unitIdRaw = s(fd, "unitId");
-  const priceRaw = s(fd, "price");
-  const costRaw = s(fd, "costPrice");
-  const stockRaw = s(fd, "stock");
-  const durationValueRaw = s(fd, "durationValue");
-  const durationUnitIdRaw = s(fd, "durationUnitId");
-  const reminderIntervalMonthsRaw = s(fd, "reminderIntervalMonths");
-  const description = s(fd, "description");
-  const categoryIdRaw = s(fd, "categoryId");
-  const isActive = fd.get("isActive") === "on";
-
-  const errors: Record<string, string> = {};
-
-  if (!SERVICE_KINDS.includes(typeRaw as ServiceKind)) {
-    errors.type = "Төрлийг сонгоно уу.";
-  }
-  if (!name) errors.name = "Нэр оруулна уу.";
-  const price = parseDecimal(priceRaw);
-  if (!price) errors.price = "Үнэ буруу.";
-
-  const type = typeRaw as ServiceKind;
-
-  let costPrice: Prisma.Decimal | null = null;
-  let stock: Prisma.Decimal | null = null;
-  let durationValue: Prisma.Decimal | null = null;
-  let durationUnitId: string | null = null;
-  let categoryId: string | null = null;
-  let unitId: string | null = null;
-
-  // Хэмжих нэгж: LABOR / GOODS-д заавал
-  if (type === "LABOR" || type === "GOODS") {
-    if (!unitIdRaw) {
-      errors.unitId = "Хэмжих нэгж сонгоно уу.";
-    } else {
-      const exists = await prisma.unit.findFirst({
-        where: { id: unitIdRaw, tenantId },
-        select: { id: true },
-      });
-      if (!exists) errors.unitId = "Сонгосон нэгж олдсонгүй.";
-      else unitId = unitIdRaw;
-    }
-  }
-
-  if (type === "GOODS") {
-    if (costRaw) {
-      costPrice = parseDecimal(costRaw);
-      if (!costPrice) errors.costPrice = "Өртөг үнэ буруу.";
-    }
-    const initialStock = stockRaw || "0";
-    stock = parseDecimal(initialStock);
-    if (!stock) errors.stock = "Үлдэгдэл буруу.";
-  }
-
-  // Хугацаа (LABOR/DIAGNOSTIC) — заавал биш, гэхдээ хэрэв утга/нэгж нэг нь оруулагдсан бол нөгөө нь ч оруулагдсан байх ёстой
-  if (type !== "GOODS") {
-    const hasValue = Boolean(durationValueRaw);
-    const hasUnit = Boolean(durationUnitIdRaw);
-    if (hasValue || hasUnit) {
-      if (!hasValue) {
-        errors.durationValue = "Хугацааны утгаа оруулна уу.";
-      } else {
-        const d = parseDecimal(durationValueRaw);
-        if (!d || d.lte(0)) errors.durationValue = "Хугацаа эерэг тоо байх ёстой.";
-        else durationValue = d;
-      }
-      if (!hasUnit) {
-        errors.durationUnitId = "Хугацааны нэгжээ сонгоно уу.";
-      } else {
-        const exists = await prisma.unit.findFirst({
-          where: { id: durationUnitIdRaw, tenantId },
-          select: { id: true },
-        });
-        if (!exists) errors.durationUnitId = "Сонгосон нэгж олдсонгүй.";
-        else durationUnitId = durationUnitIdRaw;
-      }
-    }
-  }
-
-  // Сануулгын давтамж (сар) — заавал биш, дурын төрөлд. Тавьвал энэ
-  // үйлчилгээ COMPLETED болсон мөр бүрээс хойш ийм олон сарын дараа
-  // үйлчлүүлэгчид push сануулга явна (харах: app/api/cron/service-reminders).
-  let reminderIntervalMonths: number | null = null;
-  if (reminderIntervalMonthsRaw) {
-    const n = Number.parseInt(reminderIntervalMonthsRaw, 10);
-    if (!Number.isFinite(n) || n <= 0) {
-      errors.reminderIntervalMonths = "Сар эерэг бүхэл тоо байх ёстой.";
-    } else {
-      reminderIntervalMonths = n;
-    }
-  }
-
-  // Бүх төрөлд ангилал заавал
-  if (!categoryIdRaw) {
-    errors.categoryId = "Ангилал сонгоно уу.";
-  } else {
-    const exists = await prisma.category.findFirst({
-      where: { id: categoryIdRaw, tenantId },
-      select: { id: true },
-    });
-    if (!exists) {
-      errors.categoryId = "Сонгосон ангилал олдсонгүй.";
-    } else {
-      categoryId = categoryIdRaw;
-    }
-  }
-
-  if (Object.keys(errors).length > 0) return { data: null, errors };
-
+// Үүсгэх дүрэм нэг газар (вэб форм + Excel импорт): lib/services/service-create-rules.ts.
+function rawFromForm(fd: FormData): ServiceCreateRaw {
   return {
-    data: {
-      type,
-      name,
-      code: code || null,
-      unitId,
-      price: price!,
-      costPrice,
-      stock,
-      durationValue,
-      durationUnitId,
-      reminderIntervalMonths,
-      description: description || null,
-      isActive,
-      categoryId,
-    },
-    errors,
+    type: s(fd, "type"),
+    name: s(fd, "name"),
+    code: s(fd, "code"),
+    unitId: s(fd, "unitId"),
+    price: s(fd, "price"),
+    costPrice: s(fd, "costPrice"),
+    stock: s(fd, "stock"),
+    durationValue: s(fd, "durationValue"),
+    durationUnitId: s(fd, "durationUnitId"),
+    reminderIntervalMonths: s(fd, "reminderIntervalMonths"),
+    description: s(fd, "description"),
+    categoryId: s(fd, "categoryId"),
+    isActive: fd.get("isActive") === "on",
   };
 }
 
@@ -220,7 +83,8 @@ export async function createServiceAction(
     return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
   }
 
-  const { data, errors } = await validate(formData, user.tenantId);
+  const raw = rawFromForm(formData);
+  const { values: data, errors } = validateServiceCreate(raw, await loadServiceRefs(user.tenantId, raw.type));
   if (!data) return { ok: false, fieldErrors: errors };
 
   // Багцын хязгаар: max_services
@@ -233,55 +97,8 @@ export async function createServiceAction(
     return { ok: false, message: limit.message };
   }
 
-  let created;
-  try {
-    created = await prisma.service.create({
-      data: {
-        tenantId: user.tenantId,
-        type: data.type,
-        name: data.name,
-        code: data.code,
-        unitId: data.unitId,
-        price: data.price,
-        costPrice: data.costPrice,
-        stock: data.stock,
-        durationValue: data.durationValue,
-        durationUnitId: data.durationUnitId,
-        reminderIntervalMonths: data.reminderIntervalMonths,
-        description: data.description,
-        isActive: data.isActive,
-        categoryId: data.categoryId,
-      },
-      select: { id: true },
-    });
-  } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      return {
-        ok: false,
-        fieldErrors: { code: "Энэ код тухайн төрөлд бүртгэгдсэн байна." },
-      };
-    }
-    return {
-      ok: false,
-      message: e instanceof Error ? e.message : "Үүсгэх явцад алдаа гарлаа.",
-    };
-  }
-
-  await logAudit({
-    tenantId: user.tenantId,
-    userId: user.id,
-    entity: "Service",
-    entityId: created.id,
-    action: "CREATE",
-    summary: `[${data.type}] ${data.name}${data.code ? ` · ${data.code}` : ""}`,
-    after: {
-      type: data.type,
-      name: data.name,
-      code: data.code,
-      price: data.price.toString(),
-      stock: data.stock?.toString() ?? null,
-    },
-  });
+  const created = await createServiceCommand(user, data);
+  if (!created.ok) return { ok: false, fieldErrors: created.fieldErrors, message: created.message };
 
   revalidatePath("/dashboard/services", "layout");
   redirectAfter(data.type);

@@ -1,3 +1,4 @@
+import { BOOKABLE_CATEGORY_WHERE } from "@/lib/categories";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { buildDaySlots, DEFAULT_SLOT_CAPACITY, DEFAULT_SLOT_MINUTES } from "@/lib/appointment-slots";
 import { bookingDateKey, MAX_ADVANCE_BOOKING_DAYS } from "@/lib/booking-time";
@@ -99,6 +100,7 @@ export async function reserveAppointmentInTransaction(
     const categories = await tx.category.findMany({ where: {
       id: { in: categoryIds }, tenantId: input.tenantId, isActive: true,
       OR: [{ branches: { some: { id: branch.id } } }, { branches: { none: {} } }],
+      AND: [BOOKABLE_CATEGORY_WHERE], // зөвхөн ажил үйлчилгээний ангилал
     }, select: { id: true } });
     if (categories.length !== categoryIds.length) throw new ReservationError(400, "Үйлчилгээний ангиллаа дахин сонгоно уу.");
   }

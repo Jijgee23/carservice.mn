@@ -186,7 +186,8 @@ export function validateTemplateInput(input: TemplateInput): {
 async function assertCategory(tenantId: string, categoryId: string | null): Promise<boolean> {
   if (!categoryId) return false;
   const cat = await prisma.category.findFirst({
-    where: { id: categoryId, tenantId },
+    // Оношилгооны загварт — «Оношилгоо» эсвэл «Бүх төрөлд» ангилал.
+    where: { id: categoryId, tenantId, OR: [{ kind: "DIAGNOSTIC" as const }, { kind: null }] },
     select: { id: true },
   });
   return Boolean(cat);
@@ -487,7 +488,7 @@ export async function duplicateTemplateCommand(input: {
   // tenant-ын ангилал бол хадгална (веб duplicateTemplateAction-тай ижил).
   const categoryId = src.categoryId
     ? (await prisma.category.findFirst({
-        where: { id: src.categoryId, tenantId: actor.tenantId },
+        where: { id: src.categoryId, tenantId: actor.tenantId, OR: [{ kind: "DIAGNOSTIC" as const }, { kind: null }] },
         select: { id: true },
       }))?.id ?? null
     : null;

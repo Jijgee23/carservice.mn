@@ -205,7 +205,7 @@ test("web decimal parsing is strict and never throws", async () => {
   const here = dirname(fileURLToPath(import.meta.url));
   for (const file of [
     "../app/_actions/orders.ts",
-    "../app/_actions/services.ts",
+    "../lib/services/service-create.ts", // createServiceAction + Excel импорт (app/_actions/services.ts → энд)
     "../app/_actions/diagnostic-templates.ts",
     "../app/_actions/system-diagnostic-templates.ts",
     "../lib/services/service-commands.ts",

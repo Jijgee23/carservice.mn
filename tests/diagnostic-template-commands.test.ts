@@ -338,7 +338,8 @@ test("assertCategory scopes its lookup by BOTH id and the actor's tenantId — a
   const start = source.indexOf("async function assertCategory");
   const end = source.indexOf("const TEMPLATE_RECORD_SELECT");
   const body = source.slice(start, end);
-  assert.match(body, /prisma\.category\.findFirst\(\{\s*where:\s*\{\s*id:\s*categoryId,\s*tenantId\s*\}/);
+  // Тенантынх + «Оношилгоо»/«Бүх төрөлд» ангилал л (системийн сэлбэгийн ангилал орохгүй).
+  assert.match(body, /prisma\.category\.findFirst\(\{[\s\S]*?where:\s*\{\s*id:\s*categoryId,\s*tenantId,\s*OR: \[\{ kind: "DIAGNOSTIC" as const \}, \{ kind: null \}\]\s*\}/);
 });
 
 test("createTemplateCommand and updateTemplateCommand both call assertCategory with the actor's tenantId", () => {

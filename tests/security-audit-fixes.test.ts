@@ -87,7 +87,7 @@ for (const [file, name] of confirmActions) {
 test("template duplicate keeps category (tenant-owned only), price and duration", () => {
   const src = read("app/_actions/diagnostic-templates.ts");
   const fn = src.slice(src.indexOf("export async function duplicateTemplateAction"));
-  assert.match(fn, /where: \{ id: src\.categoryId, tenantId: user\.tenantId \}/);
+  assert.match(fn, /where: \{ id: src\.categoryId, tenantId: user\.tenantId, OR: \[\{ kind: "DIAGNOSTIC" as const \}, \{ kind: null \}\] \}/);
   assert.match(fn, /categoryId,\s*price: src\.price,\s*durationMin: src\.durationMin,/);
 });
 
@@ -173,7 +173,7 @@ test("staff appointment responses expose the derived paymentStatus, not raw fee 
 test("API template duplicate (tenant app) keeps category (tenant-owned only), price and duration", () => {
   const src = read("lib/diagnostics-templates-server.ts");
   const fn = src.slice(src.indexOf("export async function duplicateTemplateCommand"));
-  assert.match(fn, /where: \{ id: src\.categoryId, tenantId: actor\.tenantId \}/);
+  assert.match(fn, /where: \{ id: src\.categoryId, tenantId: actor\.tenantId, OR: \[\{ kind: "DIAGNOSTIC" as const \}, \{ kind: null \}\] \}/);
   assert.match(fn, /categoryId,\s*price: src\.price,\s*durationMin: src\.durationMin,/);
 });
 

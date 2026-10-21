@@ -1,3 +1,4 @@
+import { BOOKABLE_CATEGORY_WHERE } from "@/lib/categories";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BookingForm } from "@/app/(app)/org/[slug]/booking-form";
@@ -68,7 +69,8 @@ export default async function BookBranchPage({
   const [vehicles, categoryRows] = await Promise.all([
     account ? loadAccountVehicles(account.id, account.phone) : Promise.resolve([]),
     prisma.category.findMany({
-      where: { tenantId: branch.tenantId, isActive: true },
+      // Онлайн захиалга — зөвхөн ажил үйлчилгээний (эсвэл бүх төрлийн) ангилал.
+      where: { tenantId: branch.tenantId, isActive: true, ...BOOKABLE_CATEGORY_WHERE },
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -92,7 +94,7 @@ export default async function BookBranchPage({
 
   // `/book`-д сонгосон түлхүүрүүдэд тохирох энэ салбарын ангилалууд.
   const preselectedCategoryIds = branchCategories
-    .filter((c) => selectedKeyIds.includes(c.systemServiceKeyId))
+    .filter((c) => c.systemServiceKeyId !== null && selectedKeyIds.includes(c.systemServiceKeyId))
     .map((c) => c.id);
 
   return (

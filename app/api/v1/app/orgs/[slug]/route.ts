@@ -1,3 +1,4 @@
+import { BOOKABLE_CATEGORY_WHERE } from "@/lib/categories";
 import { enforceRateLimit, jsonError, jsonOk, PUBLIC_CATALOG_RATE_LIMIT } from "@/lib/api";
 import { resolveCategoryDurationMinutes } from "@/lib/category-duration";
 import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
@@ -49,7 +50,7 @@ export async function GET(
       // Онлайн захиалгад санал болгох идэвхтэй ангилалууд. `branches` хоосон бол
       // тухайн ангилал БҮХ салбарт хамаарна (categories.ts-ийн дүрэмтэй нийцтэй).
       categories: {
-        where: { isActive: true },
+        where: { isActive: true, ...BOOKABLE_CATEGORY_WHERE }, // зөвхөн ажил үйлчилгээний ангилал
         orderBy: { name: "asc" },
         select: {
           id: true,

@@ -1,3 +1,4 @@
+import { BOOKABLE_CATEGORY_WHERE } from "@/lib/categories";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Prisma } from "@/app/generated/prisma/client";
@@ -158,7 +159,7 @@ export default async function AppointmentsPage({
   // Ажлын төрөл олноор солих модальд хэрэглэнэ — зөвхөн засах эрхтэй бол.
   const categories = canRespond
     ? await prisma.category.findMany({
-        where: { tenantId: user.tenantId, isActive: true },
+        where: { tenantId: user.tenantId, isActive: true, ...BOOKABLE_CATEGORY_WHERE },
         orderBy: { name: "asc" },
         select: { id: true, name: true },
       })

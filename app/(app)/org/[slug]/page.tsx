@@ -1,3 +1,4 @@
+import { BOOKABLE_CATEGORY_WHERE } from "@/lib/categories";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { loadAccountVehicles } from "@/lib/account-vehicles-catalog";
@@ -109,7 +110,7 @@ export default async function OrgPage({
     // Идэвхтэй ангилал + аль салбарт хамаарах (хоосон бол бүх салбарт) +
     // tenant-ийн default хугацаа (booking v2, `/api/v1/app/orgs/[slug]`-тэй адил).
     prisma.category.findMany({
-      where: { tenantId: org.id, isActive: true },
+      where: { tenantId: org.id, isActive: true, ...BOOKABLE_CATEGORY_WHERE },
       orderBy: { name: "asc" },
       select: {
         id: true,

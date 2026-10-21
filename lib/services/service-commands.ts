@@ -80,6 +80,7 @@
 //     partially succeed. This matches the original action's early-return
 //     shape exactly.
 
+import { categoryAllowsKind, categoryKindLabel } from "@/lib/categories";
 import { Prisma } from "@/app/generated/prisma/client";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
@@ -293,6 +294,8 @@ export function validateServiceUpdateInput(
 export async function serviceRefFieldErrors(
   tenantId: string,
   refs: { unitId?: string | null; durationUnitId?: string | null; categoryId?: string | null },
+  /** Өгвөл ангиллын төрөл (Category.kind) энэ үйлчилгээний төрөлтэй таарах ёстой. */
+  serviceType?: ServiceKind | null,
 ): Promise<Record<string, string>> {
   const errors: Record<string, string> = {};
   if (refs.unitId) {
@@ -304,8 +307,15 @@ export async function serviceRefFieldErrors(
     if (!exists) errors.durationUnitId = "Сонгосон нэгж олдсонгүй.";
   }
   if (refs.categoryId) {
-    const exists = await prisma.category.findFirst({ where: { id: refs.categoryId, tenantId }, select: { id: true } });
-    if (!exists) errors.categoryId = "Сонгосон ангилал олдсонгүй.";
+    // Өөрийн эсвэл системийн (бүх тенантад нийтлэг) ангилал.
+    const cat = await prisma.category.findFirst({
+      where: { id: refs.categoryId, OR: [{ tenantId }, { tenantId: null }] },
+      select: { id: true, kind: true },
+    });
+    if (!cat) errors.categoryId = "Сонгосон ангилал олдсонгүй.";
+    else if (serviceType && !categoryAllowsKind(cat.kind, serviceType)) {
+      errors.categoryId = `Энэ ангилал зөвхөн «${categoryKindLabel(cat.kind)}»-д зориулагдсан.`;
+    }
   }
   return errors;
 }
@@ -319,7 +329,7 @@ export async function updateServiceCommand(input: {
   const { actor, serviceId } = input;
   const { data, fieldErrors, refs } = validateServiceUpdateInput(input.data, input.options);
 
-  Object.assign(fieldErrors, await serviceRefFieldErrors(actor.tenantId, refs));
+  Object.assign(fieldErrors, await serviceRefFieldErrors(actor.tenantId, refs, data?.type ?? null));
 
   if (Object.keys(fieldErrors).length > 0) {
     throw new ServiceCommandError("Хүсэлт буруу.", 422, "VALIDATION_FAILED", fieldErrors);
@@ -582,8 +592,8 @@ export async function bulkChangeServiceCategoryCommand(input: {
   }
 
   const category = await prisma.category.findFirst({
-    where: { id: categoryId, tenantId: actor.tenantId },
-    select: { id: true, name: true },
+    where: { id: categoryId, OR: [{ tenantId: actor.tenantId }, { tenantId: null }] },
+    select: { id: true, name: true, kind: true },
   });
   if (!category) {
     throw new ServiceCommandError("Сонгосон ангилал олдсонгүй.", 404, "CATEGORY_NOT_FOUND");
@@ -596,10 +606,16 @@ export async function bulkChangeServiceCategoryCommand(input: {
 
   const services = await prisma.service.findMany({
     where: { id: { in: ids }, tenantId: actor.tenantId },
-    select: { id: true, name: true, code: true, categoryId: true },
+    select: { id: true, name: true, code: true, categoryId: true, type: true },
   });
 
-  const plans = planBulkCategoryChange(ids, services, categoryId);
+  // Төрөл таараагүй мөрийг (жиш: «Сэлбэг» ангилалд ажил) алгасаж алдаагаар мэдээлнэ.
+  const mismatched = new Set(services.filter((svc) => !categoryAllowsKind(category.kind, svc.type)).map((svc) => svc.id));
+  const plans = planBulkCategoryChange(ids, services, categoryId).map((plan) =>
+    mismatched.has(plan.id) && plan.action !== "fail"
+      ? { id: plan.id, label: plan.label, action: "fail" as const, message: `Ангилал зөвхөн «${categoryKindLabel(category.kind)}»-д зориулагдсан.` }
+      : plan,
+  );
 
   let succeeded = 0;
   const errors: string[] = [];

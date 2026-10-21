@@ -13,7 +13,7 @@ export default async function CategoriesPage() {
   // Ангиллыг зөвхөн админ удирдана (actions нь isOwner шаарддаг).
   if (!user.isOwner) redirect("/dashboard/services");
 
-  const [categories, branches, serviceKeys] = await Promise.all([
+  const [categories, branches, serviceKeys, systemCategories] = await Promise.all([
     prisma.category.findMany({
       where: { tenantId: user.tenantId },
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
@@ -25,6 +25,7 @@ export default async function CategoriesPage() {
         durationMinutes: true,
         concurrentCapacity: true,
         systemServiceKeyId: true,
+        kind: true,
         _count: { select: { services: true } },
         branches: { select: { id: true } },
       },
@@ -39,6 +40,12 @@ export default async function CategoriesPage() {
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
+    // Системийн (бүх байгууллагад нийтлэг, засах боломжгүй) ангиллууд.
+    prisma.category.findMany({
+      where: { tenantId: null, isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, kind: true },
+    }),
   ]);
 
   const rows = categories.map((c) => ({
@@ -51,6 +58,7 @@ export default async function CategoriesPage() {
     durationMinutes: c.durationMinutes,
     concurrentCapacity: c.concurrentCapacity,
     systemServiceKeyId: c.systemServiceKeyId,
+    kind: c.kind,
   }));
 
   return (
@@ -66,7 +74,7 @@ export default async function CategoriesPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">Ангилал</h1>
         <p className="text-sm text-[var(--oc-muted3)] mt-1">
-          Үйлчилгээ (Ажил, Оношилгоо, Сэлбэг)-г ангилах нэгдсэн ангилал. Салбар оноовол тухайн салбарт, хоосон бол бүх салбарт санал болгоно.
+          Ангилал бүр нэг төрөлд (Ажил үйлчилгээ, Сэлбэг, Оношилгоо) эсвэл бүх төрөлд хамаарна. Онлайн цаг захиалгад зөвхөн ажил үйлчилгээний ангилал харагдана. Салбар оноовол тухайн салбарт, хоосон бол бүх салбарт санал болгоно.
         </p>
       </div>
 
@@ -75,6 +83,7 @@ export default async function CategoriesPage() {
           categories={rows}
           branches={branches}
           serviceKeys={serviceKeys}
+          systemCategories={systemCategories}
         />
       </div>
     </div>

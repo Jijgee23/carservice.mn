@@ -1,3 +1,4 @@
+import { BOOKABLE_CATEGORY_WHERE } from "@/lib/categories";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { distanceKm } from "@/lib/branch-filters";
@@ -109,7 +110,7 @@ export default async function BranchDetailPage({
   if (!branch) notFound();
 
   const categoryRows = await prisma.category.findMany({
-    where: { tenantId: org.id, isActive: true },
+    where: { tenantId: org.id, isActive: true, ...BOOKABLE_CATEGORY_WHERE },
     orderBy: { name: "asc" },
     select: { name: true, branches: { select: { id: true } } },
   });

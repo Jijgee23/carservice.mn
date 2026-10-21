@@ -1,4 +1,5 @@
-import { AddLinkButton } from "@/app/_components/landing-ops-ui";
+import { categoriesForKindWhere } from "@/lib/categories";
+import { AddLinkButton, BtnLink, btnClass } from "@/app/_components/landing-ops-ui";
 import { EmptyState } from "@/app/_components/page-header";
 import { Pagination } from "@/app/_components/pagination";
 import { buildMeta, getPageInfo } from "@/lib/pagination";
@@ -68,7 +69,7 @@ export async function ServiceList({
     prisma.service.count({ where }),
     canBulkEdit
       ? prisma.category.findMany({
-          where: { tenantId: user.tenantId, isActive: true },
+          where: { isActive: true, ...categoriesForKindWhere(user.tenantId, type) },
           orderBy: { name: "asc" },
           select: { id: true, name: true },
         })
@@ -106,7 +107,19 @@ export async function ServiceList({
             {SERVICE_KIND_DESCRIPTION[type]}
           </p>
         </div>
-        {canAdd ? <AddLinkButton href={newHref}>Нэмэх</AddLinkButton> : null}
+        <div className="flex items-center gap-2">
+          {(type === "LABOR" || type === "GOODS") ? (
+            <a href={`/dashboard/services/export?type=${type === "LABOR" ? "labor" : "goods"}`} className={btnClass("ghost", "md")}>
+              Excel татах
+            </a>
+          ) : null}
+          {canAdd && (type === "LABOR" || type === "GOODS") ? (
+            <BtnLink href={`/dashboard/services/import?type=${type === "LABOR" ? "labor" : "goods"}`} variant="ghost">
+              Excel-ээс оруулах
+            </BtnLink>
+          ) : null}
+          {canAdd ? <AddLinkButton href={newHref}>Нэмэх</AddLinkButton> : null}
+        </div>
       </div>
 
       {services.length === 0 ? (

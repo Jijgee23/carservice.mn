@@ -6,8 +6,15 @@ import {
   importEmployeesAction,
   parseEmployeeImportAction,
 } from "@/app/_actions/employee-import";
+import {
+  AssignModal,
+  MapStep,
+  StepChips,
+  TextCell,
+  UploadStep,
+  type LoadedSheet,
+} from "@/app/_components/excel-import";
 import { Btn, BtnLink, Chip } from "@/app/_components/landing-ops-ui";
-import { Modal } from "@/app/_components/modal";
 import {
   SelectAllCell,
   SelectRowCell,
@@ -22,16 +29,13 @@ import {
   guessMapping,
   IMPORT_FIELDS,
   validateImportRow,
-  type ImportField,
   type ImportMapping,
   type ImportRow,
   type ImportRowResult,
   type NamedOption,
-  type ParsedSheet,
 } from "@/lib/employees/import";
 
 type Step = "upload" | "map" | "review";
-type LoadedSheet = ParsedSheet & { fileName: string };
 type Taken = Record<string, { phone?: boolean; email?: boolean }>;
 
 const STEPS: Array<{ key: Step; label: string }> = [
@@ -49,16 +53,13 @@ export function EmployeeImportWizard({ roles, branches }: { roles: NamedOption[]
 
   return (
     <div className="flex flex-col gap-4">
-      <ol className="flex flex-wrap gap-2 text-xs">
-        {STEPS.map((s) => (
-          <li key={s.key}>
-            <Chip tone={s.key === step ? "accent" : "neutral"}>{s.label}</Chip>
-          </li>
-        ))}
-      </ol>
+      <StepChips steps={STEPS} current={step} />
 
       {step === "upload" ? (
         <UploadStep
+          parse={parseEmployeeImportAction}
+          templateHref="/dashboard/employees/import/template"
+          templateNote="2-р хуудсанд таны үүрэг, салбарын нэрс бий."
           onLoaded={(loaded) => {
             setSheet(loaded);
             setMapping(guessMapping(loaded.headers));
@@ -70,7 +71,9 @@ export function EmployeeImportWizard({ roles, branches }: { roles: NamedOption[]
       {step === "map" && sheet && mapping ? (
         <MapStep
           sheet={sheet}
+          fields={IMPORT_FIELDS}
           mapping={mapping}
+          note="Үүрэг/салбарын нэр системийнхтэй яг таарвал автоматаар оноогдоно; таараагүйг дараагийн алхамд гараар эсвэл олноор нь оноож болно."
           onChange={setMapping}
           onBack={() => setStep("upload")}
           onNext={() => {
@@ -92,137 +95,6 @@ export function EmployeeImportWizard({ roles, branches }: { roles: NamedOption[]
           onBack={() => setStep("map")}
         />
       ) : null}
-    </div>
-  );
-}
-
-// --- 1. Upload ---------------------------------------------------------------
-
-function UploadStep({ onLoaded }: { onLoaded: (sheet: LoadedSheet) => void }) {
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-
-  function upload(file: File | undefined) {
-    if (!file) return;
-    setError(null);
-    const fd = new FormData();
-    fd.set("file", file);
-    startTransition(async () => {
-      const res = await parseEmployeeImportAction(fd);
-      if (res.ok) onLoaded(res);
-      else setError(res.message);
-    });
-  }
-
-  return (
-    <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-5 flex flex-col gap-4 max-w-2xl">
-      <label
-        className="flex flex-col items-center justify-center gap-2 rounded-[10px] border border-dashed border-[var(--oc-line2,var(--oc-line))] bg-[var(--oc-panel2)] px-6 py-10 text-center cursor-pointer hover:border-[var(--oc-accent)] transition-colors"
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault();
-          upload(e.dataTransfer.files[0]);
-        }}
-      >
-        <span className="text-sm font-medium text-[var(--oc-ink)]">
-          {pending ? "Уншиж байна…" : "Excel файлаа энд чирж оруулах эсвэл дарж сонгох"}
-        </span>
-        <span className="text-xs text-[var(--oc-muted3)]">.xlsx · 2MB хүртэл · 500 мөр хүртэл · эхний мөр нь гарчиг</span>
-        <input
-          type="file"
-          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          className="sr-only"
-          disabled={pending}
-          onChange={(e) => {
-            upload(e.target.files?.[0]);
-            e.target.value = "";
-          }}
-        />
-      </label>
-      {error ? <p className="text-sm text-red-400 light:text-red-600">{error}</p> : null}
-      <p className="text-xs text-[var(--oc-muted3)]">
-        Загвар хэрэгтэй бол{" "}
-        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- .xlsx download route, not a page */}
-        <a
-          href="/dashboard/employees/import/template"
-          className="text-[var(--oc-accent-hi)] underline underline-offset-2"
-        >
-          Excel загвар татах
-        </a>{" "}
-        — 2-р хуудсанд таны үүрэг, салбарын нэрс бий.
-      </p>
-    </div>
-  );
-}
-
-// --- 2. Column mapping -------------------------------------------------------
-
-function MapStep({
-  sheet,
-  mapping,
-  onChange,
-  onBack,
-  onNext,
-}: {
-  sheet: LoadedSheet;
-  mapping: ImportMapping;
-  onChange: (m: ImportMapping) => void;
-  onBack: () => void;
-  onNext: () => void;
-}) {
-  const columnOptions = sheet.headers.map((h, i) => ({
-    value: String(i),
-    label: h,
-    hint: sheet.rows.find((r) => r.cells[i])?.cells[i]?.slice(0, 40),
-  }));
-  const missing = IMPORT_FIELDS.filter((f) => f.required && mapping[f.key] === null);
-
-  function set(field: ImportField, value: string) {
-    onChange({ ...mapping, [field]: value === "" ? null : Number(value) });
-  }
-
-  return (
-    <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-5 flex flex-col gap-4 max-w-2xl">
-      <p className="text-sm text-[var(--oc-muted2)]">
-        <span className="text-[var(--oc-ink)] font-medium">{sheet.fileName}</span> · {sheet.rows.length} мөр. Системийн
-        талбар бүрт Excel-ийн аль баганыг ашиглахыг сонгоно уу.
-      </p>
-      <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-x-4 gap-y-3 items-center">
-        {IMPORT_FIELDS.map((f) => (
-          <div key={f.key} className="contents">
-            <label className="text-sm text-[var(--oc-ink2)]">
-              {f.label}
-              {f.required ? <span className="text-red-400"> *</span> : null}
-            </label>
-            <Select
-              name={`map-${f.key}`}
-              value={mapping[f.key] === null ? "" : String(mapping[f.key])}
-              onChange={(v) => set(f.key, v)}
-              placeholder={f.required ? "— Багана сонгох —" : "— Ашиглахгүй —"}
-              options={columnOptions}
-              clearable
-              searchable={columnOptions.length > 8}
-            />
-          </div>
-        ))}
-      </div>
-      <p className="text-xs text-[var(--oc-muted3)]">
-        Үүрэг/салбарын нэр системийнхтэй яг таарвал автоматаар оноогдоно; таараагүйг дараагийн алхамд гараар эсвэл
-        олноор нь оноож болно.
-      </p>
-      <div className="flex justify-end gap-2">
-        <Btn type="button" variant="ghost" onClick={onBack}>
-          ← Өөр файл
-        </Btn>
-        <Btn
-          type="button"
-          disabled={missing.length > 0}
-          title={missing.length > 0 ? `Тааруулаагүй: ${missing.map((f) => f.label).join(", ")}` : undefined}
-          onClick={onNext}
-        >
-          Дараах →
-        </Btn>
-      </div>
     </div>
   );
 }
@@ -455,8 +327,9 @@ function ReviewStep({
 
       {assign ? (
         <AssignModal
-          kind={assign}
-          count={selection.selected.size}
+          title={assign === "role" ? "Үүрэг оноох" : "Салбар оноох"}
+          description={`Сонгосон ${selection.selected.size} мөрөнд ${assign === "role" ? "үүрэг" : "үндсэн салбар"} оноох.`}
+          placeholder={assign === "role" ? "— Үүрэг сонгох —" : "— Салбар сонгох —"}
           options={assign === "role" ? roles : branches}
           onClose={() => setAssign(null)}
           onApply={(id) => {
@@ -466,76 +339,5 @@ function ReviewStep({
         />
       ) : null}
     </div>
-  );
-}
-
-function TextCell({
-  value,
-  error,
-  onChange,
-  mono,
-  wide,
-  placeholder,
-}: {
-  value: string;
-  error?: string;
-  onChange: (v: string) => void;
-  mono?: boolean;
-  wide?: boolean;
-  placeholder?: string;
-}) {
-  return (
-    <td className={`px-2 py-2 ${wide ? "min-w-[200px]" : "min-w-[120px]"}`}>
-      <input
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        aria-invalid={Boolean(error)}
-        className={`compact-input ${mono ? "font-plex-mono" : ""} ${error ? "border-red-500/50" : ""}`}
-      />
-      {error ? <p className="mt-1 text-[11px] leading-snug text-red-400 light:text-red-600">{error}</p> : null}
-    </td>
-  );
-}
-
-function AssignModal({
-  kind,
-  count,
-  options,
-  onClose,
-  onApply,
-}: {
-  kind: "role" | "branch";
-  count: number;
-  options: NamedOption[];
-  onClose: () => void;
-  onApply: (id: string) => void;
-}) {
-  const [value, setValue] = useState("");
-  const isRole = kind === "role";
-  return (
-    <Modal open onClose={onClose} title={isRole ? "Үүрэг оноох" : "Салбар оноох"} widthClassName="max-w-md">
-      <div className="flex flex-col gap-4">
-        <p className="text-sm text-[var(--oc-muted2)]">
-          Сонгосон {count} мөрөнд {isRole ? "үүрэг" : "үндсэн салбар"} оноох.
-        </p>
-        <Select
-          name={`assign-${kind}`}
-          value={value}
-          onChange={setValue}
-          options={options.map((o) => ({ value: o.id, label: o.name }))}
-          placeholder={isRole ? "— Үүрэг сонгох —" : "— Салбар сонгох —"}
-          searchable={options.length > 8}
-        />
-        <div className="flex justify-end gap-2">
-          <Btn type="button" variant="ghost" onClick={onClose}>
-            Болих
-          </Btn>
-          <Btn type="button" disabled={!value} onClick={() => onApply(value)}>
-            Оноох
-          </Btn>
-        </div>
-      </div>
-    </Modal>
   );
 }

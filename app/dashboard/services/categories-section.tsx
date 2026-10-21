@@ -1,5 +1,6 @@
 "use client";
 
+import { CATEGORY_KIND_LABEL, categoryKindLabel, type CategoryKind } from "@/lib/categories";
 import { useActionState, useEffect, useState } from "react";
 import {
   type CategoryActionState,
@@ -37,17 +38,24 @@ export type CategoryRow = {
   branchIds: string[];
   durationMinutes: number | null;
   concurrentCapacity: number;
-  systemServiceKeyId: string;
+  systemServiceKeyId: string | null;
+  /** null = бүх төрөлд. */
+  kind: CategoryKind | null;
 };
+
+export type SystemCategoryOption = { id: string; name: string; kind: CategoryKind | null };
 
 export function CategoriesSection({
   categories,
   branches,
   serviceKeys,
+  systemCategories = [],
 }: {
   categories: CategoryRow[];
   branches: BranchOption[];
   serviceKeys: ServiceKeyOption[];
+  /** Системийн ангиллууд — бүх байгууллагад нийтлэг, зөвхөн харах. */
+  systemCategories?: SystemCategoryOption[];
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -55,8 +63,8 @@ export function CategoriesSection({
   const [keyPickerOpen, setKeyPickerOpen] = useState(false);
   const branchName = (id: string) =>
     branches.find((b) => b.id === id)?.name ?? "—";
-  const serviceKeyName = (id: string) =>
-    serviceKeys.find((k) => k.id === id)?.name ?? null;
+  const serviceKeyName = (id: string | null) =>
+    id ? (serviceKeys.find((k) => k.id === id)?.name ?? null) : null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -100,6 +108,9 @@ export function CategoriesSection({
                 <SelectAllCell selection={selection} className="w-10 px-3 py-2.5" />
                 <th className="text-left font-plex-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--oc-muted3)] font-medium px-4 py-2.5">
                   Нэр
+                </th>
+                <th className="text-left font-plex-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--oc-muted3)] font-medium px-4 py-2.5 w-32">
+                  Төрөл
                 </th>
                 <th className="text-left font-plex-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--oc-muted3)] font-medium px-4 py-2.5">
                   Салбар
@@ -158,6 +169,25 @@ export function CategoriesSection({
           </table>
         </div>
       )}
+
+      {systemCategories.length > 0 ? (
+        <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel2)] p-4 flex flex-col gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-[var(--oc-ink)]">Системийн ангилал</h3>
+            <p className="text-xs text-[var(--oc-muted3)] mt-0.5">
+              Бүх байгууллагад нийтлэг, засах боломжгүй. Үйлчилгээ/сэлбэг бүртгэхдээ шууд сонгоно.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {systemCategories.map((c) => (
+              <TagChip key={c.id}>
+                {c.name}
+                <span className="ml-1 opacity-60">· {categoryKindLabel(c.kind)}</span>
+              </TagChip>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {keyPickerOpen ? (
         <BulkServiceKeyModal
@@ -340,7 +370,7 @@ function ViewRow({
 }: {
   category: CategoryRow;
   branchName: (id: string) => string;
-  serviceKeyName: (id: string) => string | null;
+  serviceKeyName: (id: string | null) => string | null;
   selection: RowSelection;
   onEdit: () => void;
 }) {
@@ -365,6 +395,9 @@ function ViewRow({
             <TagChip>{keyName}</TagChip>
           </span>
         ) : null}
+      </td>
+      <td className="px-4 py-3 text-xs">
+        <Chip tone={category.kind === null ? "neutral" : "accent"}>{categoryKindLabel(category.kind)}</Chip>
       </td>
       <td className="px-4 py-3 text-xs">
         {category.branchIds.length === 0 ? (
@@ -474,7 +507,7 @@ function CategoryFormRow({
 
   return (
     <tr className="bg-[var(--oc-panel2)]">
-      <td colSpan={8} className="px-4 py-3">
+      <td colSpan={9} className="px-4 py-3">
         <form action={formAction} className="flex flex-col gap-3" noValidate>
           {state?.message && !state.ok ? (
             <FormError message={state.message} />
@@ -536,6 +569,20 @@ function CategoryFormRow({
           {fe.concurrentCapacity ? (
             <p className="text-red-400 text-xs light:text-red-600">{fe.concurrentCapacity}</p>
           ) : null}
+          <label className="flex flex-col gap-1 text-xs text-[var(--oc-muted3)] max-w-xs">
+            Төрөл
+            <select
+              name="kind"
+              defaultValue={category ? (category.kind ?? "") : "LABOR"}
+              className={`auth-input !py-2 ${fe.kind ? "border-red-500/50" : ""}`}
+            >
+              <option value="LABOR">{CATEGORY_KIND_LABEL.LABOR} (онлайн захиалгад харагдана)</option>
+              <option value="GOODS">{CATEGORY_KIND_LABEL.GOODS}</option>
+              <option value="DIAGNOSTIC">{CATEGORY_KIND_LABEL.DIAGNOSTIC}</option>
+              <option value="">{CATEGORY_KIND_LABEL.ANY}</option>
+            </select>
+          </label>
+          {fe.kind ? <p className="text-red-400 text-xs light:text-red-600">{fe.kind}</p> : null}
           <BranchPicker branches={branches} selected={category?.branchIds ?? []} />
           <ServiceKeyPicker
             serviceKeys={serviceKeys}
