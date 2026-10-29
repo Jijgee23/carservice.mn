@@ -44,9 +44,19 @@ export default async function CategoriesPage() {
     prisma.category.findMany({
       where: { tenantId: null, isActive: true },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, kind: true },
+      select: { id: true, name: true, description: true, kind: true },
     }),
   ]);
+
+  // Системийн ангилал тус бүрт энэ байгууллагын бүртгэсэн үйлчилгээ/бараа.
+  const systemUsage = systemCategories.length
+    ? await prisma.service.groupBy({
+        by: ["categoryId"],
+        where: { tenantId: user.tenantId, categoryId: { in: systemCategories.map((c) => c.id) } },
+        _count: { _all: true },
+      })
+    : [];
+  const usageBy = new Map(systemUsage.map((u) => [u.categoryId, u._count._all]));
 
   const rows = categories.map((c) => ({
     id: c.id,
@@ -83,7 +93,7 @@ export default async function CategoriesPage() {
           categories={rows}
           branches={branches}
           serviceKeys={serviceKeys}
-          systemCategories={systemCategories}
+          systemCategories={systemCategories.map((c) => ({ ...c, servicesCount: usageBy.get(c.id) ?? 0 }))}
         />
       </div>
     </div>

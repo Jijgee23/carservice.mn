@@ -36,7 +36,7 @@ function Paper({ format, children }: { format: PrintFormat; children: ReactNode 
       <style>{PAGE_CSS[format]}</style>
       <div
         id="print-root"
-        className={`mx-auto bg-white text-[#111] shadow-sm rounded-[4px] ${
+        className={`mx-auto bg-[#fff] text-[#111] shadow-sm rounded-[4px] ${
           narrow ? "w-[72mm] max-w-full p-3 text-[11px] leading-snug" : "w-full max-w-[210mm] p-6 sm:p-10 text-[13px] leading-relaxed"
         }`}
       >

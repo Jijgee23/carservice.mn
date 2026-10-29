@@ -43,7 +43,16 @@ export type CategoryRow = {
   kind: CategoryKind | null;
 };
 
-export type SystemCategoryOption = { id: string; name: string; kind: CategoryKind | null };
+export type SystemCategoryOption = {
+  id: string;
+  name: string;
+  description: string | null;
+  kind: CategoryKind | null;
+  /** Энэ байгууллагын тухайн ангилалд бүртгэсэн үйлчилгээ/барааны тоо. */
+  servicesCount: number;
+};
+
+type CategoryTab = "own" | "system";
 
 export function CategoriesSection({
   categories,
@@ -57,6 +66,7 @@ export function CategoriesSection({
   /** Системийн ангиллууд — бүх байгууллагад нийтлэг, зөвхөн харах. */
   systemCategories?: SystemCategoryOption[];
 }) {
+  const [tab, setTab] = useState<CategoryTab>("own");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const selection = useRowSelection(categories);
@@ -68,22 +78,50 @@ export function CategoriesSection({
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="font-semibold text-[var(--oc-ink)] text-sm">Ангиллууд</h2>
-        <Btn
-          type="button"
-          size="sm"
-          onClick={() => {
-            setEditingId(null);
-            setIsCreating(true);
-          }}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div
+          role="tablist"
+          aria-label="Ангиллын эх сурвалж"
+          className="inline-flex rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-0.5"
         >
-          <PlusIcon />
-          Ангилал нэмэх
-        </Btn>
+          {(
+            [
+              { value: "own", label: "Байгууллагын", n: categories.length },
+              { value: "system", label: "Системийн", n: systemCategories.length },
+            ] as const
+          ).map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.value}
+              onClick={() => setTab(t.value)}
+              className={`rounded-[8px] px-3 py-1.5 text-sm ${tab === t.value ? "bg-[var(--oc-line)] text-[var(--oc-ink)] font-medium" : "text-[var(--oc-muted3)] hover:text-[var(--oc-ink)]"}`}
+            >
+              {t.label} <span className="ml-1 text-xs tabular-nums text-[var(--oc-muted3)]">{t.n}</span>
+            </button>
+          ))}
+        </div>
+        {tab === "own" ? (
+          <Btn
+            type="button"
+            size="sm"
+            onClick={() => {
+              setEditingId(null);
+              setIsCreating(true);
+            }}
+          >
+            <PlusIcon />
+            Ангилал нэмэх
+          </Btn>
+        ) : (
+          <span className="text-xs text-[var(--oc-muted3)]">Зөвхөн харах</span>
+        )}
       </div>
 
-      {categories.length === 0 && !isCreating ? (
+      {tab === "system" ? (
+        <SystemCategoriesTable categories={systemCategories} />
+      ) : categories.length === 0 && !isCreating ? (
         <p className="text-xs text-[var(--oc-muted3)]">
           Одоогоор ангилал бүртгэгдээгүй байна. Дээрх товчоор шинэ ангилал нэмнэ үү.
         </p>
@@ -170,24 +208,6 @@ export function CategoriesSection({
         </div>
       )}
 
-      {systemCategories.length > 0 ? (
-        <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel2)] p-4 flex flex-col gap-3">
-          <div>
-            <h3 className="text-sm font-semibold text-[var(--oc-ink)]">Системийн ангилал</h3>
-            <p className="text-xs text-[var(--oc-muted3)] mt-0.5">
-              Бүх байгууллагад нийтлэг, засах боломжгүй. Үйлчилгээ/сэлбэг бүртгэхдээ шууд сонгоно.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {systemCategories.map((c) => (
-              <TagChip key={c.id}>
-                {c.name}
-                <span className="ml-1 opacity-60">· {categoryKindLabel(c.kind)}</span>
-              </TagChip>
-            ))}
-          </div>
-        </div>
-      ) : null}
 
       {keyPickerOpen ? (
         <BulkServiceKeyModal
@@ -604,5 +624,68 @@ function CategoryFormRow({
         </form>
       </td>
     </tr>
+  );
+}
+
+const TH =
+  "text-left font-plex-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--oc-muted3)] font-medium px-4 py-2.5";
+
+/** Системийн ангилал — бүх байгууллагад нийтлэг, засах боломжгүй (super admin удирдана). */
+function SystemCategoriesTable({ categories }: { categories: SystemCategoryOption[] }) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const rows = q ? categories.filter((c) => c.name.toLowerCase().includes(q)) : categories;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Ангиллын нэрээр хайх…"
+          aria-label="Системийн ангилал хайх"
+          className="compact-input w-64"
+        />
+        <p className="text-xs text-[var(--oc-muted3)]">
+          Бүх байгууллагад нийтлэг, засах боломжгүй. Үйлчилгээ/сэлбэг бүртгэхдээ шууд сонгоно.
+        </p>
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-xs text-[var(--oc-muted3)]">
+          {q ? "Хайлтад тохирох ангилал алга." : "Системийн ангилал алга байна."}
+        </p>
+      ) : (
+        <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] overflow-hidden overflow-x-auto">
+          <table className="w-full text-sm min-w-[520px]">
+            <thead>
+              <tr className="border-b border-[var(--oc-line)]">
+                <th className={TH}>Нэр</th>
+                <th className={`${TH} w-40`}>Төрөл</th>
+                <th className={`${TH} w-28`} title="Танай байгууллагын энэ ангилалд бүртгэсэн тоо">
+                  Таны бүртгэл
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--oc-line)]">
+              {rows.map((c) => (
+                <tr key={c.id}>
+                  <td className="px-4 py-2.5">
+                    <div className="font-medium text-[var(--oc-ink)]">{c.name}</div>
+                    {c.description ? (
+                      <div className="text-xs text-[var(--oc-muted3)] mt-0.5 line-clamp-1">{c.description}</div>
+                    ) : null}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <Chip tone="neutral">{categoryKindLabel(c.kind)}</Chip>
+                  </td>
+                  <td className="px-4 py-2.5 font-plex-mono text-[var(--oc-muted2)]">{c.servicesCount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
