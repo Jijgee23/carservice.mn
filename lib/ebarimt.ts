@@ -1,7 +1,9 @@
 import { PublicUpstreamError } from "@/lib/action-errors";
+import { normalizeRegno, regnoKind } from "@/lib/tenant-regno";
 /**
  * api.ebarimt.mn-аас аж ахуйн нэгжийн мэдээллийг 2 алхамаар авна:
  *   1) /api/info/check/getTinInfo?regNo=XXXXXXX  → татвар төлөгчийн дугаар (TIN)
+ *      (байгууллага: 7 оронтой тоо, хувь хүн: ҮҮ99993333 — хоёуланд нь ажиллана)
  *   2) /api/info/check/getInfo?tin={TIN}         → нэр болон бусад мэдээлэл
  *
  * Env:
@@ -70,8 +72,8 @@ const EMPTY: EbarimtOrg = {
 };
 
 export async function lookupOrgByRegno(regno: string): Promise<EbarimtOrg> {
-  const clean = regno.replace(/\D+/g, "");
-  if (!/^\d{7}$/.test(clean)) return EMPTY;
+  const clean = normalizeRegno(regno);
+  if (!regnoKind(clean)) return EMPTY;
 
   const tin = await getTinByRegno(clean);
   if (!tin) return EMPTY;

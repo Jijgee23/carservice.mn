@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { enforceRateLimit, upstreamErrorResponse } from "@/lib/api";
 import { lookupOrgByRegno } from "@/lib/ebarimt";
+import { normalizeRegno, regnoKind, TENANT_REGNO_MESSAGE } from "@/lib/tenant-regno";
 
 /**
  * Нийтийн endpoint — бүртгүүлэх хуудсанд регистрийн нэрийг автоматаар татахад
  * ашиглана. Auth шаардахгүй (зөвхөн нийтийн мэдээлэл).
  *
- * GET /api/ebarimt/lookup?regno=1234567
+ * GET /api/ebarimt/lookup?regno=1234567  (байгууллага)
+ * GET /api/ebarimt/lookup?regno=ҮҮ99993333 (хувь хүн)
  */
 export async function GET(req: Request) {
   // Нийтийн proxy тул IP-ээр throttle (upstream ban / DoS-аас сэргийлнэ).
@@ -17,10 +19,10 @@ export async function GET(req: Request) {
   if (limited) return limited;
 
   const url = new URL(req.url);
-  const regno = url.searchParams.get("regno")?.trim() ?? "";
-  if (!/^\d{7}$/.test(regno)) {
+  const regno = normalizeRegno(url.searchParams.get("regno") ?? "");
+  if (!regnoKind(regno)) {
     return NextResponse.json(
-      { error: "Регистр 7 оронтой тоо байх ёстой." },
+      { error: TENANT_REGNO_MESSAGE },
       { status: 400 },
     );
   }

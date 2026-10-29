@@ -12,6 +12,13 @@ import {
 } from "@/lib/auth/roles";
 import { safeNext } from "@/lib/safe-redirect";
 import {
+  mapPersonAdminErrors,
+  normalizeRegno,
+  regnoKind,
+  splitPersonName,
+  TENANT_REGNO_MESSAGE,
+} from "@/lib/tenant-regno";
+import {
   clearSessionCookie,
   setSessionCookie,
 } from "@/lib/auth/cookies";
@@ -118,7 +125,7 @@ export async function signUpAction(
   setBypassContext();
   // Organization
   const orgName = getStr(formData, "orgName");
-  const registerNumber = getStr(formData, "registerNumber");
+  const registerNumber = normalizeRegno(getStr(formData, "registerNumber"));
   const orgEmail = getStr(formData, "orgEmail").toLowerCase();
   const phone1 = getStr(formData, "phone1");
   const phone2 = getStr(formData, "phone2");
@@ -135,11 +142,14 @@ export async function signUpAction(
   const branchCloseTimeRaw = getStr(formData, "closeTime");
   const branchWorkDays = formData.getAll("workDays").map(String).filter(isWeekday);
 
-  // Admin
-  const lastName = getStr(formData, "lastName");
-  const firstName = getStr(formData, "firstName");
-  const adminPhone = getStr(formData, "adminPhone");
-  const adminEmail = getStr(formData, "adminEmail").toLowerCase();
+  // Admin — хувь хүн бол админ нь тухайн хүн өөрөө: нэр/утас/имэйлийг
+  // 1-р алхмын мэдээллээс авна (дахин бөглүүлэхгүй).
+  const isPerson = regnoKind(registerNumber) === "person";
+  const personName = isPerson ? splitPersonName(orgName) : null;
+  const lastName = personName ? personName.lastName : getStr(formData, "lastName");
+  const firstName = personName ? personName.firstName : getStr(formData, "firstName");
+  const adminPhone = isPerson ? phone1 : getStr(formData, "adminPhone");
+  const adminEmail = isPerson ? orgEmail : getStr(formData, "adminEmail").toLowerCase();
   const password = getStr(formData, "password");
   const passwordConfirm = getStr(formData, "passwordConfirm");
 
@@ -161,9 +171,9 @@ export async function signUpAction(
 
   const fieldErrors: Record<string, string> = {};
 
-  if (!orgName) fieldErrors.orgName = "Байгууллагын нэрээ оруулна уу.";
-  if (!/^\d{7}$/.test(registerNumber))
-    fieldErrors.registerNumber = "Регистр яг 7 оронтой тоо байх ёстой.";
+  if (!orgName) fieldErrors.orgName = "Байгууллагын нэр (хувь хүн бол овог нэр)-ээ оруулна уу.";
+  if (!regnoKind(registerNumber))
+    fieldErrors.registerNumber = TENANT_REGNO_MESSAGE;
   if (!isEmail(orgEmail)) fieldErrors.orgEmail = "Байгууллагын Gmail буруу.";
   if (!phone1) fieldErrors.phone1 = "Утасны дугаар оруулна уу.";
   else if (!isValidPhone(phone1))
@@ -197,12 +207,15 @@ export async function signUpAction(
   if (branchCloseTime && !isValidTime(branchCloseTime))
     fieldErrors.closeTime = "Цагийн форматыг HH:MM (24 цаг) хэлбэрээр оруулна уу.";
 
-  if (!lastName) fieldErrors.lastName = "Овгоо оруулна уу.";
-  if (!firstName) fieldErrors.firstName = "Нэрээ оруулна уу.";
-  if (!adminPhone) fieldErrors.adminPhone = "Утасны дугаар оруулна уу.";
-  else if (!isValidPhone(adminPhone))
-    fieldErrors.adminPhone = "Утасны дугаар 8 оронтой тоо байх ёстой.";
-  if (!isEmail(adminEmail)) fieldErrors.adminEmail = "Имэйл хаяг буруу.";
+  // Хувь хүний утас/имэйл/нэрийг дээр шалгасан тул зөвхөн байгууллагад.
+  if (!isPerson) {
+    if (!lastName) fieldErrors.lastName = "Овгоо оруулна уу.";
+    if (!firstName) fieldErrors.firstName = "Нэрээ оруулна уу.";
+    if (!adminPhone) fieldErrors.adminPhone = "Утасны дугаар оруулна уу.";
+    else if (!isValidPhone(adminPhone))
+      fieldErrors.adminPhone = "Утасны дугаар 8 оронтой тоо байх ёстой.";
+    if (!isEmail(adminEmail)) fieldErrors.adminEmail = "Имэйл хаяг буруу.";
+  }
   if (password.length < 8)
     fieldErrors.password = "Нууц үг хамгийн багадаа 8 тэмдэгт байна.";
   if (password !== passwordConfirm)
@@ -224,7 +237,12 @@ export async function signUpAction(
     const [tenantConflict, userConflict] = await Promise.all([
       prisma.tenant.findFirst({
         where: {
-          OR: [{ registerNumber }, { email: orgEmail }, { name: orgName }],
+          // Хувь хүмүүс адилхан нэртэй байж болох тул нэрээр зөвхөн байгууллагыг шалгана.
+          OR: [
+            { registerNumber },
+            { email: orgEmail },
+            ...(isPerson ? [] : [{ name: orgName }]),
+          ],
         },
         select: { registerNumber: true, email: true, name: true },
       }),
@@ -239,7 +257,7 @@ export async function signUpAction(
         fe.registerNumber = "Энэ регистр аль хэдийн бүртгэгдсэн байна.";
       if (tenantConflict.email === orgEmail)
         fe.orgEmail = "Энэ имэйл аль хэдийн бүртгэгдсэн байна.";
-      if (tenantConflict.name === orgName)
+      if (!isPerson && tenantConflict.name === orgName)
         fe.orgName = "Энэ нэртэй байгууллага аль хэдийн бүртгэгдсэн байна.";
       return { ok: false, fieldErrors: fe, values };
     }
@@ -249,7 +267,11 @@ export async function signUpAction(
         fe.adminEmail = "Энэ имэйл хаяг аль хэдийн бүртгэгдсэн байна.";
       if (userConflict.phone === normAdminPhone)
         fe.adminPhone = "Энэ утасны дугаар аль хэдийн бүртгэгдсэн байна.";
-      return { ok: false, fieldErrors: fe, values };
+      return {
+        ok: false,
+        fieldErrors: isPerson ? mapPersonAdminErrors(fe) : fe,
+        values,
+      };
     }
 
     const h = await headers();
@@ -446,7 +468,11 @@ export async function signUpAction(
       else if (target.includes("User_email") || target.includes("email"))
         fe.adminEmail = "Энэ имэйл хаяг аль хэдийн бүртгэгдсэн байна.";
       else fe._ = "Давхардсан утга бүртгэгдсэн байна.";
-      return { ok: false, fieldErrors: fe, values };
+      return {
+        ok: false,
+        fieldErrors: isPerson ? mapPersonAdminErrors(fe) : fe,
+        values,
+      };
     }
     const msg = e instanceof Error ? e.message : "Бүртгэх явцад алдаа гарлаа.";
     return { ok: false, message: msg, values };

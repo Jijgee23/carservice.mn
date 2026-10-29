@@ -10,6 +10,7 @@ import { isValidPhone, normalizePhone } from "@/lib/phone";
 import { isFeatureEnabled } from "@/lib/plan-limits-server";
 import { prisma } from "@/lib/prisma";
 import { resolveUploadPath, saveUpload } from "@/lib/storage";
+import { normalizeRegno, regnoKind, TENANT_REGNO_MESSAGE } from "@/lib/tenant-regno";
 
 export type TenantActionState = {
   ok: boolean;
@@ -46,7 +47,7 @@ export async function updateTenantAction(
   }
 
   const name = s(formData, "name");
-  const registerNumber = s(formData, "registerNumber");
+  const registerNumber = normalizeRegno(s(formData, "registerNumber"));
   const email = s(formData, "email");
   const phone1 = s(formData, "phone1");
   const phone2 = s(formData, "phone2");
@@ -54,8 +55,8 @@ export async function updateTenantAction(
 
   const fieldErrors: Record<string, string> = {};
   if (!name) fieldErrors.name = "Нэрээ оруулна уу.";
-  if (!/^\d{7}$/.test(registerNumber))
-    fieldErrors.registerNumber = "Регистр яг 7 оронтой тоо байх ёстой.";
+  if (!regnoKind(registerNumber))
+    fieldErrors.registerNumber = TENANT_REGNO_MESSAGE;
   if (!isEmail(email)) fieldErrors.email = "Имэйл хаяг буруу.";
   if (!phone1) fieldErrors.phone1 = "Утасны дугаар оруулна уу.";
   else if (!isValidPhone(phone1))

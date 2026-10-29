@@ -39,7 +39,7 @@ export function TenantForm({ initial }: { initial: Initial }) {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <Field label="Байгууллагын нэр" htmlFor="name" error={fe.name} className={FIELD_MW}>
+        <Field label="Байгууллага / хувь хүний нэр" htmlFor="name" error={fe.name} className={FIELD_MW}>
           <input
             id="name"
             name="name"
@@ -52,7 +52,7 @@ export function TenantForm({ initial }: { initial: Initial }) {
         <Field
           label="Регистр"
           htmlFor="registerNumber"
-          hint="7 оронтой тоо"
+          hint="Байгууллага: 7 оронтой тоо · Хувь хүн: ҮҮ99993333"
           error={fe.registerNumber}
           className={FIELD_MW}
         >
@@ -60,9 +60,7 @@ export function TenantForm({ initial }: { initial: Initial }) {
             id="registerNumber"
             name="registerNumber"
             type="text"
-            inputMode="numeric"
-            pattern="\d{7}"
-            maxLength={7}
+            maxLength={10}
             required
             defaultValue={initial.registerNumber}
             className={`auth-input h-11 font-plex-mono ${fe.registerNumber ? "border-red-500/50" : ""}`}

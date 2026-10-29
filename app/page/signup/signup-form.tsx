@@ -17,8 +17,8 @@ import {
   resolveAddressFromGeocode,
 } from "@/app/dashboard/branches/address-select";
 import { DEFAULT_OPEN_DAYS, WEEK_DAYS, type Weekday } from "@/lib/branches";
+import { normalizeRegno, regnoKind, splitPersonName } from "@/lib/tenant-regno";
 
-const REGNO_PATTERN = /^\d{7}$/;
 const REGNO_FETCH_DEBOUNCE_MS = 400;
 
 // Leaflet/Google Maps нь window-д шууд хандах учир SSR хийгдэхгүйгээр lazy load
@@ -140,6 +140,11 @@ export function SignUpForm({
   const [regLoading, setRegLoading] = useState(false);
   const [regError, setRegError] = useState<string | null>(null);
   const [regFound, setRegFound] = useState(false);
+  // Регистрийн хэлбэрээс: 7 оронтой тоо = байгууллага, ҮҮ99993333 = хувь хүн
+  const regKind = regnoKind(registerNumber);
+  const isPerson = regKind === "person";
+  // Хувь хүний админыг 1-р алхмын утас/имэйлээр үүсгэнэ — алхам 3-т харуулахад.
+  const [personContact, setPersonContact] = useState({ phone: "", email: "" });
   // Хэрэглэгч нэрийг гараар өөрчилсөн бол дахин дарж бичихгүй
   const userEditedNameRef = useRef(false);
   const lastFetchedRegnoRef = useRef<string | null>(null);
@@ -171,8 +176,8 @@ export function SignUpForm({
   }, [state]);
 
   useEffect(() => {
-    const cleanRegno = registerNumber.replace(/\D+/g, "");
-    if (!REGNO_PATTERN.test(cleanRegno)) {
+    const cleanRegno = normalizeRegno(registerNumber);
+    if (!regnoKind(cleanRegno)) {
       setRegFound(false);
       setRegError(null);
       return;
@@ -238,8 +243,8 @@ export function SignUpForm({
     const val = (n: string) =>
       (f?.elements.namedItem(n) as HTMLInputElement | null)?.value.trim() ?? "";
     const missing: string[] = [];
-    if (!REGNO_PATTERN.test(registerNumber)) missing.push("регистр (7 орон)");
-    if (!orgName.trim()) missing.push("байгууллагын нэр");
+    if (!regKind) missing.push("регистр (7 орон эсвэл ҮҮ99993333)");
+    if (!orgName.trim()) missing.push(isPerson ? "овог нэр" : "байгууллагын нэр");
     if (!/^\S+@\S+\.\S+$/.test(val("orgEmail"))) missing.push("имэйл");
     if (!/^\d{8}$/.test(val("phone1"))) missing.push("утас 1");
     if (missing.length) {
@@ -247,6 +252,7 @@ export function SignUpForm({
       return;
     }
     setStepError(null);
+    setPersonContact({ phone: val("phone1"), email: val("orgEmail") });
     setStep(2);
   }
 
@@ -288,7 +294,11 @@ export function SignUpForm({
         <div
           className={`h-px flex-1 ${step > 2 ? "bg-[var(--oc-accent)]/50" : "bg-[var(--oc-line)]"}`}
         />
-        <StepLabel num={3} label="Админ хэрэглэгч" active={step === 3} />
+        <StepLabel
+          num={3}
+          label={isPerson ? "Нууц үг" : "Админ хэрэглэгч"}
+          active={step === 3}
+        />
       </div>
 
       {awaitingOtp && state?.message ? (
@@ -302,22 +312,22 @@ export function SignUpForm({
       {/* --- Алхам 1: Байгууллагын мэдээлэл (алхам 2-т hidden, DOM-д хэвээр) --- */}
       <section className={step === 1 ? "flex flex-col gap-5" : "hidden"}>
         <div>
-          <h2 className="font-semibold text-[var(--oc-ink)]">Байгууллагын мэдээлэл</h2>
+          <h2 className="font-semibold text-[var(--oc-ink)]">{isPerson ? "Хувь хүний мэдээлэл" : "Байгууллагын мэдээлэл"}</h2>
           <p className="mt-1 text-xs text-[var(--oc-muted3)]">
-            carservice-д бүртгүүлэх үндсэн мэдээлэл.
+            carservice-д бүртгүүлэх үндсэн мэдээлэл. Байгууллага болон хувь хүн бүртгүүлж болно.
           </p>
         </div>
 
         <div className="grid gap-5 sm:grid-cols-2">
           <Field
-            label="Байгууллагын регистр"
+            label="Регистрийн дугаар"
             htmlFor="registerNumber"
             hint={
               regLoading
                 ? "Шалгаж байна..."
                 : regFound
-                  ? "Олдсон · нэр автоматаар бөглөгдсөн"
-                  : "7 оронтой тоо — нэрийг автоматаар татна"
+                  ? `Олдсон (${isPerson ? "хувь хүн" : "байгууллага"}) · нэр автоматаар бөглөгдсөн`
+                  : "Байгууллага: 7 оронтой тоо · Хувь хүн: ҮҮ99993333"
             }
             error={fe.registerNumber ?? regError ?? undefined}
           >
@@ -326,13 +336,12 @@ export function SignUpForm({
                 id="registerNumber"
                 name="registerNumber"
                 type="text"
-                inputMode="numeric"
-                pattern="\d{7}"
-                maxLength={7}
+                maxLength={10}
                 required
+                autoComplete="off"
                 value={registerNumber}
                 onChange={(e) =>
-                  setRegisterNumber(e.target.value.replace(/\D+/g, ""))
+                  setRegisterNumber(normalizeRegno(e.target.value))
                 }
                 className={`auth-input pr-9 ${
                   fe.registerNumber
@@ -341,7 +350,7 @@ export function SignUpForm({
                       ? "border-[var(--oc-ok)]/40"
                       : ""
                 }`}
-                placeholder="1234567"
+                placeholder="1234567 эсвэл ҮҮ99993333"
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
                 {regLoading ? (
@@ -371,7 +380,11 @@ export function SignUpForm({
             </div>
           </Field>
 
-          <Field label="Байгууллагын нэр" htmlFor="orgName" error={fe.orgName}>
+          <Field
+            label={isPerson ? "Овог нэр" : "Байгууллагын нэр"}
+            htmlFor="orgName"
+            error={fe.orgName}
+          >
             <input
               id="orgName"
               name="orgName"
@@ -383,12 +396,12 @@ export function SignUpForm({
                 setOrgName(e.target.value);
               }}
               className={`auth-input ${fe.orgName ? "border-red-500/50" : ""}`}
-              placeholder="Жишээ: Гранд Гараж ХХК"
+              placeholder={isPerson ? "Жишээ: Бат Дорж" : "Жишээ: Гранд Гараж ХХК"}
             />
           </Field>
 
           <Field
-            label="Байгууллагын имэйл"
+            label={isPerson ? "Имэйл" : "Байгууллагын имэйл"}
             htmlFor="orgEmail"
             error={fe.orgEmail}
           >
@@ -666,63 +679,73 @@ export function SignUpForm({
         <div>
           <h2 className="font-semibold text-[var(--oc-ink)]">Админ хэрэглэгч</h2>
           <p className="mt-1 text-xs text-[var(--oc-muted3)]">
-            Системийн анхны админ (OWNER) хэрэглэгч.
+            {isPerson
+              ? "Таны мэдээллээр админ (OWNER) хэрэглэгч үүснэ — зөвхөн нууц үгээ тохируулна уу."
+              : "Системийн анхны админ (OWNER) хэрэглэгч."}
           </p>
         </div>
 
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Овог" htmlFor="lastName" error={fe.lastName}>
-            <input
-              key={`lastName-${state?.values?.lastName ?? ""}`}
-              id="lastName"
-              name="lastName"
-              type="text"
-              required
-              defaultValue={state?.values?.lastName ?? ""}
-              className={`auth-input ${fe.lastName ? "border-red-500/50" : ""}`}
-              placeholder="Батын"
-            />
-          </Field>
-          <Field label="Нэр" htmlFor="firstName" error={fe.firstName}>
-            <input
-              key={`firstName-${state?.values?.firstName ?? ""}`}
-              id="firstName"
-              name="firstName"
-              type="text"
-              required
-              defaultValue={state?.values?.firstName ?? ""}
-              className={`auth-input ${fe.firstName ? "border-red-500/50" : ""}`}
-              placeholder="Болд"
-            />
-          </Field>
-          <Field label="Утас" htmlFor="adminPhone" error={fe.adminPhone}>
-            <input
-              key={`adminPhone-${state?.values?.adminPhone ?? ""}`}
-              id="adminPhone"
-              name="adminPhone"
-              type="tel"
-              inputMode="numeric"
-              maxLength={8}
-              pattern="[0-9]{8}"
-              required
-              defaultValue={state?.values?.adminPhone ?? ""}
-              className={`auth-input ${fe.adminPhone ? "border-red-500/50" : ""}`}
-              placeholder="99000000"
-            />
-          </Field>
-          <Field label="Имэйл" htmlFor="adminEmail" error={fe.adminEmail}>
-            <input
-              key={`adminEmail-${state?.values?.adminEmail ?? ""}`}
-              id="adminEmail"
-              name="adminEmail"
-              type="email"
-              required
-              defaultValue={state?.values?.adminEmail ?? ""}
-              className={`auth-input ${fe.adminEmail ? "border-red-500/50" : ""}`}
-              placeholder="bold@gmail.com"
-            />
-          </Field>
-        </div>
+        {isPerson ? (
+          <PersonAdminSummary
+            name={splitPersonName(orgName)}
+            phone={personContact.phone || state?.values?.phone1 || ""}
+            email={personContact.email || state?.values?.orgEmail || ""}
+          />
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field label="Овог" htmlFor="lastName" error={fe.lastName}>
+              <input
+                key={`lastName-${state?.values?.lastName ?? ""}`}
+                id="lastName"
+                name="lastName"
+                type="text"
+                required
+                defaultValue={state?.values?.lastName ?? ""}
+                className={`auth-input ${fe.lastName ? "border-red-500/50" : ""}`}
+                placeholder="Батын"
+              />
+            </Field>
+            <Field label="Нэр" htmlFor="firstName" error={fe.firstName}>
+              <input
+                key={`firstName-${state?.values?.firstName ?? ""}`}
+                id="firstName"
+                name="firstName"
+                type="text"
+                required
+                defaultValue={state?.values?.firstName ?? ""}
+                className={`auth-input ${fe.firstName ? "border-red-500/50" : ""}`}
+                placeholder="Болд"
+              />
+            </Field>
+            <Field label="Утас" htmlFor="adminPhone" error={fe.adminPhone}>
+              <input
+                key={`adminPhone-${state?.values?.adminPhone ?? ""}`}
+                id="adminPhone"
+                name="adminPhone"
+                type="tel"
+                inputMode="numeric"
+                maxLength={8}
+                pattern="[0-9]{8}"
+                required
+                defaultValue={state?.values?.adminPhone ?? ""}
+                className={`auth-input ${fe.adminPhone ? "border-red-500/50" : ""}`}
+                placeholder="99000000"
+              />
+            </Field>
+            <Field label="Имэйл" htmlFor="adminEmail" error={fe.adminEmail}>
+              <input
+                key={`adminEmail-${state?.values?.adminEmail ?? ""}`}
+                id="adminEmail"
+                name="adminEmail"
+                type="email"
+                required
+                defaultValue={state?.values?.adminEmail ?? ""}
+                className={`auth-input ${fe.adminEmail ? "border-red-500/50" : ""}`}
+                placeholder="bold@gmail.com"
+              />
+            </Field>
+          </div>
+        )}
 
         <div className="grid gap-5 sm:grid-cols-2">
           <Field
@@ -892,6 +915,34 @@ function StepLabel({
     );
   }
   return content;
+}
+
+/* Хувь хүн: админ хэрэглэгч 1-р алхмын мэдээллээр үүснэ — зөвхөн харуулна. */
+function PersonAdminSummary({
+  name,
+  phone,
+  email,
+}: {
+  name: { lastName: string; firstName: string };
+  phone: string;
+  email: string;
+}) {
+  const rows: [string, string][] = [
+    ["Овог", name.lastName || "—"],
+    ["Нэр", name.firstName || "—"],
+    ["Утас", phone || "—"],
+    ["Имэйл", email || "—"],
+  ];
+  return (
+    <dl className="grid gap-x-5 gap-y-3 sm:grid-cols-2 rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] px-4 py-3 text-sm">
+      {rows.map(([k, v]) => (
+        <div key={k} className="flex flex-col gap-0.5 min-w-0">
+          <dt className="text-xs text-[var(--oc-muted3)]">{k}</dt>
+          <dd className="text-[var(--oc-ink)] truncate">{v}</dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
 function CheckIcon() {

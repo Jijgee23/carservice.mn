@@ -19,7 +19,7 @@ model Tenant {
   // байх нь бодит боломжтой). Давхцлыг зөвхөн бүртгэлийн UX түвшинд (signUpAction)
   // шалгаж, тодорхой мессеж өгдөг — бизнесийн шийдвэрээр constraint аваагүй.
   name                           String
-  registerNumber                 String   @unique // 7 оронтой улсын бүртгэлийн дугаар (string-р хадгална)
+  registerNumber                 String   @unique // Байгууллага: 7 оронтой тоо, хувь хүн: ҮҮ99993333 (lib/tenant-regno.ts)
   email                          String   @unique
   phone1                         String
   phone2                         String?
