@@ -42,9 +42,11 @@ async function run(req: Request) {
   const until = new Date(now.getTime() + SUBSCRIPTION_WARN_DAYS * DAY_MS);
 
   // Идэвхтэй/туршилтын, дуусах хугацаатай (endsAt != null), удахгүй дуусах гэж буй,
-  // сануулга хараахан илгээгээгүй багцууд.
+  // сануулга хараахан илгээгээгүй ТӨЛБӨРТЭЙ багцууд (FREE үргэлж үнэгүй —
+  // хуучин FREE туршилтын мөрүүдэд сануулга явуулахгүй).
   const due = await prisma.subscription.findMany({
     where: {
+      plan: { not: "FREE" },
       status: { in: ["TRIAL", "ACTIVE"] },
       reminderSentAt: null,
       endsAt: { gte: now, lte: until },
@@ -89,7 +91,7 @@ async function run(req: Request) {
       0,
       Math.ceil((sub.endsAt.getTime() - now.getTime()) / DAY_MS),
     );
-    const body = `${sub.tenant.name}: багцын хугацаа ${formatDaysLeft(daysLeft)} (${formatDate(sub.endsAt)}). Тасралтгүй ажиллахын тулд сунгана уу.`;
+    const body = `${sub.tenant.name}: багцын хугацаа ${formatDaysLeft(daysLeft)} (${formatDate(sub.endsAt)}). Сунгаагүй бол үнэгүй FREE багц руу шилжиж, лимит нь багасна.`;
 
     for (const owner of owners) {
       try {

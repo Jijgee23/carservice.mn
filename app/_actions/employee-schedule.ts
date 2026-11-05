@@ -1,5 +1,6 @@
 "use server";
 
+import { assertModuleEnabled } from "@/lib/plan-modules-server";
 import { revalidatePath } from "next/cache";
 import { logAudit } from "@/lib/audit";
 import { requireUser } from "@/lib/auth";
@@ -25,6 +26,7 @@ function s(fd: FormData, key: string): string {
 
 async function authorize(userId: string) {
   const actor = await requireUser();
+  await assertModuleEnabled(actor.tenantId, "enable_staff_schedule");
   const result = await authorizeScheduleTarget(prisma, {
     hasSchedulePermission: hasPermission(actor, "employees.schedule"),
     tenantId: actor.tenantId,

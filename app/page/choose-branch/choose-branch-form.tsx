@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { type ChooseBranchState, chooseBranchAction } from "@/app/_actions/auth";
 import { FormError } from "@/app/_components/landing-ops-ui";
 import { ALL_BRANCHES } from "@/lib/auth/session";
@@ -28,6 +28,29 @@ export function ChooseBranchForm({
     ChooseBranchState,
     FormData
   >(chooseBranchAction, null);
+
+  // Сонгох салбар ганцхан бол (өмнөх session-тэй орж ирсэн үед) хуудсыг
+  // алгасаж шууд сонгоно — «Бүх салбар» нэг салбартай үед ялгаагүй.
+  // Нэвтрэх үед ихэвчлэн аль хэдийн оноогддог (lib/auth/initial-working-branch.ts).
+  const single = branches.length === 1;
+  const autoRef = useRef<HTMLFormElement>(null);
+  const autoSent = useRef(false);
+  useEffect(() => {
+    if (single && !autoSent.current && autoRef.current) {
+      autoSent.current = true;
+      autoRef.current.requestSubmit();
+    }
+  }, [single]);
+
+  if (single && !(state && !state.ok)) {
+    return (
+      <form ref={autoRef} action={formAction} className="py-6 text-center text-sm text-[var(--oc-muted3)]">
+        <input type="hidden" name="branchId" value={branches[0].id} />
+        <input type="hidden" name="next" value={next} />
+        {branches[0].name} руу орж байна…
+      </form>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4">

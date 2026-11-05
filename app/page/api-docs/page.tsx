@@ -1,16 +1,16 @@
 import Link from "next/link";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
 import { Brand } from "@/app/_components/brand";
 import { Footer } from "@/app/_components/footer";
 import { ApiDocsTabs } from "./tabs";
 
-const plexSans = IBM_Plex_Sans({
+const plexSans = Geist({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-plex-sans",
 });
-const plexMono = IBM_Plex_Mono({
+const plexMono = Geist_Mono({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600"],
   variable: "--font-plex-mono",

@@ -1184,7 +1184,7 @@ test("importEmployees: valid rows are created, invalid ones reported per row", a
     db,
     OWNER_ACTOR,
     [importRow(2), importRow(3, { roleId: "ghost-role" }), importRow(4, { email: "bad" }), importRow(5)],
-    { remaining: null, limitMessage: "limit", onCreated: async (c) => void created.push(c.id) },
+    { onCreated: async (c) => void created.push(c.id) },
   );
   assert.equal(result.succeeded, 2);
   assert.equal(result.failed, 2);
@@ -1196,23 +1196,16 @@ test("importEmployees: valid rows are created, invalid ones reported per row", a
   assert.ok(users.every((u) => u.isOwner === false && u.roleId === "r1" && u.passwordHash === null));
 });
 
-test("importEmployees: rows beyond the remaining plan quota fail with the limit message", async () => {
+test("importEmployees: no plan quota — every valid row is created (plans differ by modules only)", async () => {
   const { db, users } = makeFakeDb({ roles: [{ id: "r1", name: "Мастер", isActive: true, tenantId: "t1" }] });
-  const result = await core.importEmployees(db, ACTOR, [importRow(2), importRow(3), importRow(4)], {
-    remaining: 2,
-    limitMessage: "Багцын хязгаар",
-  });
-  assert.equal(result.succeeded, 2);
-  assert.deepEqual(result.results[2], { key: "r4", ok: false, error: "Багцын хязгаар" });
-  assert.equal(users.length, 2);
+  const result = await core.importEmployees(db, ACTOR, [importRow(2), importRow(3), importRow(4)], {});
+  assert.equal(result.succeeded, 3);
+  assert.equal(users.length, 3);
 });
 
 test("importEmployees: an owner actor still cannot create owners or role-less rows", async () => {
   const { db, users } = makeFakeDb({ roles: [{ id: "r1", name: "Мастер", isActive: true, tenantId: "t1" }] });
-  const result = await core.importEmployees(db, OWNER_ACTOR, [importRow(2, { roleId: "" })], {
-    remaining: null,
-    limitMessage: "limit",
-  });
+  const result = await core.importEmployees(db, OWNER_ACTOR, [importRow(2, { roleId: "" })], {});
   assert.equal(result.succeeded, 0);
   assert.equal(result.results[0]!.fieldErrors?.roleId, "Үүрэг сонгоно уу.");
   assert.equal(users.length, 0);
@@ -1220,10 +1213,7 @@ test("importEmployees: an owner actor still cannot create owners or role-less ro
 
 test("importEmployees: an impossible date (2026-02-30) is rejected server-side, not rolled over", async () => {
   const { db, users } = makeFakeDb({ roles: [{ id: "r1", name: "Мастер", isActive: true, tenantId: "t1" }] });
-  const result = await core.importEmployees(db, OWNER_ACTOR, [importRow(2, { activeUntil: "2026-02-30" })], {
-    remaining: null,
-    limitMessage: "limit",
-  });
+  const result = await core.importEmployees(db, OWNER_ACTOR, [importRow(2, { activeUntil: "2026-02-30" })], {});
   assert.equal(result.succeeded, 0);
   assert.equal(result.results[0]!.fieldErrors?.activeUntil, "Огноо буруу.");
   assert.equal(users.length, 0);

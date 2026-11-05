@@ -65,7 +65,7 @@ export function CategoryPickerModal({
           <button
             type="button"
             onClick={apply}
-            className="px-5 py-2 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-500 transition-colors"
+            className="px-5 py-2 rounded-xl text-sm font-semibold bg-[var(--oc-accent)] text-[var(--oc-on-accent)] hover:bg-[var(--oc-accent-hi)] transition-colors"
           >
             Хэрэглэх{draft.length > 0 ? ` (${draft.length})` : ""}
           </button>

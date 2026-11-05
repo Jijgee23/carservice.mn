@@ -317,16 +317,15 @@ test("every path returns the link's actual owner, never the requested customerId
   assert.match(postBody, /customerId: record\.customerId/);
 });
 
-test("MAX_VEHICLES is enforced unconditionally; the remaining per-caller flags stay pinned", () => {
+test("no vehicle count quota; the remaining per-caller flags stay pinned", () => {
   const actions = src("../app/_actions/vehicles.ts");
   const quickCreate = src("../app/_actions/quick-create.ts");
   const route = src("../app/api/v1/vehicles/route.ts");
 
-  // MAX_VEHICLES: enforced everywhere as of D-154 (superseding D-151), which
-  // closed the quick-create/API bypass of a tenant's cap. The flag is GONE
-  // rather than set to true — an optional flag invites switching it back off.
+  // Vehicle count quota removed (plans differ by modules only); no per-caller
+  // plan-limit flag either.
   const commandSourceEarly = src("../lib/vehicles/vehicle-commands.ts");
-  assert.match(commandSourceEarly, /PLAN_LIMIT_CODES\.MAX_VEHICLES/);
+  assert.doesNotMatch(commandSourceEarly, /enforceCountLimit|PLAN_LIMIT_REACHED|DAILY_LIMIT_REACHED|PLAN_LIMIT_CODES\.(MAX_|DAILY_)/);
   assert.doesNotMatch(commandSourceEarly, /enforcePlanLimit/);
   for (const caller of [actions, quickCreate, route]) {
     assert.doesNotMatch(caller, /enforcePlanLimit/);

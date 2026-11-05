@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
+import { getEnabledModules } from "@/lib/plan-modules-server";
 import { canCreate } from "@/lib/auth/roles";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
 import { BranchForm, BRANCH_FORM_ID } from "../branch-form";
 import { getAddressData } from "@/lib/address";
@@ -13,6 +14,13 @@ export const metadata = {
 
 export default async function NewBranchPage() {
   const user = await requireUser();
+  // «Олон салбар» модуль багцад ороогүй бол хоёр дахь салбар нэмэх хуудас байхгүй.
+  if (
+    !(await getEnabledModules(user.tenant.plan)).has("enable_multi_branch") &&
+    (await prisma.branch.count({ where: { tenantId: user.tenantId } })) > 0
+  ) {
+    notFound();
+  }
   if (!canCreate(user, "branches")) redirect("/dashboard/branches");
 
   const [addressData, tagOptions] = await Promise.all([

@@ -92,7 +92,9 @@ export async function GET(req: Request) {
             daysLeft: data.activeSub.daysLeft,
           }
         : null,
-      planLimits: data.planLimits,
+      // Тоон хязгаар устсан (багц модулиар ялгардаг) — мобайл апп-ын нийцлийн
+      // тулд талбарыг хадгалсан, бүгд null = хязгааргүй.
+      planLimits: { daily_orders: null, max_vehicles: null, max_users: null, max_branches: null },
       postpaid: {
         vehicleCount: data.postpaidVehicleCount,
         // Field name kept for compatibility. QA #11: value is now the outstanding balance of ALL

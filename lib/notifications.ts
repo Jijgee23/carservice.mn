@@ -29,9 +29,14 @@ export const NOTIFICATION_TYPES = [
   "appointment_rescheduled",
   "appointment_rescheduled_by_account",
   "subscription_expiring",
+  "credit_blocked",
+  "credit_unblocked",
+  "credit_blocked_admin",
+  "review_received",
   "feedback_replied_staff",
   "feedback_replied_account",
   "tenant_created",
+  "quote_request_created",
   "tenant_promo",
   "broadcast_staff",
   "broadcast_account",
@@ -62,9 +67,14 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   appointment_rescheduled: "Цаг шилжсэн",
   appointment_rescheduled_by_account: "Хэрэглэгч цагаа шилжүүлсэн",
   subscription_expiring: "Багц дуусах",
+  credit_blocked: "Credit score — блоклогдсон",
+  credit_unblocked: "Credit score — блок цуцлагдсан",
+  credit_blocked_admin: "Credit score — блок",
+  review_received: "Шинэ үнэлгээ",
   feedback_replied_staff: "Санал хүсэлтэд хариу ирсэн",
   feedback_replied_account: "Санал хүсэлтэд хариу ирсэн",
   tenant_created: "Шинэ байгууллага бүртгүүлсэн",
+  quote_request_created: "Үнийн саналын хүсэлт",
   tenant_promo: "Байгууллагын зар",
   broadcast_staff: "Мэдэгдэл",
   broadcast_account: "Мэдэгдэл",
@@ -309,6 +319,45 @@ export const NOTIFICATION_REGISTRY: Record<NotificationType, NotificationDef> = 
     }),
     href: (d) => staffAppointmentHref(d.appointmentId),
   },
+  // Credit score босгоос доош орж автоматаар блоклогдсон / нээгдсэн
+  // (lib/credit-score-server.ts) — тенантын эзэд, мөн систем админд.
+  credit_blocked: {
+    realm: "staff",
+    build: (i) => ({
+      title: "Credit score бага тул блоклогдлоо",
+      body: i.body ?? "Таны байгууллагын credit score босгоос доош орсон.",
+      data: { type: "credit_blocked" },
+    }),
+    href: () => "/dashboard/settings",
+  },
+  credit_unblocked: {
+    realm: "staff",
+    build: (i) => ({
+      title: "Блок цуцлагдлаа",
+      body: i.body ?? "Таны байгууллагын credit score сэргэж, блок цуцлагдлаа.",
+      data: { type: "credit_unblocked" },
+    }),
+    href: () => "/dashboard/settings",
+  },
+  credit_blocked_admin: {
+    realm: "system",
+    build: (i) => ({
+      title: "Credit score — автомат блок",
+      body: i.body ?? "Байгууллага credit score-оор блоклогдлоо.",
+      data: { type: "credit_blocked_admin", tenantId: i.tenantId ?? "" },
+    }),
+    href: (d) => (d.tenantId ? `/system/tenants/${d.tenantId}` : "/system/tenants"),
+  },
+  // Үйлчлүүлэгч дууссан засварт үнэлгээ өгсөн (lib/reviews.ts).
+  review_received: {
+    realm: "staff",
+    build: (i) => ({
+      title: `Шинэ үнэлгээ: ${i.rating ?? ""} ★`,
+      body: i.body ?? "Үйлчлүүлэгч үнэлгээ өглөө.",
+      data: { type: "review_received", reviewId: i.reviewId ?? "" },
+    }),
+    href: () => "/dashboard/reviews",
+  },
   subscription_expiring: {
     realm: "staff",
     build: (i) => ({
@@ -349,6 +398,17 @@ export const NOTIFICATION_REGISTRY: Record<NotificationType, NotificationDef> = 
       data: { type: "tenant_created", tenantId: i.tenantId ?? "" },
     }),
     href: (d) => (d.tenantId ? `/system/tenants/${d.tenantId}` : "/system/tenants"),
+  },
+  // Энтерпрайз багцын үнийн саналын хүсэлт (app/_actions/quote-requests.ts).
+  quote_request_created: {
+    realm: "system",
+    build: (i) => ({
+      title: "Энтерпрайз үнийн саналын хүсэлт",
+      body: `"${i.orgName ?? ""}" · ${i.moduleCount ?? "0"} модуль сонгосон.`,
+      data: { type: "quote_request_created", quoteRequestId: i.quoteRequestId ?? "" },
+    }),
+    href: (d) =>
+      d.quoteRequestId ? `/system/quote-requests/${d.quoteRequestId}` : "/system/quote-requests",
   },
   // Тенант (байгууллага) өөрийн үйлчлүүлэгчиддээ гар аргаар илгээсэн зар/
   // урамшуулал (жишээ нь "20% хямдрал") — `customers.notify` эрхтэй ажилтан

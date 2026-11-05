@@ -172,7 +172,7 @@ export const BranchTimePicker = forwardRef<
     <>
       {/* Өдөр (календар) */}
       <div className="flex flex-col gap-1.5">
-        <span className="text-sm font-medium text-white/70">Өдөр</span>
+        <span className="text-sm font-medium text-[var(--oc-ink2)]">Өдөр</span>
         {branchId ? (
           <BookingCalendar
             value={date}
@@ -182,24 +182,24 @@ export const BranchTimePicker = forwardRef<
             schedule={schedule}
           />
         ) : (
-          <p className="text-xs text-white/40">Эхлээд салбараа сонгоно уу.</p>
+          <p className="text-xs text-[var(--oc-muted3)]">Эхлээд салбараа сонгоно уу.</p>
         )}
         {error ? <p className="text-red-400 light:text-red-600 text-xs">{error}</p> : null}
       </div>
 
       {/* Боломжит цаг */}
       <div className="flex flex-col gap-2">
-        <div className="text-sm font-medium text-white/70">Боломжит цаг</div>
+        <div className="text-sm font-medium text-[var(--oc-ink2)]">Боломжит цаг</div>
         {!branchId || !date ? (
-          <p className="text-xs text-white/40">Салбар, өдрөө сонгоно уу.</p>
+          <p className="text-xs text-[var(--oc-muted3)]">Салбар, өдрөө сонгоно уу.</p>
         ) : loadingSlots ? (
-          <p className="text-xs text-white/40">Ачааллаж байна...</p>
+          <p className="text-xs text-[var(--oc-muted3)]">Ачааллаж байна...</p>
         ) : !availability || !availability.open ? (
-          <p className="text-xs text-white/40">
+          <p className="text-xs text-[var(--oc-muted3)]">
             {availability?.reason ?? "Энэ өдөр цаг авах боломжгүй."}
           </p>
         ) : availability.slots.length === 0 ? (
-          <p className="text-xs text-white/40">Цагийн нүх алга.</p>
+          <p className="text-xs text-[var(--oc-muted3)]">Цагийн нүх алга.</p>
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
             {availability.slots.map((slot) => {
@@ -231,13 +231,13 @@ export const BranchTimePicker = forwardRef<
                   className={`px-2 py-2 rounded-lg text-sm tabular-nums border transition-colors ${
                     selected
                       ? overbookable
-                        ? "bg-amber-600 border-amber-500 text-white font-semibold"
-                        : "bg-violet-600 border-violet-500 text-white font-semibold"
+                        ? "bg-amber-600 border-amber-500 text-[#fff] font-semibold"
+                        : "bg-[var(--oc-accent)] border-[var(--oc-accent)] text-[var(--oc-on-accent)] font-semibold shadow-sm"
                       : slot.available
-                        ? "border-white/[0.12] bg-white/[0.04] text-white/80 hover:border-violet-500/40 hover:bg-violet-500/10"
+                        ? "border-[var(--oc-line)] bg-[var(--oc-panel)] text-[var(--oc-ink2)] hover:border-[var(--oc-accent)]/60 hover:bg-[var(--oc-accent)]/10"
                         : overbookable
-                          ? "border-amber-500/40 bg-amber-500/10 text-amber-300 hover:border-amber-500/60 hover:bg-amber-500/20"
-                          : "border-white/[0.05] bg-white/[0.02] text-white/25 line-through cursor-not-allowed"
+                          ? "border-amber-500/40 bg-amber-500/10 text-amber-300 light:text-amber-700 hover:border-amber-500/60 hover:bg-amber-500/20"
+                          : "border-[var(--oc-line2)] bg-[var(--oc-panel2)] text-[var(--oc-muted4)] line-through cursor-not-allowed"
                   }`}
                 >
                   {slot.time}
@@ -247,16 +247,16 @@ export const BranchTimePicker = forwardRef<
           </div>
         )}
         {availability?.scheduleLabel ? (
-          <p className="text-xs text-[#dc7f4f]/80">{availability.scheduleLabel}</p>
+          <p className="text-xs text-[var(--oc-warn)]">{availability.scheduleLabel}</p>
         ) : null}
         {availability?.open && availability.slots.length > 0 ? (
-          <div className="flex items-center gap-3 text-[11px] text-white/40">
+          <div className="flex items-center gap-3 text-[11px] text-[var(--oc-muted3)]">
             <span className="inline-flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded border border-white/20 bg-white/[0.04]" />
+              <span className="w-2.5 h-2.5 rounded border border-[var(--oc-line)] bg-[var(--oc-panel)]" />
               Сул
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded bg-white/[0.02] border border-white/[0.05]" />
+              <span className="w-2.5 h-2.5 rounded bg-[var(--oc-panel2)] border border-[var(--oc-line2)]" />
               Захиалгатай
             </span>
           </div>

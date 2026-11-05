@@ -3,6 +3,7 @@
 // урьдчилан, server дээр дахин) хоёулаа энэ функцээр шалгана. Мессежүүд
 // өмнөх createServiceAction-ийн validate()-тэй ижил.
 
+import { isValidBarcode, normalizeBarcode } from "@/lib/catalog/normalize";
 import { SERVICE_KINDS, type ServiceKind } from "@/lib/services";
 
 /** Формын/Excel-ийн түүхий утгууд (бүгд string). */
@@ -20,6 +21,10 @@ export type ServiceCreateRaw = {
   description: string;
   categoryId: string;
   isActive: boolean;
+  /** Нэгдсэн сангаас сонгосон мөр (LABOR/GOODS) — хоосон бол санд таарахыг хайх/нэмнэ. */
+  catalogItemId?: string;
+  /** Баркод — зөвхөн GOODS, заавал биш. */
+  barcode?: string;
 };
 
 /** Шалгасан утгууд — тоонууд нормчлогдсон decimal string (server Decimal болгоно). */
@@ -37,6 +42,8 @@ export type ServiceCreateValues = {
   description: string | null;
   isActive: boolean;
   categoryId: string;
+  catalogItemId: string | null;
+  barcode: string | null;
 };
 
 /** Тенантын эзэмшдэг нэгж/ангиллын id-ууд (null = шалгахгүй, зөвхөн хэлбэр). */
@@ -108,6 +115,12 @@ export function validateServiceCreate(
     else reminderIntervalMonths = n;
   }
 
+  let barcode: string | null = null;
+  if (type === "GOODS") {
+    barcode = normalizeBarcode(raw.barcode);
+    if (barcode && !isValidBarcode(barcode)) errors.barcode = "Баркод буруу (4–64 тэмдэгт: тоо, үсэг, - .).";
+  }
+
   const categoryId = raw.categoryId.trim();
   if (!categoryId) errors.categoryId = "Ангилал сонгоно уу.";
   else if (!owns(refs?.categoryIds, categoryId)) errors.categoryId = "Сонгосон ангилал олдсонгүй.";
@@ -128,6 +141,8 @@ export function validateServiceCreate(
       description: raw.description.trim() || null,
       isActive: raw.isActive,
       categoryId,
+      catalogItemId: (type === "LABOR" || type === "GOODS") && raw.catalogItemId?.trim() ? raw.catalogItemId.trim() : null,
+      barcode,
     },
     errors,
   };

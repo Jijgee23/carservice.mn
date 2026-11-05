@@ -9,6 +9,8 @@ const WIDTH: Record<string, number> = { name: 32, description: 36, category: 20,
 
 export type ServiceExportRow = {
   code: string | null;
+  /** Баркод (зөвхөн GOODS хуудсанд багана бий). */
+  barcode?: string | null;
   name: string;
   category: string | null;
   unit: string | null;
@@ -47,6 +49,7 @@ export async function buildServiceWorkbook(input: {
   ws.addRows(
     input.rows.map((r) => ({
       code: r.code ?? "",
+      barcode: r.barcode ?? "",
       name: r.name,
       category: r.category ?? "",
       unit: r.unit ?? "",
@@ -62,6 +65,8 @@ export async function buildServiceWorkbook(input: {
   );
   ws.getRow(1).font = { bold: true };
   ws.getColumn("code").numFmt = "@";
+  // Баркодыг текстээр — урт тоо (EAN-13) шинжлэх бичлэг (8.8E+12) болохоос сэргийлнэ.
+  if (input.type === "GOODS") ws.getColumn("barcode").numFmt = "@";
 
   if (input.reference) {
     const ref = wb.addWorksheet("Ангилал, нэгж");

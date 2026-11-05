@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { getEnabledModules } from "@/lib/plan-modules-server";
 import { canEdit } from "@/lib/auth/roles";
 import { Btn, BtnLink, Chip } from "@/app/_components/landing-ops-ui";
 import { prisma } from "@/lib/prisma";
@@ -38,6 +39,7 @@ export default async function EditBranchPage({
   params: Promise<{ id: string }>;
 }) {
   const user = await requireUser();
+  const auditInPlan = (await getEnabledModules(user.tenant.plan)).has("enable_audit");
   if (!canEdit(user, "branches")) redirect("/dashboard/branches");
 
   const { id } = await params;
@@ -216,12 +218,14 @@ export default async function EditBranchPage({
             ) : (
               <p className="text-sm text-[var(--oc-muted3)]">Түүх алга.</p>
             )}
-            <Link
-              href={`/dashboard/audit?entity=Branch&q=${branch.id}`}
-              className="mt-3 inline-block text-xs text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)] transition-colors"
-            >
-              Аудит лог харах →
-            </Link>
+            {auditInPlan ? (
+              <Link
+                href={`/dashboard/audit?entity=Branch&q=${branch.id}`}
+                className="mt-3 inline-block text-xs text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)] transition-colors"
+              >
+                Аудит лог харах →
+              </Link>
+            ) : null}
           </div>
         </div>
       </div>

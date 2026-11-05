@@ -1,7 +1,15 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Prisma } from "@/app/generated/prisma/client";
-import { BtnLink, Chip } from "@/app/_components/landing-ops-ui";
+import { Chip } from "@/app/_components/landing-ops-ui";
+import {
+  BackLink,
+  Chevron,
+  DateTile,
+  FilterBar,
+  PageHero,
+  SectionTitle,
+} from "@/app/(app)/_components/consumer-ui";
 import { EmptyState } from "@/app/_components/empty-state";
 import {
   APPOINTMENT_STATUS_BADGE,
@@ -166,6 +174,7 @@ export default async function AccountHistoryPage({
         tenant: { select: { name: true } },
         branch: { select: { name: true } },
         vehicle: { select: { plate: true, make: true, model: true } },
+        review: { select: { rating: true } },
         _count: { select: { items: true } },
       },
     }),
@@ -236,49 +245,54 @@ export default async function AccountHistoryPage({
 
   const hasFilter = Boolean(query) || month !== null;
 
-  return (
-    <div className="w-full flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Үйлчилгээний түүх</h1>
-          <p className="text-[var(--oc-muted3)] text-sm mt-0.5">
-            {plate
-              ? `${plate} — хийгдсэн үйлчилгээнүүд`
-              : "Таны машинд хийгдсэн бүх үйлчилгээ"}
-          </p>
-        </div>
-        <BtnLink href="/account" variant="ghost">
-          ← Буцах
-        </BtnLink>
-      </div>
+  const spent = await prisma.serviceOrder.aggregate({
+    where: { ...where, status: "COMPLETED" },
+    _sum: { totalAmount: true },
+  });
+  const periodLabel = month ? `${year} оны ${month}-р сар` : `${year} он`;
 
-      {plate ? (
-        <div className="flex items-center gap-2">
-          <Chip tone="accent" bordered>
-            {plate}
-          </Chip>
-          <Link
-            href="/account/history"
-            className="text-xs text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)] transition-colors"
-          >
-            Бүх машины түүхийг харах
-          </Link>
-        </div>
-      ) : null}
+  return (
+    <div className="w-full flex flex-col gap-5">
+      <BackLink href="/account">Миний захиалгууд</BackLink>
+
+      <PageHero
+        eyebrow={periodLabel}
+        title="Үйлчилгээний түүх"
+        description={
+          plate ? `${plate} — хийгдсэн үйлчилгээнүүд` : "Таны машинд хийгдсэн, төлбөр нь төлөгдсөн бүх үйлчилгээ"
+        }
+        actions={
+          plate ? (
+            <>
+              <Chip tone="accent" bordered>
+                {plate}
+              </Chip>
+              <Link
+                href="/account/history"
+                className="text-xs font-medium text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)] transition-colors"
+              >
+                Бүх машины түүхийг харах →
+              </Link>
+            </>
+          ) : null
+        }
+        stats={[
+          { label: "Үйлчилгээ", value: ordersTotal },
+          { label: "Нийт зарцуулсан", value: formatTugrik(spent._sum.totalAmount?.toString() ?? "0") },
+          { label: "Цуцлагдсан", value: cancelledAppointments.length },
+        ]}
+      />
 
       {/* Хайлт + он — mobile-ийн Түүх табтай ижил (текст + он). */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <SearchBox
-          placeholder="Байгууллага, салбар, дугаараар хайх"
-          paramName="q"
-        />
+      <FilterBar>
+        <SearchBox placeholder="Байгууллага, салбар, дугаараар хайх" paramName="q" />
         <FilterSelect
           paramName="year"
           allowClear={false}
           options={availableYears.map((y) => ({ value: String(y), label: String(y) }))}
         />
         <FilterSelect paramName="month" placeholder="Бүх сар" options={MONTH_OPTIONS} />
-      </div>
+      </FilterBar>
 
       {orders.length === 0 && cancelledAppointments.length === 0 ? (
         <EmptyState>
@@ -287,99 +301,124 @@ export default async function AccountHistoryPage({
             : "Одоогоор хийгдсэн үйлчилгээ алга. Цаг захиалга баталгаажиж, үйлчилгээ хийгдсэний дараа энд харагдана."}
         </EmptyState>
       ) : orders.length > 0 ? (
-        <div className="flex flex-col gap-3">
-          {orders.map((o) => {
-            const when = o.completedAt ?? o.scheduledAt ?? o.createdAt;
-            return (
-              <Link
-                key={o.id}
-                href={`/account/history/${o.id}`}
-                className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 block hover:bg-[var(--oc-panel2)] transition-colors"
-              >
-                <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-[var(--oc-ink)]">
+        <section className="flex flex-col gap-3">
+          <SectionTitle count={ordersTotal}>Хийгдсэн үйлчилгээ</SectionTitle>
+          <div className="flex flex-col gap-2.5">
+            {orders.map((o) => {
+              const when = o.completedAt ?? o.scheduledAt ?? o.createdAt;
+              const former = formerPlate(o.plateSnapshot, o.vehicle.plate);
+              return (
+                <Link
+                  key={o.id}
+                  href={`/account/history/${o.id}`}
+                  className="group flex items-center gap-3 sm:gap-4 rounded-2xl border border-[var(--oc-line)] bg-[var(--oc-panel)] p-3.5 sm:p-4 shadow-sm transition-all hover:border-[var(--oc-accent)]/50 hover:shadow-md"
+                >
+                  <DateTile date={when} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate font-semibold text-[var(--oc-ink)] group-hover:text-[var(--oc-accent)] transition-colors">
                         {o.tenant.name}
                       </span>
-                      <span className="text-xs text-[var(--oc-muted3)] font-plex-mono">
-                        №{o.number}
-                      </span>
                       <span
-                        className={`font-plex-mono text-[11px] px-2.5 py-1 rounded-full ${ORDER_STATUS_BADGE[o.status as OrderStatus]}`}
+                        className={`font-plex-mono text-[11px] px-2 py-0.5 rounded-full ${ORDER_STATUS_BADGE[o.status as OrderStatus]}`}
                       >
                         {ORDER_STATUS_LABEL[o.status as OrderStatus]}
                       </span>
                     </div>
-                    <div className="text-sm text-[var(--oc-muted)] mt-1">
-                      {o.vehicle.plate} · {o.vehicle.make} {o.vehicle.model}
-                      {formerPlate(o.plateSnapshot, o.vehicle.plate) ? ` (хуучин: ${formerPlate(o.plateSnapshot, o.vehicle.plate)})` : ""}
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[var(--oc-muted)]">
+                      <span className="rounded-md border border-[var(--oc-line)] bg-[var(--oc-panel2)] px-1.5 py-px font-plex-mono text-xs font-semibold text-[var(--oc-ink2)]">
+                        {o.vehicle.plate}
+                      </span>
+                      <span className="truncate">
+                        {o.vehicle.make} {o.vehicle.model}
+                        {former ? ` (хуучин: ${former})` : ""}
+                      </span>
                     </div>
-                    <div className="text-xs text-[var(--oc-muted3)] mt-0.5 tabular-nums">
-                      {formatDate(when)} · {o.branch.name} · {o._count.items} мөр
+                    <div className="mt-1 text-xs text-[var(--oc-muted3)] tabular-nums">
+                      {o.branch.name} · №{o.number} · {o._count.items} мөр · {formatDate(when)}
+                    </div>
+                    {o.status === "COMPLETED" ? (
+                      o.review ? (
+                        <div className="mt-1.5 text-xs" aria-label={`Таны үнэлгээ: ${o.review.rating} од`}>
+                          <span className="text-amber-400">{"★".repeat(o.review.rating)}</span>
+                          <span className="text-[var(--oc-line)]">{"★".repeat(5 - o.review.rating)}</span>
+                          <span className="ml-1.5 text-[var(--oc-muted3)]">Таны үнэлгээ</span>
+                        </div>
+                      ) : (
+                        <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-amber-400/50 bg-amber-400/10 px-2.5 py-0.5 text-xs font-semibold text-amber-500 light:text-amber-700">
+                          ★ Үнэлгээ өгөх
+                        </span>
+                      )
+                    ) : null}
+                    <div className="mt-1.5 flex items-center gap-2 text-sm sm:hidden">
+                      <span className="font-semibold tabular-nums text-[var(--oc-ink)]">
+                        {formatTugrik(o.totalAmount?.toString() ?? null)}
+                      </span>
+                      <span
+                        className={`text-xs ${
+                          o.paymentStatus === "PAID" ? "text-emerald-400 light:text-emerald-600" : "text-[var(--oc-muted3)]"
+                        }`}
+                      >
+                        · {PAYMENT_STATUS_LABEL[o.paymentStatus as PaymentStatus]}
+                      </span>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="font-semibold text-[var(--oc-ink)] tabular-nums">
+                  <div className="hidden shrink-0 text-right sm:block">
+                    <div className="font-semibold tabular-nums text-[var(--oc-ink)]">
                       {formatTugrik(o.totalAmount?.toString() ?? null)}
                     </div>
-                    <div className="text-xs text-[var(--oc-muted3)] mt-0.5">
+                    <div
+                      className={`mt-0.5 text-xs ${
+                        o.paymentStatus === "PAID" ? "text-emerald-400 light:text-emerald-600" : "text-[var(--oc-muted3)]"
+                      }`}
+                    >
                       {PAYMENT_STATUS_LABEL[o.paymentStatus as PaymentStatus]}
                     </div>
                   </div>
-                </div>
-              </Link>
-            );
-          })}
+                  <Chevron />
+                </Link>
+              );
+            })}
+          </div>
           <Pagination
             page={ordersMeta.page}
             totalPages={ordersMeta.totalPages}
             total={ordersMeta.total}
             params={{ plate, q: query, year, month }}
           />
-        </div>
+        </section>
       ) : null}
 
       {cancelledAppointments.length > 0 ? (
-        <div className="flex flex-col gap-3">
-          <h2 className="font-semibold text-[var(--oc-ink2)] text-sm">
-            Цуцлагдсан / ирээгүй цагууд
-            <span className="text-[var(--oc-muted3)] font-normal">
-              {" "}
-              · {cancelledAppointments.length}
-            </span>
-          </h2>
-          {cancelledAppointments.map((a) => (
-            <Link
-              key={a.id}
-              href={`/account/appointments/${a.id}`}
-              className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 block hover:bg-[var(--oc-panel2)] transition-colors"
-            >
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-[var(--oc-ink)]">
-                      {a.tenant.name}
-                    </span>
+        <section className="flex flex-col gap-3">
+          <SectionTitle count={cancelledAppointments.length}>Цуцлагдсан / ирээгүй цагууд</SectionTitle>
+          <div className="overflow-hidden rounded-2xl border border-[var(--oc-line)] bg-[var(--oc-panel)] divide-y divide-[var(--oc-line2)]">
+            {cancelledAppointments.map((a) => (
+              <Link
+                key={a.id}
+                href={`/account/appointments/${a.id}`}
+                className="group flex items-center gap-4 p-3.5 sm:px-4 transition-colors hover:bg-[var(--oc-panel2)]"
+              >
+                <DateTile date={a.requestedAt} muted />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="truncate font-medium text-[var(--oc-ink2)]">{a.tenant.name}</span>
                     <span
-                      className={`font-plex-mono text-[11px] px-2.5 py-1 rounded-full ${APPOINTMENT_STATUS_BADGE[a.status]}`}
+                      className={`font-plex-mono text-[11px] px-2 py-0.5 rounded-full ${APPOINTMENT_STATUS_BADGE[a.status]}`}
                     >
                       {APPOINTMENT_STATUS_LABEL[a.status]}
                     </span>
                   </div>
-                  {a.category ? (
-                    <div className="text-sm text-[var(--oc-muted)] mt-1">
-                      {a.category.name}
-                    </div>
-                  ) : null}
-                  <div className="text-xs text-[var(--oc-muted3)] mt-0.5 tabular-nums">
-                    {formatDate(a.requestedAt)} · {a.branch.name}
+                  <div className="mt-0.5 text-xs text-[var(--oc-muted3)] tabular-nums">
+                    {a.category ? `${a.category.name} · ` : ""}
+                    {a.branch.name} · {formatDate(a.requestedAt)}
                   </div>
                 </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+                <Chevron />
+              </Link>
+            ))}
+          </div>
+        </section>
       ) : null}
     </div>
   );

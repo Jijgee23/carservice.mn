@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth";
+import { moduleGateForPlan } from "@/lib/plan-modules-server";
 import { workingBranchScopeId } from "@/lib/auth/roles";
 import { loadReportData, parseRange } from "@/lib/reports";
 import { buildReportWorkbook, reportExportFilename } from "@/lib/reports-export";
@@ -10,6 +11,8 @@ import { buildReportWorkbook, reportExportFilename } from "@/lib/reports-export"
 // дуудагч (thin caller) болсон.
 export async function GET(req: Request) {
   const user = await requireUser();
+  const blocked = await moduleGateForPlan(user.tenant.plan, ["enable_reports"]);
+  if (blocked) return blocked;
   const { searchParams } = new URL(req.url);
   const range = parseRange({
     from: searchParams.get("from") ?? undefined,

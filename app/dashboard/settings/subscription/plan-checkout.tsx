@@ -26,12 +26,8 @@ export type PlanPriceOption = {
   amount: string;
   currency: string;
   notes: string | null;
-  features: {
-    label: string;
-    value: string;
-    description: string | null;
-    highlighted: boolean;
-  }[];
+  // Багцын модулиудаас (planFeatureLines) — тоон хязгааргүй.
+  features: string[];
 };
 
 export type PendingPayment = {
@@ -70,14 +66,6 @@ function PlanList({ prices }: { prices: PlanPriceOption[] }) {
     }
   }, [state, toast]);
 
-  if (prices.length === 0) {
-    return (
-      <p className="text-sm text-[var(--oc-muted3)]">
-        Үнийн жагсаалт хоосон байна. carservice.mn-тэй холбоо барина уу.
-      </p>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -105,15 +93,8 @@ function PlanList({ prices }: { prices: PlanPriceOption[] }) {
             ) : null}
             {p.features.length > 0 ? (
               <ul className="flex flex-col gap-1.5 text-xs">
-                {p.features.map((f, i) => (
-                  <li
-                    key={`${f.label}-${i}`}
-                    className={`flex items-start gap-2 ${
-                      f.highlighted
-                        ? "text-[var(--oc-accent)]"
-                        : "text-[var(--oc-muted2)]"
-                    }`}
-                  >
+                {p.features.map((f) => (
+                  <li key={f} className="flex items-start gap-2 text-[var(--oc-muted2)]">
                     <svg
                       width="12"
                       height="12"
@@ -127,10 +108,7 @@ function PlanList({ prices }: { prices: PlanPriceOption[] }) {
                     >
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
-                    <span>
-                      <span className="text-[var(--oc-ink2)]">{f.label}</span>
-                      <span className="text-[var(--oc-muted3)]">: {f.value}</span>
-                    </span>
+                    <span className="text-[var(--oc-ink2)]">{f}</span>
                   </li>
                 ))}
               </ul>
@@ -140,7 +118,34 @@ function PlanList({ prices }: { prices: PlanPriceOption[] }) {
             </Btn>
           </form>
         ))}
+        <EnterpriseCard />
       </div>
+    </div>
+  );
+}
+
+/** ENTERPRISE тогтсон үнэгүй — модулиудаа сонгоод үнийн санал авна (super admin хариу өгч олгоно). */
+function EnterpriseCard() {
+  return (
+    <div className="rounded-[10px] border border-dashed border-[var(--oc-line)] bg-[var(--oc-panel2)] p-4 flex flex-col gap-3">
+      <div>
+        <div className="font-plex-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--oc-muted3)]">
+          Захиалгат үнэ
+        </div>
+        <div className="mt-1 text-lg font-semibold text-[var(--oc-ink)]">
+          {PLAN_LABEL.ENTERPRISE}
+        </div>
+      </div>
+      <p className="text-xs text-[var(--oc-muted2)]">
+        Сүлжээ, олон салбартай байгууллагад. Хэрэгтэй модулиудаа сонгоод үнийн
+        санал аваарай — удахгүй тантай холбогдоно.
+      </p>
+      <a
+        href="/dashboard/settings/subscription/quote"
+        className="mt-auto inline-flex w-full items-center justify-center rounded-lg border border-[var(--oc-line)] py-2 text-sm font-semibold text-[var(--oc-ink2)] hover:bg-[var(--oc-panel)]"
+      >
+        Үнийн санал авах
+      </a>
     </div>
   );
 }

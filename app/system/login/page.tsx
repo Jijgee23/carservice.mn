@@ -1,16 +1,16 @@
 import Link from "next/link";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { redirect } from "next/navigation";
 import { hasActiveSystemSession } from "@/lib/auth/system";
 import { Brand } from "@/app/_components/brand";
 import { SystemLoginForm } from "./login-form";
 
-const plexSans = IBM_Plex_Sans({
+const plexSans = Geist({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-plex-sans",
 });
-const plexMono = IBM_Plex_Mono({
+const plexMono = Geist_Mono({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600"],
   variable: "--font-plex-mono",
@@ -30,7 +30,7 @@ export default async function SystemLoginPage() {
     <div
       className={`${plexSans.variable} ${plexMono.variable} landing-ops relative min-h-screen flex flex-col bg-[var(--oc-carbon)] bg-oc-grid overflow-hidden`}
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_520px_at_50%_0%,rgba(34,211,238,0.12),transparent_70%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_520px_at_50%_0%,rgba(231,76,60,0.06),transparent_70%)]" />
 
       <header className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-[var(--oc-line2)]">
         <Link href="/" className="flex items-center gap-2.5">

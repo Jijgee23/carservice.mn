@@ -26,6 +26,7 @@ export async function GET(
       acceptsOnlineBooking: true,
       suspended: false,
       isTest: false,
+      creditHidden: false,
       plan: { in: allowedPlans },
     },
     select: {
@@ -36,6 +37,8 @@ export async function GET(
       branches: {
         orderBy: { isPrimary: "desc" },
         select: {
+          ratingAvg: true,
+          ratingCount: true,
           id: true,
           name: true,
           city: true,
@@ -73,6 +76,8 @@ export async function GET(
     );
     return {
       ...b,
+      // Үнэлгээний дундаж — number (Decimal string биш); үнэлгээ: GET /api/v1/app/branches/[id]/reviews
+      ratingAvg: b.ratingAvg == null ? null : Number(b.ratingAvg.toString()),
       categories: offered.map((c) => ({
         id: c.id,
         name: c.name,

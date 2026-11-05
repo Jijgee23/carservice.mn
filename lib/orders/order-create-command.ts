@@ -4,10 +4,8 @@ import { DEFAULT_SLOT_MINUTES } from "@/lib/appointment-slots";
 import { validateScheduledOrderHours } from "@/lib/order-schedule-validation";
 import { openOrderTimeBooking } from "@/lib/order-time-booking";
 import { nextOrderNumber } from "@/lib/order-number";
-import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
-import { enforceCountLimit } from "@/lib/plan-limits-server";
 import { INTAKE_PATH_CLAIMED_MESSAGE, type IntakeInput } from "@/lib/orders/order-intake-server";
-import { prisma, withBookingTransaction, type PrismaTransactionClient } from "@/lib/prisma";
+import { withBookingTransaction, type PrismaTransactionClient } from "@/lib/prisma";
 import { ensureTenantVehicle } from "@/lib/vehicles";
 import { validateOrderAssignee, OrderCommandError } from "@/lib/orders/order-commands";
 import {
@@ -50,36 +48,6 @@ function branchSlotMinutes(value: number | null | undefined): number {
   return value && value > 0 ? value : DEFAULT_SLOT_MINUTES;
 }
 
-function todayStart(): Date {
-  const value = new Date();
-  value.setHours(0, 0, 0, 0);
-  return value;
-}
-
-async function enforceCreateLimits(tenantId: string): Promise<void> {
-  const daily = await enforceCountLimit(
-    tenantId,
-    PLAN_LIMIT_CODES.DAILY_ORDERS,
-    () => prisma.serviceOrder.count({
-      where: { tenantId, createdAt: { gte: todayStart() } },
-    }),
-  );
-  if (!daily.allowed) {
-    throw new OrderCommandError(daily.message ?? "Өдрийн захиалгын хязгаарт хүрсэн байна.", 422, "PLAN_LIMIT_REACHED");
-  }
-
-  const active = await enforceCountLimit(
-    tenantId,
-    PLAN_LIMIT_CODES.MAX_ACTIVE_ORDERS,
-    () => prisma.serviceOrder.count({
-      where: { tenantId, status: { in: ["SCHEDULED", "IN_PROGRESS"] } },
-    }),
-  );
-  if (!active.allowed) {
-    throw new OrderCommandError(active.message ?? "Идэвхтэй захиалгын хязгаарт хүрсэн байна.", 422, "PLAN_LIMIT_REACHED");
-  }
-}
-
 export async function createOrderCommand(
   input: CreateOrderCommandInput,
 ): Promise<CreateOrderCommandResult> {
@@ -110,8 +78,6 @@ export async function createOrderCommand(
       isPostpaid: conflict.message,
     });
   }
-
-  await enforceCreateLimits(input.tenantId);
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {

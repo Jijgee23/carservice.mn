@@ -62,7 +62,7 @@ function ConfirmationDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={messageId}
-        className="fixed left-1/2 top-1/2 z-[210] w-[min(92vw,26rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-[var(--surface)] p-5 shadow-2xl backdrop-blur-xl"
+        className="fixed left-1/2 top-1/2 z-[210] w-[min(92vw,26rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--oc-line)] bg-[var(--oc-panel)] p-5 shadow-2xl backdrop-blur-xl"
       >
         <div className="flex items-start gap-3">
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--oc-warn)]/15 text-[var(--oc-warn)]">
@@ -95,14 +95,14 @@ function ConfirmationDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg border border-white/10 bg-white/[0.04] px-3.5 py-2 text-sm text-[var(--oc-muted)] transition-colors hover:bg-white/[0.08] hover:text-[var(--oc-ink)]"
+            className="rounded-lg border border-[var(--oc-line)] bg-[var(--oc-panel2)] px-3.5 py-2 text-sm text-[var(--oc-muted)] transition-colors hover:bg-[var(--oc-line2)] hover:text-[var(--oc-ink)]"
           >
             Болих
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="rounded-lg bg-[var(--oc-accent)] px-3.5 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
+            className="rounded-lg bg-[var(--oc-accent)] px-3.5 py-2 text-sm font-medium text-[var(--oc-on-accent)] transition-colors hover:opacity-90"
           >
             {confirmLabel}
           </button>

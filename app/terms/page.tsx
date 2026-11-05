@@ -1,16 +1,16 @@
 import Link from "next/link";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { Brand } from "@/app/_components/brand";
 import { Footer } from "@/app/_components/footer";
 import { CONTACT } from "@/lib/contact";
 import { getContactPhones } from "@/lib/platform-settings";
 
-const plexSans = IBM_Plex_Sans({
+const plexSans = Geist({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-plex-sans",
 });
-const plexMono = IBM_Plex_Mono({
+const plexMono = Geist_Mono({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600"],
   variable: "--font-plex-mono",
@@ -185,16 +185,21 @@ export default async function TermsPage() {
           <Sub>Байгууллагын багц</Sub>
           <ul className="list-disc pl-5 space-y-1">
             <li>
-              Байгууллагын багцыг вэб сайтаас худалдан авна. Үнэ, боломжийг
-              вэб сайтад зарласнаар мөрдөнө.
+              Үндсэн (FREE) багц үнэгүй бөгөөд хугацаагүй. Түүний боломж,
+              хязгаарыг вэб сайтад зарласнаар мөрдөнө.
             </li>
             <li>
-              Шинэ байгууллагад туршилтын хугацаа олгож болно. Дууссаны дараа
-              үргэлжлүүлэн ашиглахын тулд багцын төлбөрийг урьдчилан төлнө.
+              Бизнес багцыг вэб сайтаас урьдчилан төлж худалдан авна. Үнэ,
+              боломжийг вэб сайтад зарласнаар мөрдөнө.
             </li>
             <li>
-              Эхэлсэн хугацааны багцын төлбөрийг буцаан олгохгүй. Хугацаа
-              дуусахад төлбөр төлөгдөөгүй бол хандалт хязгаарлагдана.
+              Энтерпрайз багцын үнэ, нөхцөлийг байгууллага тус бүртэй
+              тохиролцож тогтооно.
+            </li>
+            <li>
+              Эхэлсэн хугацааны багцын төлбөрийг буцаан олгохгүй. Төлбөртэй
+              багцын хугацаа дуусахад сунгаагүй бол үндсэн (FREE) багц руу
+              шилжиж, тухайн багцад багтсан модулиуд үйлчилнэ.
             </li>
           </ul>
         </Section>

@@ -1,21 +1,17 @@
 import { PageHeader } from "@/app/_components/page-header";
 import { requireSuperAdmin } from "@/lib/auth/system";
 import { prisma } from "@/lib/prisma";
-import { PlanFeaturesManager } from "./plan-features-manager";
 import { PlanLimitsManager } from "./plan-limits-manager";
 import { PlanPriceMatrix } from "./plan-price-matrix";
 
 export const metadata = {
-  title: "Багц / Үнэ / Боломж / Хязгаар",
+  title: "Багц / Үнэ / Модуль",
 };
 
 export default async function SystemPlanPricesPage() {
   await requireSuperAdmin();
 
-  const [features, limits, prices] = await Promise.all([
-    prisma.planFeature.findMany({
-      orderBy: [{ plan: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
-    }),
+  const [limits, prices] = await Promise.all([
     prisma.planLimit.findMany({
       orderBy: [{ plan: "asc" }, { sortOrder: "asc" }],
     }),
@@ -27,8 +23,8 @@ export default async function SystemPlanPricesPage() {
   return (
     <div className="p-6 sm:p-8 max-w-screen flex flex-col gap-6">
       <PageHeader
-        title="Багц / Үнэ / Боломж / Хязгаар"
-        description="SuperAdmin: үнэ + хязгаар + дэлгэцийн боломжийн жагсаалт."
+        title="Багц / Үнэ / Модуль"
+        description="SuperAdmin: BUSINESS багцын үнэ болон багц тус бүрийн модулиуд. Тоон хязгаар байхгүй — нүүр хуудасны «юу багтсан» жагсаалт модулиудаас автоматаар гарна."
       />
 
       <PlanPriceMatrix
@@ -53,23 +49,6 @@ export default async function SystemPlanPricesPage() {
           highlighted: l.highlighted,
         }))}
       />
-
-      <div>
-        <h2 className="font-semibold text-sm mb-3">
-          Дэлгэцэнд харагдах боломжийн жагсаалт
-        </h2>
-        <PlanFeaturesManager
-          features={features.map((f) => ({
-            id: f.id,
-            plan: f.plan,
-            label: f.label,
-            value: f.value,
-            description: f.description,
-            sortOrder: f.sortOrder,
-            highlighted: f.highlighted,
-          }))}
-        />
-      </div>
     </div>
   );
 }

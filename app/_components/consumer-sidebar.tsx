@@ -133,7 +133,7 @@ function isLeafActive(pathname: string, item: NavLeaf): boolean {
 }
 
 const activePillClasses =
-  "bg-[var(--oc-accent)] text-[var(--oc-on-accent)] shadow-[0_10px_28px_-12px_rgba(34,211,238,0.55)]";
+  "bg-[var(--oc-side-active)] text-[var(--oc-side-active-ink)] font-semibold";
 const inactivePillClasses =
   "text-[var(--oc-muted)] hover:bg-white/[0.04] hover:text-[var(--oc-ink)]";
 
@@ -358,7 +358,7 @@ export function ConsumerSidebar({
   const { collapsed, toggle } = useSidebarCollapse();
 
   return (
-    <aside className="app-sidebar fixed top-0 left-0 h-screen bg-[var(--oc-panel)] border-r border-[var(--oc-line2)] flex-col z-40 hidden lg:flex">
+    <aside className="oc-side app-sidebar fixed top-0 left-0 h-screen bg-[var(--oc-panel)] border-r border-[var(--oc-line2)] flex-col z-40 hidden lg:flex">
       <div className="relative h-16 border-b border-[var(--oc-line2)] flex items-center shrink-0">
         <Link
           href="/discover"
@@ -510,7 +510,7 @@ export function ConsumerMobileTopbar({
           role="dialog"
           aria-modal="true"
           aria-label="Үндсэн цэс"
-          className={`absolute top-0 left-0 h-full w-72 max-w-[85vw] bg-[var(--oc-panel)] border-r border-[var(--oc-line2)] flex flex-col shadow-2xl transition-transform duration-300 ease-out ${
+          className={`oc-side absolute top-0 left-0 h-full w-72 max-w-[85vw] bg-[var(--oc-panel)] border-r border-[var(--oc-line2)] flex flex-col shadow-2xl transition-transform duration-300 ease-out ${
             open ? "translate-x-0" : "-translate-x-full"
           }`}
         >

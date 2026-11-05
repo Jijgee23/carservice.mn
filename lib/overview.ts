@@ -3,12 +3,10 @@
 // loader. Query shape, branch scoping and tenant-wide counts are unchanged
 // from the original inline `Promise.all` — only moved.
 
-import { Prisma, type Plan } from "@/app/generated/prisma/client";
+import { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { orderReadWhere, type OrderAccessUser } from "@/lib/auth/order-access";
 import { workingBranchScopeId } from "@/lib/auth/roles";
-import { getLimitsMap } from "@/lib/plan-limits-server";
-import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
 import {
   RECEIVABLE_ORDER_SELECT,
   RECEIVABLE_ORDER_WHERE,
@@ -37,12 +35,6 @@ export { dailyTrend, type Trend };
 export type OverviewUser = {
   tenantId: string;
   workingBranchId?: string | null;
-  /**
-   * Plan code for `getLimitsMap`. The web page already has `user.tenant.plan`
-   * loaded from `requireUser()` and passes it through — no extra query.
-   * Omit it (e.g. from an API-token actor) and the loader fetches it itself.
-   */
-  tenantPlan?: string;
   /**
    * Order read-access identity (id/isOwner/role). When given, the receivable is
    * limited by `orderReadWhere` so the card equals what the user can see in the
@@ -87,16 +79,6 @@ export async function loadOverviewData(
   });
   const orderBranchFilter = scopeBranchId ? { branchId: scopeBranchId } : {};
 
-  const tenantPlan =
-    user.tenantPlan ??
-    (
-      await prisma.tenant.findUnique({
-        where: { id: user.tenantId },
-        select: { plan: true },
-      })
-    )?.plan ??
-    "FREE";
-
   const [
     branchCount,
     employeeCount,
@@ -117,7 +99,6 @@ export async function loadOverviewData(
     postpaidVehicleCount,
     receivableOrders,
     todayOrderCount,
-    planLimits,
   ] = await Promise.all([
     prisma.branch.count({ where: { tenantId: user.tenantId } }),
     prisma.user.count({ where: { tenantId: user.tenantId, deletedAt: null } }),
@@ -231,12 +212,6 @@ export async function loadOverviewData(
     prisma.serviceOrder.count({
       where: { tenantId: user.tenantId, createdAt: { gte: todayStart } },
     }),
-    getLimitsMap(tenantPlan as Plan, [
-      PLAN_LIMIT_CODES.DAILY_ORDERS,
-      PLAN_LIMIT_CODES.MAX_VEHICLES,
-      PLAN_LIMIT_CODES.MAX_USERS,
-      PLAN_LIMIT_CODES.MAX_BRANCHES,
-    ]),
   ]);
   const activeSub = resolveActiveSubscription(subscriptions);
 
@@ -268,7 +243,6 @@ export async function loadOverviewData(
     postpaidVehicleCount,
     receivable,
     todayOrderCount,
-    planLimits,
     income,
     internalCost,
     orderTrend,

@@ -20,7 +20,8 @@ export async function GET(req: Request) {
 
   return jsonOk({
     plan: tenant?.plan ?? state.active?.subscription.plan ?? "FREE",
-    status: state.active?.subscription.status ?? "EXPIRED",
+    // Төлбөртэй subscription-гүй = үнэгүй FREE багц, хугацаагүй идэвхтэй.
+    status: state.active?.subscription.status ?? "ACTIVE",
     locked: state.locked,
     isTrial: state.active?.isTrial ?? false,
     daysLeft: Number.isFinite(state.active?.daysLeft ?? NaN)

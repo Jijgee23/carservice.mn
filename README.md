@@ -155,6 +155,7 @@ npm run system:create-admin
 - `POST /api/cron/expire-appointments` — хугацаа хэтэрсэн, хариу өгөөгүй (PENDING) цаг захиалгыг CANCELLED болгох.
 - `POST /api/cron/subscription-reminders` — багц дуусах гэж буй тенант эздэд сануулга.
 - `POST /api/cron/notifications-prune` — 90 хоногоос хуучин, уншсан мэдэгдлийг устгах.
+- `POST /api/cron/credit-scores` — засварын газрын credit score тооцож, босгоос доош бол автоматаар блоклох/сэргээх.
 
 Бүгд `Authorization: Bearer $CRON_SECRET`-ээр хамгаалагдсан.
 

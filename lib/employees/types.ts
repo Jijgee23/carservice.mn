@@ -93,7 +93,6 @@ export type EmployeeErrorCode =
   | "SELF_DEACTIVATE"
   | "SELF_ACTION"
   | "LAST_OWNER"
-  | "PLAN_LIMIT_REACHED"
   | "DUPLICATE"
   | "FK_CONFLICT"
   | "OPEN_ORDERS"

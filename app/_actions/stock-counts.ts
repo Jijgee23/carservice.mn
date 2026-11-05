@@ -1,5 +1,6 @@
 "use server";
 
+import { assertModuleEnabled } from "@/lib/plan-modules-server";
 import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { knownAuthorizationMessage } from "@/lib/action-errors";
@@ -38,6 +39,7 @@ export async function startStockCountAction(_prev: StockCountActionState, fd: Fo
   try {
     const user = await requireUser();
     await assertActiveSubscription(user.tenantId);
+    await assertModuleEnabled(user.tenantId, "enable_inventory");
     const str = (k: string) => (typeof fd.get(k) === "string" ? (fd.get(k) as string) : "");
     id = (await startStockCount({ actor: user, categoryId: str("categoryId") || null, note: str("note") || null })).id;
   } catch (error) {
@@ -58,6 +60,7 @@ export async function saveStockCountLinesAction(
   try {
     const user = await requireUser();
     await assertActiveSubscription(user.tenantId);
+    await assertModuleEnabled(user.tenantId, "enable_inventory");
     const { saved } = await saveStockCountLines({ actor: user, countId, entries });
     revalidatePath(`${BASE}/${countId}`);
     return { ok: true, message: `${saved} мөр хадгалагдлаа.` };
@@ -75,6 +78,7 @@ export async function completeStockCountAction(
   try {
     const user = await requireUser();
     await assertActiveSubscription(user.tenantId);
+    await assertModuleEnabled(user.tenantId, "enable_inventory");
     if (pending.length > 0) await saveStockCountLines({ actor: user, countId, entries: pending });
     const done = await completeStockCount({ actor: user, countId });
     refresh(countId);
@@ -89,6 +93,7 @@ export async function cancelStockCountAction(countId: string): Promise<ConfirmAc
   try {
     const user = await requireUser();
     await assertActiveSubscription(user.tenantId);
+    await assertModuleEnabled(user.tenantId, "enable_inventory");
     await cancelStockCount({ actor: user, countId });
   } catch (error) {
     unstable_rethrow(error);

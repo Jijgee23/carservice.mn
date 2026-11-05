@@ -18,9 +18,10 @@ export async function suspendTenantAction(formData: FormData): Promise<void> {
   await requireSuperAdmin();
   const id = s(formData, "id");
   if (!id) return;
+  // Гараар зогсоосон — credit-ийн автомат нээлт хамаарахгүй (creditSuspended=false).
   await prisma.tenant.update({
     where: { id },
-    data: { suspended: true },
+    data: { suspended: true, creditSuspended: false },
   });
   revalidatePath("/system/tenants");
   revalidatePath(`/system/tenants/${id}`);
@@ -31,9 +32,16 @@ export async function activateTenantAction(formData: FormData): Promise<void> {
   await requireSuperAdmin();
   const id = s(formData, "id");
   if (!id) return;
+  // Credit-ээр зогсоосон байгууллагыг гараар сэргээвэл админы шийдвэр давуу:
+  // автомат блокоос чөлөөлнө (creditExempt), эс бөгөөс маргаашийн cron дахин зогсооно.
+  const current = await prisma.tenant.findUnique({ where: { id }, select: { creditSuspended: true } });
   await prisma.tenant.update({
     where: { id },
-    data: { suspended: false },
+    data: {
+      suspended: false,
+      creditSuspended: false,
+      ...(current?.creditSuspended ? { creditExempt: true } : {}),
+    },
   });
   revalidatePath("/system/tenants");
   revalidatePath(`/system/tenants/${id}`);

@@ -3,6 +3,7 @@ import { PublicUpstreamError } from "@/lib/action-errors";
 import { type ApiUser, getApiUserFromRequest } from "@/lib/auth/api-token";
 import type { PermissionCode } from "@/lib/auth/permissions";
 import { hasPermission } from "@/lib/auth/roles";
+import { moduleGateForApiPath } from "@/lib/plan-modules-server";
 import { clientIp, consumeRateLimit } from "@/lib/rate-limit";
 
 /** HUR/ebarimt алдааг 502 болгоно — зөвхөн PublicUpstreamError-ийн мессежийг ил гаргана. */
@@ -62,6 +63,10 @@ export async function requireApiUser(
       response: jsonError(401, "Нэвтрэх шаардлагатай эсвэл token хүчингүй."),
     };
   }
+  // Багцын модулийн хаалт — замаар нь нэг дор (lib/plan-modules.ts
+  // API_MODULE_PATHS). Хаалттай модулийн endpoint 403 MODULE_DISABLED.
+  const blocked = await moduleGateForApiPath(new URL(req.url).pathname, user.tenantPlan);
+  if (blocked) return { response: blocked };
   return { user };
 }
 

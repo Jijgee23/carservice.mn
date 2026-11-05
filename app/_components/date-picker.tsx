@@ -278,7 +278,7 @@ export function DatePicker(props: DatePickerProps) {
           props.error
             ? "border-red-500/50"
             : open
-              ? "dp-accent-border border-violet-500/60 shadow-[0_0_0_2px_rgba(108,71,255,0.15)]"
+              ? "dp-accent-border border-violet-500/60 shadow-[0_0_0_2px_rgba(231,76,60,0.15)]"
               : "border-white/10 hover:border-white/20"
         }`}
       >

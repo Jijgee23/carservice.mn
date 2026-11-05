@@ -9,6 +9,7 @@ import { buildMeta, getPageInfo } from "@/lib/pagination";
 import { customerDisplay, customerLabel, orgRegnumLabel } from "@/lib/customers";
 import { buildCustomerListWhere, parseCustomerKind } from "@/lib/customers/customer-list-query";
 import { requireUser } from "@/lib/auth";
+import { getEnabledModules } from "@/lib/plan-modules-server";
 import { canCreate, canDelete, canView, hasPermission } from "@/lib/auth/roles";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -29,7 +30,10 @@ export default async function CustomersPage({
   if (!canView(user, "customers")) redirect("/dashboard");
   const canAdd = canCreate(user, "customers");
   const canRemove = canDelete(user, "customers");
-  const canNotify = hasPermission(user, "customers.notify");
+  // Багцад «Үйлчлүүлэгчид зар» модуль ороогүй бол товч огт харагдахгүй.
+  const canNotify =
+    hasPermission(user, "customers.notify") &&
+    (await getEnabledModules(user.tenant.plan)).has("enable_customer_broadcast");
 
   const { q = "", kind: kindParam, page: pageParam, sort: sortParam, dir: dirParam } =
     await searchParams;

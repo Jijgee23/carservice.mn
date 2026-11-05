@@ -19,7 +19,14 @@ type Initial = {
 
 const FIELD_MW = "w-full";
 
-export function TenantForm({ initial }: { initial: Initial }) {
+export function TenantForm({
+  initial,
+  onlineBookingInPlan = true,
+}: {
+  initial: Initial;
+  // «Онлайн цаг захиалга» модуль багцад ороогүй бол toggle огт харагдахгүй.
+  onlineBookingInPlan?: boolean;
+}) {
   const [state, formAction, pending] = useActionState<
     TenantActionState,
     FormData
@@ -111,17 +118,19 @@ export function TenantForm({ initial }: { initial: Initial }) {
         {/* Утас талбаруудын label-тэй мөр зэрэгцэхийн тулд толгойд адил
             өндөртэй хоосон spacer нэмнэ (Утас 2 доор hint байгаа эсэхээс үл
             хамааран toggle/товч INPUT-той нэг эгнээнд зогсоно). */}
-        <div className="flex flex-col gap-1.5">
-          <span aria-hidden="true" className="text-sm font-medium select-none">
-            &nbsp;
-          </span>
-          <ToggleChip
-            name="acceptsOnlineBooking"
-            label="Онлайн цаг захиалга"
-            defaultChecked={initial.acceptsOnlineBooking}
-            className="rounded-lg "
-          />
-        </div>
+        {onlineBookingInPlan ? (
+          <div className="flex flex-col gap-1.5">
+            <span aria-hidden="true" className="text-sm font-medium select-none">
+              &nbsp;
+            </span>
+            <ToggleChip
+              name="acceptsOnlineBooking"
+              label="Онлайн цаг захиалга"
+              defaultChecked={initial.acceptsOnlineBooking}
+              className="rounded-lg "
+            />
+          </div>
+        ) : null}
 
         <div className="flex flex-col gap-1.5">
           <span aria-hidden="true" className="text-sm font-medium select-none">
@@ -133,10 +142,12 @@ export function TenantForm({ initial }: { initial: Initial }) {
         </div>
       </div>
 
-      <p className="text-xs text-[var(--oc-muted3)] max-w-lg">
-        Онлайн цаг захиалга идэвхжүүлбэл байгууллага хэрэглэгчийн вэб дэх каталог
-        (/discover)-т харагдаж, үйлчлүүлэгчид онлайнаар цаг захиална.
-      </p>
+      {onlineBookingInPlan ? (
+        <p className="text-xs text-[var(--oc-muted3)] max-w-lg">
+          Онлайн цаг захиалга идэвхжүүлбэл байгууллага хэрэглэгчийн вэб дэх каталог
+          (/discover)-т харагдаж, үйлчлүүлэгчид онлайнаар цаг захиална.
+        </p>
+      ) : null}
     </form>
   );
 }

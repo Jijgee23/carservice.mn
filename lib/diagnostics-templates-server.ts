@@ -47,7 +47,7 @@ import {
   validateSchema,
 } from "@/lib/diagnostics";
 import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
-import { enforceCountLimit, isFeatureEnabled } from "@/lib/plan-limits-server";
+import { isFeatureEnabled } from "@/lib/plan-limits-server";
 import { prisma } from "@/lib/prisma";
 
 export type DiagnosticTemplateCommandActor = {
@@ -239,19 +239,6 @@ export async function createTemplateCommand(input: {
       "FEATURE_DISABLED",
     );
   }
-  const limit = await enforceCountLimit(
-    actor.tenantId,
-    PLAN_LIMIT_CODES.MAX_DIAGNOSTIC_TEMPLATES,
-    () => prisma.diagnosticTemplate.count({ where: { tenantId: actor.tenantId } }),
-  );
-  if (!limit.allowed) {
-    throw new DiagnosticTemplateCommandError(
-      limit.message ?? "Хязгаарт хүрсэн байна.",
-      403,
-      "PLAN_LIMIT_REACHED",
-    );
-  }
-
   const created = await prisma.diagnosticTemplate.create({
     data: {
       name: data.name,
@@ -462,19 +449,6 @@ export async function duplicateTemplateCommand(input: {
       "FEATURE_DISABLED",
     );
   }
-  const limit = await enforceCountLimit(
-    actor.tenantId,
-    PLAN_LIMIT_CODES.MAX_DIAGNOSTIC_TEMPLATES,
-    () => prisma.diagnosticTemplate.count({ where: { tenantId: actor.tenantId } }),
-  );
-  if (!limit.allowed) {
-    throw new DiagnosticTemplateCommandError(
-      limit.message ?? "Хязгаарт хүрсэн байна.",
-      403,
-      "PLAN_LIMIT_REACHED",
-    );
-  }
-
   // Өөрийн загвар эсвэл систем admin-аас олгосон хуваалцсан загвар (tenantId
   // NULL) аль алиныг нь хуулж болно.
   const src = await prisma.diagnosticTemplate.findFirst({

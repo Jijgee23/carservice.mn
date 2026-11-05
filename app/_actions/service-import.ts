@@ -5,8 +5,6 @@ import { requireUser } from "@/lib/auth";
 import { canCreate } from "@/lib/auth/roles";
 import { MAX_IMPORT_BYTES, type ParsedSheet } from "@/lib/import/mapping";
 import { ImportParseError, parseImportWorkbook } from "@/lib/import/xlsx-server";
-import { PLAN_LIMIT_CODES, PLAN_LIMIT_META } from "@/lib/plan-limits";
-import { enforceCountLimit } from "@/lib/plan-limits-server";
 import { prisma } from "@/lib/prisma";
 import {
   parseServiceImportPayload,
@@ -92,27 +90,17 @@ export async function importServicesAction(type: unknown, payload: unknown): Pro
   if (!kind || !rows) return { ok: false, message: "Оруулах мөр алга эсвэл хүсэлт буруу." };
 
   const codes = [...new Set(rows.map((r) => r.code.trim().toUpperCase()).filter(Boolean))];
-  const [refs, existing, limit] = await Promise.all([
+  const [refs, existing] = await Promise.all([
     loadServiceRefs(user.tenantId, kind),
     codes.length
       ? prisma.service.findMany({ where: { tenantId: user.tenantId, type: kind, code: { in: codes } }, select: { code: true } })
       : Promise.resolve([] as { code: string | null }[]),
-    enforceCountLimit(user.tenantId, PLAN_LIMIT_CODES.MAX_SERVICES, () =>
-      prisma.service.count({ where: { tenantId: user.tenantId } }),
-    ),
   ]);
-  const remaining = limit.limit === null ? null : Math.max(0, limit.limit - limit.current);
-  const limitMessage =
-    limit.message ??
-    `${PLAN_LIMIT_META[PLAN_LIMIT_CODES.MAX_SERVICES].label}: багцын хязгаар (${limit.limit}) хүрсэн. Багцаа сайжруулна уу.`;
-
   const result = await runServiceImport({
     type: kind,
     rows,
     refs,
     existingCodes: new Set(existing.map((e) => (e.code ?? "").toUpperCase()).filter(Boolean)),
-    remaining,
-    limitMessage,
     create: (values) => createServiceCommand(user, values, { auditSuffix: " · Excel-ээс" }),
   });
 

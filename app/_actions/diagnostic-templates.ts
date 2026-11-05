@@ -1,6 +1,7 @@
 "use server";
 
 
+import { assertModuleEnabled } from "@/lib/plan-modules-server";
 import type { ConfirmActionResult } from "@/lib/confirm-action";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -10,7 +11,7 @@ import { requireUser } from "@/lib/auth";
 import { canCreate, canDelete, canEdit } from "@/lib/auth/roles";
 import { assertActiveSubscription } from "@/lib/subscription-server";
 import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
-import { enforceCountLimit, isFeatureEnabled } from "@/lib/plan-limits-server";
+import { isFeatureEnabled } from "@/lib/plan-limits-server";
 import {
   DIAGNOSTIC_TYPES,
   type DiagnosticType,
@@ -47,6 +48,7 @@ async function authorize(action: "create" | "edit" | "delete") {
     throw new Error("Танд оношилгооны загварт энэ үйлдэл хийх эрх байхгүй.");
   }
   await assertActiveSubscription(user.tenantId);
+  await assertModuleEnabled(user.tenantId, "enable_diagnostics");
   return user;
 }
 
@@ -160,15 +162,6 @@ export async function createTemplateAction(
       message: "Таны багц дээр оношилгооны модуль нээгдээгүй байна.",
     };
   }
-  const limit = await enforceCountLimit(
-    user.tenantId,
-    PLAN_LIMIT_CODES.MAX_DIAGNOSTIC_TEMPLATES,
-    () => prisma.diagnosticTemplate.count({ where: { tenantId: user.tenantId } }),
-  );
-  if (!limit.allowed) {
-    return { ok: false, message: limit.message };
-  }
-
   let created;
   try {
     created = await prisma.diagnosticTemplate.create({

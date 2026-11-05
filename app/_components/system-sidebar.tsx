@@ -102,6 +102,17 @@ const navGroups: NavGroup[] = [
         ),
       },
       {
+        href: "/system/catalog",
+        label: "Нэгдсэн сан",
+        icon: (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <ellipse cx="12" cy="5" rx="9" ry="3" />
+            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+            <path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3" />
+          </svg>
+        ),
+      },
+      {
         href: "/system/system-categories",
         label: "Сэлбэгийн ангилал",
         icon: (
@@ -196,6 +207,26 @@ const navGroups: NavGroup[] = [
         ),
       },
       {
+        href: "/system/reviews",
+        label: "Үнэлгээ",
+        icon: (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+          </svg>
+        ),
+      },
+      {
+        href: "/system/quote-requests",
+        label: "Үнийн саналын хүсэлт",
+        icon: (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <path d="M14 2v6h6" />
+            <path d="M9 13h6M9 17h4" />
+          </svg>
+        ),
+      },
+      {
         href: "/system/announcements",
         label: "Мэдэгдэл илгээх",
         icon: (
@@ -276,7 +307,7 @@ const navItems: NavItem[] = navGroups.flatMap((g) => g.items);
 const STORAGE_KEY = "carcare:system-sidebar:open";
 
 const activePillClasses =
-  "bg-[var(--oc-accent)] text-[var(--oc-on-accent)] shadow-[0_10px_28px_-12px_rgba(34,211,238,0.55)]";
+  "bg-[var(--oc-side-active)] text-[var(--oc-side-active-ink)] font-semibold";
 const inactivePillClasses =
   "text-[var(--oc-muted)] hover:bg-white/[0.04] hover:text-[var(--oc-ink)]";
 
@@ -350,8 +381,8 @@ function CollapsedNavGroup({
           уламжлагдахгүй тул шууд hex + `light:` variant (admin-sidebar.tsx-ийн
           NavGroupItem-тэй адил). */}
       <HoverFlyoutPortal pos={pos} open={open} onEnter={onEnter} onLeave={onLeave}>
-        <div className="min-w-[11rem] overflow-hidden rounded-xl border border-[#23272e] light:border-[#e3e0da] bg-[#101318] light:bg-[#faf9f8] py-1.5 shadow-xl">
-          <div className="px-3 py-1.5 font-plex-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-[#6e747e] light:text-[#90949b]">
+        <div className="min-w-[11rem] overflow-hidden rounded-xl border border-[#2c3e50] light:border-[#3b5167] bg-[#17222d] light:bg-[#2c3e50] py-1.5 shadow-xl">
+          <div className="px-3 py-1.5 font-plex-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-[#95a5a6] light:text-[#a9b4b6]">
             {group.label}
           </div>
           {group.items.map((item) => {
@@ -362,8 +393,8 @@ function CollapsedNavGroup({
                 href={item.href}
                 className={`block px-3 py-2 text-[13px] transition-colors ${
                   childActive
-                    ? "bg-[#22d3ee]/10 light:bg-[#0e7490]/10 text-[#22d3ee] light:text-[#0e7490]"
-                    : "text-[#a7adb6] light:text-[#5c6067] hover:bg-white/[0.06] hover:text-[#edeef0] light:hover:text-[#1e1f24]"
+                    ? "bg-[#2c3e50] light:bg-[#3b5167] text-[#ffffff] light:text-[#ffffff]"
+                    : "text-[#d5dcdf] light:text-[#d5dcdf] hover:bg-[#2c3e50] light:hover:bg-[#3b5167] hover:text-[#ffffff] light:hover:text-[#ffffff]"
                 }`}
               >
                 {item.label}
@@ -430,7 +461,7 @@ export function SystemSidebar({
   }
 
   return (
-    <aside className="app-sidebar fixed top-0 left-0 h-screen bg-[var(--oc-panel)] border-r border-[var(--oc-accent)]/15 flex-col z-40 hidden lg:flex">
+    <aside className="oc-side app-sidebar fixed top-0 left-0 h-screen bg-[var(--oc-panel)] border-r border-[var(--oc-line2)] flex-col z-40 hidden lg:flex">
       <div className="relative h-16 border-b border-[var(--oc-line2)] flex items-center shrink-0">
         <Link
           href="/system"

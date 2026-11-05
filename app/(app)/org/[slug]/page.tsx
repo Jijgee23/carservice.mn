@@ -1,5 +1,10 @@
 import { BOOKABLE_CATEGORY_WHERE } from "@/lib/categories";
-import Link from "next/link";
+import {
+  BackLink,
+  LoginPrompt,
+  Panel,
+  PlaceHeader,
+} from "@/app/(app)/_components/consumer-ui";
 import { notFound } from "next/navigation";
 import { loadAccountVehicles } from "@/lib/account-vehicles-catalog";
 import { getAccount } from "@/lib/auth/account";
@@ -16,7 +21,7 @@ export const dynamic = "force-dynamic";
 
 async function loadOrg(slug: string) {
   return await prisma.tenant.findFirst({
-    where: { slug, acceptsOnlineBooking: true, suspended: false, isTest: false },
+    where: { slug, acceptsOnlineBooking: true, suspended: false, isTest: false, creditHidden: false },
     select: {
       id: true,
       slug: true,
@@ -138,79 +143,52 @@ export default async function OrgPage({
   );
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <JsonLd data={orgJsonLd(org, org.branches)} />
-      <Link
-        href="/discover"
-        className="text-sm text-white/40 hover:text-white/70 transition-colors"
-      >
-        ← Бүх газар
-      </Link>
+      <BackLink href="/discover">Бүх газар</BackLink>
 
-      <div className="flex items-center gap-4">
-        {org.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={org.logoUrl}
-            alt=""
-            className="w-16 h-16 rounded-2xl object-contain bg-white/[0.04] border border-white/[0.06] shrink-0"
+      <PlaceHeader
+        name={org.name}
+        logoUrl={org.logoUrl}
+        eyebrow={lockedBranch ? org.name : "Онлайн цаг захиалга"}
+        title={lockedBranch ? lockedBranch.name : org.name}
+        subtitle={
+          lockedBranch
+            ? org.phone1
+            : `${org.branches.length} салбар${org.phone1 ? ` · ${org.phone1}` : ""}`
+        }
+      />
+
+      <Panel
+        title="Цаг захиалах"
+        description="Үйлчилгээ, машин, өдөр, цагаа сонгоод захиалгаа илгээнэ үү."
+      >
+        {bookingBranches.length === 0 ? (
+          <p className="text-sm text-[var(--oc-muted3)]">
+            Энэ газар идэвхтэй салбаргүй байна.
+          </p>
+        ) : account ? (
+          <BookingForm
+            branches={bookingBranches.map((b) => ({
+              id: b.id,
+              name: b.name,
+              openWeekdays: openWeekdaysOf(b),
+              schedule: {
+                openTime: b.openTime,
+                closeTime: b.closeTime,
+                schedules: b.schedules,
+                scheduleExceptions: b.scheduleExceptions,
+                scheduleSeasons: b.scheduleSeasons,
+              },
+              categories: branchCategories.get(b.id) ?? [],
+            }))}
+            vehicles={vehicles}
+            initialBranchId={initialBranchId}
           />
         ) : (
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500/30 to-blue-500/30 border border-white/[0.06] shrink-0 flex items-center justify-center text-xl font-bold text-white/70">
-            {org.name.slice(0, 1)}
-          </div>
+          <LoginPrompt />
         )}
-        <div>
-          <h1 className="text-2xl font-bold">
-            {lockedBranch ? lockedBranch.name : org.name}
-          </h1>
-          <p className="text-white/40 text-sm mt-0.5">
-            {lockedBranch ? `${org.name} · ${org.phone1}` : org.phone1}
-          </p>
-        </div>
-      </div>
-
-      {/* Захиалга */}
-      <div className="w-full">
-        <div className="glass rounded-2xl p-5 border border-white/[0.08]">
-          <h2 className="font-semibold mb-4">Цаг захиалах</h2>
-          {bookingBranches.length === 0 ? (
-            <p className="text-sm text-white/40">
-              Энэ газар идэвхтэй салбаргүй байна.
-            </p>
-          ) : account ? (
-            <BookingForm
-              branches={bookingBranches.map((b) => ({
-                id: b.id,
-                name: b.name,
-                openWeekdays: openWeekdaysOf(b),
-                schedule: {
-                  openTime: b.openTime,
-                  closeTime: b.closeTime,
-                  schedules: b.schedules,
-                  scheduleExceptions: b.scheduleExceptions,
-                  scheduleSeasons: b.scheduleSeasons,
-                },
-                categories: branchCategories.get(b.id) ?? [],
-              }))}
-              vehicles={vehicles}
-              initialBranchId={initialBranchId}
-            />
-          ) : (
-            <div className="flex flex-col gap-3">
-              <p className="text-sm text-white/50">
-                Цаг захиалахын тулд эхлээд нэвтэрнэ үү.
-              </p>
-              <Link
-                href="/login"
-                className="self-start bg-violet-600 hover:bg-violet-500 transition-colors px-5 py-2.5 rounded-xl font-medium text-sm"
-              >
-                Нэвтрэх / Бүртгүүлэх →
-              </Link>
-            </div>
-          )}
-        </div>
-      </div>
+      </Panel>
     </div>
   );
 }

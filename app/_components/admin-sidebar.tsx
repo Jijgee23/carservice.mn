@@ -13,6 +13,7 @@ import { SidebarAppLinks } from "./app-store-badges";
 import type { StoreLinks } from "@/lib/app-store-links";
 import { ThemeToggle } from "./theme-toggle";
 import { useSidebarCollapse } from "./use-sidebar-collapse";
+import { DASHBOARD_MODULE_PATHS, modulesForPath } from "@/lib/plan-modules";
 
 type NavLeaf = {
   href: string;
@@ -145,6 +146,7 @@ const navItems: NavItem[] = [
     children: [
       { href: "/dashboard/customers", label: "Үйлчлүүлэгчид" },
       { href: "/dashboard/vehicles", label: "Машинууд" },
+      { href: "/dashboard/reviews", label: "Үнэлгээ" },
     ]
   },
 
@@ -329,11 +331,13 @@ function SidebarTenantRow({
 function SidebarNavList({
   isOwner,
   permissions,
+  lockedModules = [],
   onNavigate,
   collapsed = false,
 }: {
   isOwner: boolean;
   permissions: string[];
+  lockedModules?: string[];
   onNavigate?: () => void;
   collapsed?: boolean;
 }) {
@@ -358,8 +362,27 @@ function SidebarNavList({
   const isVisible = (it: NavItem): boolean =>
     canSeeView(it.view, isOwner, permissions) ||
     (hasChildren(it) && it.children.some((c) => childVisible(it.view, c)));
-  const visibleNav = navItems.filter(isVisible).map(filterChildren);
-  const visibleSecondary = secondaryItems.filter(isVisible).map(filterChildren);
+  // Багцад ороогүй модулийн хуудсыг цэснээс бүрэн нууна (lib/plan-modules.ts) —
+  // түгжих/upsell биш. Бүлгийн бүх child нуугдвал бүлэг ч нуугдана; бүлгийн
+  // өөрийн href хаалттай бол эхний харагдах child руу заана.
+  const inPlan = (href: string): boolean =>
+    !modulesForPath(href, DASHBOARD_MODULE_PATHS).some((m) => lockedModules.includes(m));
+  const applyPlan = (it: NavItem): NavItem | null => {
+    if (!hasChildren(it)) return inPlan(it.href) ? it : null;
+    const children = it.children.filter((c) => inPlan(c.href));
+    if (children.length === 0) return inPlan(it.href) && it.children.length === 0 ? it : null;
+    return { ...it, children, href: inPlan(it.href) ? it.href : children[0].href };
+  };
+  const visibleNav = navItems
+    .filter(isVisible)
+    .map(filterChildren)
+    .map(applyPlan)
+    .filter((it): it is NavItem => it !== null);
+  const visibleSecondary = secondaryItems
+    .filter(isVisible)
+    .map(filterChildren)
+    .map(applyPlan)
+    .filter((it): it is NavItem => it !== null);
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const hydratedRef = useRef(false);
@@ -467,14 +490,14 @@ function SidebarNavList({
 // ялгана (энэ нь `html.light` удамд суурилдаг тул portal-д ч ажиллана).
 function NavTooltip({ label }: { label: string }) {
   return (
-    <span className="whitespace-nowrap rounded-lg bg-[#101318] light:bg-[#faf9f8] border border-[#23272e] light:border-[#e3e0da] px-2.5 py-1.5 text-xs font-medium text-[#edeef0] light:text-[#1e1f24] shadow-xl block">
+    <span className="whitespace-nowrap rounded-lg bg-[#17222d] light:bg-[#2c3e50] border border-[#2c3e50] light:border-[#3b5167] px-2.5 py-1.5 text-xs font-medium text-[#ecf0f1] light:text-[#ffffff] shadow-xl block">
       {label}
     </span>
   );
 }
 
 const activePillClasses =
-  "bg-[var(--oc-accent)] text-[var(--oc-on-accent)] shadow-[0_10px_28px_-12px_rgba(34,211,238,0.55)]";
+  "bg-[var(--oc-side-active)] text-[var(--oc-side-active-ink)] font-semibold";
 const inactivePillClasses =
   "text-[var(--oc-muted)] hover:bg-white/[0.04] hover:text-[var(--oc-ink)]";
 
@@ -559,6 +582,7 @@ export function AdminSidebar({
   tenantLogoUrl,
   isOwner,
   permissions,
+  lockedModules = [],
   notificationUnread,
   appLinks,
 }: {
@@ -569,6 +593,7 @@ export function AdminSidebar({
   tenantLogoUrl?: string | null;
   isOwner: boolean;
   permissions: string[];
+  lockedModules?: string[];
   notificationUnread: number;
   /** Засварын газрын аппын store холбоос (super admin) — хоосон бол харагдахгүй. */
   appLinks?: StoreLinks;
@@ -576,7 +601,7 @@ export function AdminSidebar({
   const { collapsed, toggle } = useSidebarCollapse();
 
   return (
-    <aside className="app-sidebar fixed top-0 left-0 h-screen bg-[var(--oc-panel)] border-r border-[var(--oc-line2)] flex-col z-40 hidden lg:flex">
+    <aside className="oc-side app-sidebar fixed top-0 left-0 h-screen bg-[var(--oc-panel)] border-r border-[var(--oc-line2)] flex-col z-40 hidden lg:flex">
       <div className="relative h-16 border-b border-[var(--oc-line2)] flex items-center shrink-0">
         <Link
           href="/dashboard"
@@ -612,6 +637,7 @@ export function AdminSidebar({
       <SidebarNavList
         isOwner={isOwner}
         permissions={permissions}
+        lockedModules={lockedModules}
         collapsed={collapsed}
       />
 
@@ -719,8 +745,8 @@ function NavGroupItem({
         {/* Portal (`document.body`) → `.landing-ops`-ийн гадна, `var(--oc-*)`
             уламжлагдахгүй тул шууд hex + `light:` variant (NavTooltip-тэй адил). */}
         <HoverFlyoutPortal pos={pos} open={flyoutOpen} onEnter={onEnter} onLeave={onLeave}>
-          <div className="min-w-[11rem] overflow-hidden rounded-xl border border-[#23272e] light:border-[#e3e0da] bg-[#101318] light:bg-[#faf9f8] py-1.5 shadow-xl">
-            <div className="px-3 py-1.5 font-plex-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-[#6e747e] light:text-[#90949b]">
+          <div className="min-w-[11rem] overflow-hidden rounded-xl border border-[#2c3e50] light:border-[#3b5167] bg-[#17222d] light:bg-[#2c3e50] py-1.5 shadow-xl">
+            <div className="px-3 py-1.5 font-plex-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-[#95a5a6] light:text-[#a9b4b6]">
               {item.label}
             </div>
             {item.children.map((child) => {
@@ -731,8 +757,8 @@ function NavGroupItem({
                   href={child.href}
                   onClick={onNavigate}
                   className={`block px-3 py-2 text-[13px] transition-colors ${childActive
-                    ? "bg-[#22d3ee]/10 light:bg-[#0e7490]/10 text-[#22d3ee] light:text-[#0e7490]"
-                    : "text-[#a7adb6] light:text-[#5c6067] hover:bg-white/[0.06] hover:text-[#edeef0] light:hover:text-[#1e1f24]"
+                    ? "bg-[#2c3e50] light:bg-[#3b5167] text-[#ffffff] light:text-[#ffffff]"
+                    : "text-[#d5dcdf] light:text-[#d5dcdf] hover:bg-[#2c3e50] light:hover:bg-[#3b5167] hover:text-[#ffffff] light:hover:text-[#ffffff]"
                     }`}
                 >
                   {child.label}
@@ -808,6 +834,7 @@ export function MobileTopbar({
   initials,
   isOwner,
   permissions,
+  lockedModules = [],
   notificationUnread,
   appLinks,
 }: {
@@ -818,6 +845,7 @@ export function MobileTopbar({
   initials: string;
   isOwner: boolean;
   permissions: string[];
+  lockedModules?: string[];
   notificationUnread: number;
   appLinks?: StoreLinks;
 }) {
@@ -906,7 +934,7 @@ export function MobileTopbar({
           role="dialog"
           aria-modal="true"
           aria-label="Үндсэн цэс"
-          className={`absolute top-0 left-0 h-full w-72 max-w-[85vw] bg-[var(--oc-panel)] border-r border-[var(--oc-line2)] flex flex-col shadow-2xl transition-transform duration-300 ease-out ${open ? "translate-x-0" : "-translate-x-full"
+          className={`oc-side absolute top-0 left-0 h-full w-72 max-w-[85vw] bg-[var(--oc-panel)] border-r border-[var(--oc-line2)] flex flex-col shadow-2xl transition-transform duration-300 ease-out ${open ? "translate-x-0" : "-translate-x-full"
             }`}
         >
           <div className="flex items-center justify-between gap-2 px-5 h-16 border-b border-[var(--oc-line2)]">
@@ -941,6 +969,7 @@ export function MobileTopbar({
           <SidebarNavList
             isOwner={isOwner}
             permissions={permissions}
+        lockedModules={lockedModules}
             onNavigate={() => setOpen(false)}
           />
 

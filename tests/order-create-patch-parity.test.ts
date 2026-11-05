@@ -77,12 +77,9 @@ test("scheduled create validates branch hours and derives booking endAt from dur
   assert.match(command, /endAt\s*:[\s\S]{0,260}getTime\(\)\s*\+\s*[A-Za-z0-9_.]+\s*\*\s*60000/);
 });
 
-test("createOrderCommand enforces both order plan limits", () => {
+test("createOrderCommand has no order count limits (plans differ by modules only)", () => {
   const command = createCommandBody();
-
-  assert.match(command, /enforceCountLimit/);
-  assert.match(command, /PLAN_LIMIT_CODES\.DAILY_ORDERS/);
-  assert.match(command, /PLAN_LIMIT_CODES\.MAX_ACTIVE_ORDERS/);
+  assert.doesNotMatch(command, /enforceCountLimit|PLAN_LIMIT_REACHED|DAILY_LIMIT_REACHED|PLAN_LIMIT_CODES\.(MAX_|DAILY_)/);
 });
 
 test("notes-only API PATCH delegates to applyOrderPatchCommand without a duplicate transaction or audit body", () => {

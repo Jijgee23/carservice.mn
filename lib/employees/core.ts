@@ -339,8 +339,7 @@ export async function updateEmployee(
  * тенантынх, имэйл/утас давхцал). Импортоор хэзээ ч тенант админ (owner)
  * үүсгэхгүй — `importRowToFormData` isOwner илгээдэггүй тул үүрэг заавал.
  *
- * `remaining` = багцын MAX_USERS-аас үлдсэн эрх (null = хязгааргүй); түүнээс
- * хэтэрсэн мөрүүд "багцын хязгаар" алдаатай буцна. `onCreated` нь амжилттай
+ * Тоон хязгааргүй (багц модулиар ялгардаг). `onCreated` нь амжилттай
  * мөр бүрийн audit-д (logAudit-ыг дуудагч тал өөрийн client-ээр хийнэ).
  */
 export async function importEmployees(
@@ -348,18 +347,12 @@ export async function importEmployees(
   actor: EmployeeActor,
   rows: readonly ImportRow[],
   opts: {
-    remaining: number | null;
-    limitMessage: string;
     onCreated?: (created: { id: string; summary: string; after: Record<string, unknown> }) => Promise<void>;
   },
 ): Promise<{ succeeded: number; failed: number; results: ImportRowResult[] }> {
   const results: ImportRowResult[] = [];
   let succeeded = 0;
   for (const row of rows) {
-    if (opts.remaining !== null && succeeded >= opts.remaining) {
-      results.push({ key: row.key, ok: false, error: opts.limitMessage });
-      continue;
-    }
     if (row.activeUntil && !isCalendarDate(row.activeUntil)) {
       results.push({ key: row.key, ok: false, error: "Оруулсан мэдээлэл буруу.", fieldErrors: { activeUntil: "Огноо буруу." } });
       continue;

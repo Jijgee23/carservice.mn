@@ -58,43 +58,35 @@ test("countBroadcastRecipients counts only account-linked customers, tenant-scop
 
 // --- daily-limit → send → audit sequence, preserved --------------------------
 
-test("sendCustomerBroadcast enforces the daily limit before sending", () => {
+test("sendCustomerBroadcast has no daily send limit — plans differ by modules only", () => {
   const moduleSource = src("../lib/customers/customer-broadcast.ts");
-  const limitIdx = moduleSource.indexOf("PLAN_LIMIT_CODES.DAILY_CUSTOMER_NOTIFICATIONS");
+  assert.doesNotMatch(moduleSource, /enforceCountLimit|PLAN_LIMIT_REACHED|DAILY_LIMIT_REACHED|PLAN_LIMIT_CODES\.(MAX_|DAILY_)/);
+  // The module gate (enable_customer_broadcast) precedes the send instead.
+  const gateIdx = moduleSource.indexOf('isModuleEnabled(actor.tenantId, "enable_customer_broadcast")');
   const sendIdx = moduleSource.indexOf("broadcastTenantPromo({");
-  assert.ok(limitIdx >= 0, "must enforce DAILY_CUSTOMER_NOTIFICATIONS");
-  assert.ok(sendIdx > limitIdx, "the limit check must precede the send");
+  assert.ok(gateIdx >= 0 && sendIdx > gateIdx, "the module gate must precede the send");
 });
 
-test("a limit-exceeded result throws CustomerBroadcastError with status/code, never a generic message", () => {
+test("a disabled module throws CustomerBroadcastError with status/code, never a generic message", () => {
   const moduleSource = src("../lib/customers/customer-broadcast.ts");
   assert.match(
     moduleSource,
-    /if \(!dailyLimit\.allowed\) \{\s*throw new CustomerBroadcastError\(\s*dailyLimit\.message[\s\S]*?"DAILY_LIMIT_REACHED",\s*\);\s*\}/,
+    /throw new CustomerBroadcastError\(\s*moduleDisabledMessage\("enable_customer_broadcast"\),\s*403,\s*MODULE_DISABLED_CODE,\s*\);/,
   );
 });
 
-test("exactly one audit row is written per send, keyed by tenantId as the rate-limit counter (the preserved wart)", () => {
+test("exactly one audit row is written per send", () => {
   const moduleSource = src("../lib/customers/customer-broadcast.ts");
   const logAuditOccurrences = moduleSource.match(/await logAudit\(/g) ?? [];
   assert.equal(logAuditOccurrences.length, 1, "sendCustomerBroadcast must write exactly one audit row");
   assert.match(moduleSource, /entity:\s*"Notification"/);
   assert.match(moduleSource, /entityId:\s*actor\.tenantId/);
   assert.match(moduleSource, /action:\s*"OTHER"/);
-  // The count that gates the NEXT day's limit reads the same entity/tenant
-  // shape this write produces — proof the write is also the counter.
-  assert.match(
-    moduleSource,
-    /prisma\.auditLog\.count\(\{\s*where:\s*\{\s*tenantId:\s*actor\.tenantId,\s*entity:\s*"Notification",\s*createdAt:\s*\{\s*gte:\s*todayStart\s*\}/,
-  );
 });
 
-test("the daily-limit read and the audit write agree on entity/tenant shape — no separate counter table exists", () => {
+test("no audit-log counter is read any more (the daily limit was removed)", () => {
   const moduleSource = src("../lib/customers/customer-broadcast.ts");
-  // Both the read (count) and the write (log) must key off the SAME entity
-  // string, or the counter and the audit trail would silently diverge.
-  const entityOccurrences = moduleSource.match(/entity:\s*"Notification"/g) ?? [];
-  assert.equal(entityOccurrences.length, 2, "one in the count where-clause, one in the logAudit call");
+  assert.doesNotMatch(moduleSource, /prisma\.auditLog\.count\(/);
 });
 
 test("a zero-recipient send still returns success shape and does not skip the audit write", () => {
@@ -108,10 +100,10 @@ test("a zero-recipient send still returns success shape and does not skip the au
   assert.doesNotMatch(between, /if\s*\(\s*notified/, "audit write must not be conditioned on notified > 0");
 });
 
-test("the module documents the audit-row-as-rate-limit-counter design wart and a recommendation, without redesigning it", () => {
+test("the module documents that the daily send limit is gone (audit row is only an audit trail)", () => {
   const moduleSource = src("../lib/customers/customer-broadcast.ts");
-  assert.match(moduleSource, /ГАЖИГ|design wart/i);
-  assert.match(moduleSource, /Санал болгож буй засвар|recommend/i);
+  assert.match(moduleSource, /тоон хязгаар устсан/);
+  assert.doesNotMatch(moduleSource, /rate-limit counter\./);
 });
 
 test("sendCustomerBroadcast does not re-implement broadcastTenantPromo's send logic", () => {

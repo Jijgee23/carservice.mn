@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
 import { Select } from "@/app/_components/select";
+import { DiscoverReviewModal, type MyBranchReview, type PendingReview, type ReviewTarget } from "./discover-review-modal";
 
 export type DiscoverBranch = {
   id: string;
@@ -24,6 +25,9 @@ export type DiscoverBranch = {
   // Бизнесийн төрлийн шошго (жиш: "Угаалгын газар") — салбар карт дээр шууд
   // харуулна, мөн доор нэг сонголттой шүүлтүүрийн эх сурвалж.
   tags: { id: string; name: string }[];
+  // Үйлчлүүлэгчийн үнэлгээний дундаж (Branch.ratingAvg), үнэлгээгүй бол null.
+  rating: number | null;
+  ratingCount: number;
 };
 
 const DEFAULT_CITY = "Улаанбаатар";
@@ -267,7 +271,7 @@ function isLightTheme(): boolean {
 }
 
 function ringColor(open: boolean, active: boolean): string {
-  return active ? "#7c5cff" : open ? "#22c55e" : "#9ca3af";
+  return active ? "#e74c3c" : open ? "#22c55e" : "#9ca3af";
 }
 
 /** Маркерын DOM — логотой дугуй "pin" + доош үзүүртэй. */
@@ -291,7 +295,7 @@ function buildPinElement(m: Marker, active: boolean): HTMLElement {
     badge.appendChild(img);
   } else {
     badge.textContent = m.org.name.slice(0, 1).toUpperCase();
-    badge.style.color = "#3b2f6b";
+    badge.style.color = "#2c3e50";
     badge.style.fontWeight = "700";
     badge.style.fontSize = "16px";
   }
@@ -313,13 +317,13 @@ function buildPinElement(m: Marker, active: boolean): HTMLElement {
 function OpenBadge({ open, hours }: { open: boolean; hours: string | null }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border ${open
+      className={`shrink-0 inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap ${open
         ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30 light:bg-emerald-50 light:text-emerald-700 light:border-emerald-300"
-        : "bg-zinc-500/15 text-zinc-300 border-zinc-500/30 light:bg-zinc-100 light:text-zinc-600 light:border-zinc-300"
+        : "bg-[var(--oc-panel2)] text-[var(--oc-muted)] border-[var(--oc-line)]"
         }`}
     >
       <span
-        className={`w-1.5 h-1.5 rounded-full ${open ? "bg-emerald-400" : "bg-zinc-400"}`}
+        className={`w-1.5 h-1.5 rounded-full ${open ? "bg-emerald-400" : "bg-[var(--oc-muted4)]"}`}
       />
       {open ? "Нээлттэй" : "Хаалттай"}
       {hours ? <span className="opacity-70 tabular-nums">· {hours}</span> : null}
@@ -335,7 +339,7 @@ function ServiceTags({ services }: { services: string[] }) {
       {services.map((s) => (
         <span
           key={s}
-          className="text-[11px] px-2 py-0.5 rounded-full bg-white/[0.05] text-white/60 border border-white/[0.08] light:bg-black/[0.04] light:text-slate-600 light:border-black/[0.08]"
+          className="text-[11px] px-2 py-0.5 rounded-md bg-[var(--oc-panel)] text-[var(--oc-muted)] border border-[var(--oc-line)]"
         >
           {s}
         </span>
@@ -352,7 +356,7 @@ function ServiceTags({ services }: { services: string[] }) {
 function BranchTagLine({ tags }: { tags: { id: string; name: string }[] }) {
   if (tags.length === 0) return null;
   return (
-    <div className="text-[11px] font-semibold text-violet-300 light:text-violet-700 truncate">
+    <div className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--oc-accent)] truncate">
       {tags.map((tag) => tag.name).join(" · ")}
     </div>
   );
@@ -362,11 +366,40 @@ export function DiscoverClient({
   orgs,
   apiKey,
   mapId,
+  pendingReviews = {},
+  myReviews = {},
+  loggedIn = false,
 }: {
   orgs: DiscoverOrg[];
   apiKey: string;
   mapId: string;
+  /** Нэвтэрсэн хэрэглэгчийн үнэлээгүй дууссан засварууд (branchId → засварууд). */
+  pendingReviews?: Record<string, PendingReview[]>;
+  /** Хэрэглэгчийн салбар бүрт өгсөн үнэлгээ. */
+  myReviews?: Record<string, MyBranchReview>;
+  loggedIn?: boolean;
 }) {
+  // Үнэлгээ өгөх modal: салбар дээр дарахад АВТОМАТААР гарахгүй — зөвхөн
+  // «★ Үнэлгээ өгөх» товчоор (жагсаалтын мөр, газрын зургийн popup) нээгдэнэ.
+  // Нэвтрээгүй бол нэвтрэх санал, үнэлсэн бол «засах».
+  const [pending, setPending] = useState(pendingReviews);
+  // Сервер (refresh-ийн дараа) утга давуу; локал нь «сая үнэлсэн» тэмдэг.
+  const [justRated, setJustRated] = useState<Record<string, MyBranchReview>>({});
+  const mine = useMemo(() => ({ ...justRated, ...myReviews }), [justRated, myReviews]);
+  const [reviewTarget, setReviewTarget] = useState<ReviewTarget | null>(null);
+  function openReview(m: { org: DiscoverOrg; branch: DiscoverBranch }, continueHref: string | null) {
+    setReviewTarget({
+      branchId: m.branch.id,
+      orgName: m.org.name,
+      branchName: m.branch.name,
+      logoUrl: m.org.logoUrl,
+      continueHref,
+    });
+  }
+  // Газрын зургийн pin дээр дарахад: зөвхөн popup сонгоно.
+  function pickMarker(m: Marker) {
+    setSelected(m);
+  }
   // Аймаг/хотын жагсаалт (branch-ийн баазын утгаас).
   const cities = useMemo(() => {
     const s = new Set<string>();
@@ -835,10 +868,10 @@ export function DiscoverClient({
           zIndex: active ? 999 : 1,
           gmpClickable: true,
         });
-        marker.addListener("gmp-click", () => setSelected(m));
-        marker.addListener("click", () => setSelected(m));
+        marker.addListener("gmp-click", () => pickMarker(m));
+        marker.addListener("click", () => pickMarker(m));
         content.style.pointerEvents = "auto";
-        content.addEventListener("click", () => setSelected(m));
+        content.addEventListener("click", () => pickMarker(m));
       } else {
         marker = new g.maps.Marker({
           position,
@@ -853,7 +886,7 @@ export function DiscoverClient({
             strokeWeight: 2,
           },
         });
-        marker.addListener("click", () => setSelected(m));
+        marker.addListener("click", () => pickMarker(m));
       }
       markersRef.current.push({ marker, m });
       createdMarkers.push(marker);
@@ -914,7 +947,7 @@ export function DiscoverClient({
       if ("content" in entry.marker) {
         // AdvancedMarkerElement — контентыг дахин зурна.
         const el = buildPinElement(entry.m, active);
-        el.addEventListener("click", () => setSelected(entry.m));
+        el.addEventListener("click", () => pickMarker(entry.m));
         // eslint-disable-next-line react-hooks/immutability
         entry.marker.content = el;
         entry.marker.zIndex = active ? 999 : 1;
@@ -944,171 +977,183 @@ export function DiscoverClient({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Tab + шүүлтүүд нэг мөрөнд */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="inline-flex items-center rounded-xl border border-white/[0.1] p-0.5 bg-white/[0.03] shrink-0">
-          {mapConfigured ? (
-            <button
-              type="button"
-              onClick={() => setView("map")}
-              className={`h-10 flex items-center px-4 rounded-lg text-sm font-medium transition-colors ${view === "map"
-                ? "bg-[var(--oc-accent)] text-[var(--oc-on-accent)]"
-                : "text-white/55 hover:text-white/80"
-                }`}
+      {/* Хайлт + шүүлтүүд — нэг самбар */}
+      <div className="rounded-2xl border border-[var(--oc-line)] bg-[var(--oc-panel)] p-3 sm:p-4 flex flex-col gap-3 shadow-sm">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+          <div className="relative flex-1 min-w-0">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--oc-muted3)] pointer-events-none"
             >
-              Газрын зураг
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => setView("list")}
-            className={`h-10 flex items-center px-4 rounded-lg text-sm font-medium transition-colors ${view === "list" || !mapConfigured
-              ? "bg-[var(--oc-accent)] text-[var(--oc-on-accent)]"
-              : "text-white/55 hover:text-white/80"
-              }`}
-          >
-            Жагсаалт
-          </button>
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setSelected(null);
+              }}
+              placeholder="Засвар, үйлчилгээ, газрын нэрээр хайх..."
+              className="auth-input !h-11 !py-0 !pl-10 !text-sm !rounded-xl"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:flex-nowrap">
+            {tags.length > 0 ? (
+              <div className="discover-filter-select col-span-2 sm:w-52 shrink-0">
+                <Select
+                  name="discover-tag"
+                  value={tag}
+                  placeholder="Салбарын төрөл"
+                  onChange={(v) => {
+                    setTag(v);
+                    setSelected(null);
+                  }}
+                  options={tags.map((t) => ({ value: t.id, label: t.name }))}
+                />
+              </div>
+            ) : null}
+
+            {cities.length > 0 ? (
+              <div className="discover-filter-select sm:w-40 shrink-0">
+                <Select
+                  name="discover-city"
+                  value={city}
+                  placeholder="Аймаг/хот"
+                  onChange={(v) => {
+                    setCitySelectedByUser(true);
+                    setCity(v);
+                    setDistrict("");
+                    setSelected(null);
+                  }}
+                  options={cities.map((c) => ({ value: c, label: c }))}
+                />
+              </div>
+            ) : null}
+
+            {districts.length > 0 ? (
+              <div className="discover-filter-select sm:w-40 shrink-0">
+                <Select
+                  name="discover-district"
+                  value={district}
+                  placeholder="Сум/дүүрэг"
+                  onChange={(v) => {
+                    setDistrict(v);
+                    setSelected(null);
+                  }}
+                  options={districts.map((d) => ({ value: d, label: d }))}
+                />
+              </div>
+            ) : null}
+          </div>
         </div>
 
-        {tags.length > 0 ? (
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <div className="discover-filter-select w-full sm:w-56 shrink-0">
-              <Select
-                name="discover-tag"
-                value={tag}
-                placeholder="Салбарын төрөл"
-                onChange={(v) => {
-                  setTag(v);
-                  setSelected(null);
-                }}
-                options={tags.map((t) => ({ value: t.id, label: t.name }))}
-              />
-            </div>
-          </div>
-        ) : null}
-
-        <div className="relative flex-1 min-w-[10rem] sm:flex-none sm:w-64">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none"
+        <div className="flex flex-wrap items-center gap-2">
+          <FilterChip
+            active={nearMeOnly}
+            busy={locationPending}
+            onClick={toggleNearMe}
+            icon={
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <polygon points="3 11 22 2 13 21 11 13 3 11" />
+              </svg>
+            }
           >
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
+            {locationPending ? "Байршил авч байна…" : "Надад ойр"}
+          </FilterChip>
+          <FilterChip
+            active={openNowOnly}
+            onClick={() => {
+              setOpenNowOnly((value) => !value);
               setSelected(null);
             }}
-            placeholder="Засвар, салбарын нэрээр хайх..."
-            className="auth-input !h-10 !py-0 !pl-9 !text-sm !rounded-lg"
-          />
+            icon={<span className="w-2 h-2 rounded-full bg-emerald-500" aria-hidden />}
+          >
+            Одоо нээлттэй
+          </FilterChip>
+          <FilterChip
+            active={weekendOnly}
+            onClick={() => {
+              setWeekendOnly((v) => !v);
+              setSelected(null);
+            }}
+            icon={
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+            }
+          >
+            Амралтын өдөр
+          </FilterChip>
+
+          <div className="ml-auto flex items-center gap-3">
+            <span className="hidden sm:inline text-xs text-[var(--oc-muted3)] tabular-nums">
+              <b className="font-semibold text-[var(--oc-ink2)]">{visibleOrgs.length}</b> газар ·{" "}
+              <b className="font-semibold text-[var(--oc-ink2)]">{markers.length}</b> салбар
+            </span>
+            <div className="inline-flex items-center rounded-xl border border-[var(--oc-line)] p-0.5 bg-[var(--oc-panel2)] shrink-0">
+              {mapConfigured ? (
+                <button
+                  type="button"
+                  onClick={() => setView("map")}
+                  aria-pressed={view === "map"}
+                  className={`h-8 flex items-center gap-1.5 px-3 rounded-lg text-xs font-semibold transition-colors ${view === "map"
+                    ? "bg-[var(--oc-panel)] text-[var(--oc-ink)] shadow-sm"
+                    : "text-[var(--oc-muted)] hover:text-[var(--oc-ink)]"
+                    }`}
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
+                    <line x1="8" y1="2" x2="8" y2="18" />
+                    <line x1="16" y1="6" x2="16" y2="22" />
+                  </svg>
+                  Газрын зураг
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setView("list")}
+                aria-pressed={view === "list" || !mapConfigured}
+                className={`h-8 flex items-center gap-1.5 px-3 rounded-lg text-xs font-semibold transition-colors ${view === "list" || !mapConfigured
+                  ? "bg-[var(--oc-panel)] text-[var(--oc-ink)] shadow-sm"
+                  : "text-[var(--oc-muted)] hover:text-[var(--oc-ink)]"
+                  }`}
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <line x1="8" y1="6" x2="21" y2="6" />
+                  <line x1="8" y1="12" x2="21" y2="12" />
+                  <line x1="8" y1="18" x2="21" y2="18" />
+                  <line x1="3" y1="6" x2="3.01" y2="6" />
+                  <line x1="3" y1="12" x2="3.01" y2="12" />
+                  <line x1="3" y1="18" x2="3.01" y2="18" />
+                </svg>
+                Жагсаалт
+              </button>
+            </div>
+          </div>
+
+          {filterError ? (
+            <div className="basis-full text-xs text-[var(--oc-warn)]">
+              {filterError}
+            </div>
+          ) : null}
         </div>
-
-        {cities.length > 0 ? (
-          <div className="discover-filter-select w-36 sm:w-40 shrink-0">
-            <Select
-              name="discover-city"
-              value={city}
-              placeholder="Аймаг/хот"
-              onChange={(v) => {
-                setCitySelectedByUser(true);
-                setCity(v);
-                setDistrict("");
-                setSelected(null);
-              }}
-              options={cities.map((c) => ({ value: c, label: c }))}
-            />
-          </div>
-        ) : null}
-
-        {districts.length > 0 ? (
-          <div className="discover-filter-select w-36 sm:w-40 shrink-0">
-            <Select
-              name="discover-district"
-              value={district}
-              placeholder="Сум/дүүрэг"
-              onChange={(v) => {
-                setDistrict(v);
-                setSelected(null);
-              }}
-              options={districts.map((d) => ({ value: d, label: d }))}
-            />
-          </div>
-        ) : null}
-
-        <button
-          type="button"
-          onClick={toggleNearMe}
-          disabled={locationPending}
-          aria-pressed={nearMeOnly}
-          aria-busy={locationPending}
-          className={`shrink-0 text-xs px-3 h-10 rounded-lg border transition-colors disabled:opacity-60 disabled:cursor-wait ${
-            nearMeOnly
-              ? "bg-[var(--oc-accent)] border-[var(--oc-accent)] text-[var(--oc-on-accent)]"
-              : "border-white/[0.12] bg-white/[0.04] text-white/70 hover:bg-white/[0.08]"
-          }`}
-        >
-          {locationPending ? "Байршил авч байна…" : "Надад ойр"}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setOpenNowOnly((value) => !value);
-            setSelected(null);
-          }}
-          aria-pressed={openNowOnly}
-          className={`shrink-0 text-xs px-3 h-10 rounded-lg border transition-colors ${
-            openNowOnly
-              ? "bg-[var(--oc-accent)] border-[var(--oc-accent)] text-[var(--oc-on-accent)]"
-              : "border-white/[0.12] bg-white/[0.04] text-white/70 hover:bg-white/[0.08]"
-          }`}
-        >
-          Одоо нээлттэй
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setWeekendOnly((v) => !v);
-            setSelected(null);
-          }}
-          aria-pressed={weekendOnly}
-          className={`shrink-0 text-xs px-3 h-10 rounded-lg border transition-colors ${
-            weekendOnly
-              ? "bg-[var(--oc-accent)] border-[var(--oc-accent)] text-[var(--oc-on-accent)]"
-              : "border-white/[0.12] bg-white/[0.04] text-white/70 hover:bg-white/[0.08]"
-          }`}
-        >
-          Амралтын өдөр ажилладаг
-        </button>
-
-        <span className="text-xs text-white/40 shrink-0 ml-auto">
-          {visibleOrgs.length} газар · {markers.length} салбар
-        </span>
-
-        {filterError ? (
-          <div className="basis-full text-xs text-[var(--oc-warn)]">
-            {filterError}
-          </div>
-        ) : null}
       </div>
 
       {orgs.length === 0 ? (
-        <div className="glass rounded-2xl p-10 border border-white/[0.08] text-center text-sm text-white/40">
-          Одоогоор онлайн цаг захиалга нээсэн газар алга.
-        </div>
+        <EmptyState>Одоогоор онлайн цаг захиалга нээсэн газар алга.</EmptyState>
       ) : view === "map" && hasMap ? (
         // Шүүлтийн үр дүн хоосон болсон ч (`visibleOrgs.length === 0`) энэ
         // `<div ref={mapRef}>`-г ЗААВАЛ mount хэвээр үлдээнэ (доор overlay-аар
@@ -1123,10 +1168,10 @@ export function DiscoverClient({
         <div className="relative">
           <div
             ref={mapRef}
-            className="h-[70vh] min-h-[24rem] w-full rounded-2xl overflow-hidden border border-white/[0.08] bg-[var(--surface)]"
+            className="h-[70vh] min-h-[24rem] w-full rounded-2xl overflow-hidden border border-[var(--oc-line)] bg-[var(--oc-panel2)] shadow-sm"
           />
           <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-2">
-            <div className="overflow-hidden rounded-xl border border-white/10 bg-zinc-900/95 shadow-lg light:border-black/10 light:bg-white/95">
+            <div className="overflow-hidden rounded-xl border bg-[var(--oc-panel)] text-[var(--oc-ink2)] border-[var(--oc-line)] shadow-lg">
               <button
                 type="button"
                 onClick={() => {
@@ -1135,11 +1180,11 @@ export function DiscoverClient({
                 }}
                 aria-label="Газрын зургийг томруулах"
                 title="Томруулах"
-                className="flex h-10 w-10 items-center justify-center text-xl font-medium text-white/85 transition-colors hover:bg-white/10 light:text-zinc-700 light:hover:bg-zinc-100"
+                className="flex h-10 w-10 items-center justify-center text-xl font-medium transition-colors hover:bg-[var(--oc-panel2)] hover:text-[var(--oc-ink)]"
               >
                 +
               </button>
-              <div className="h-px bg-white/10 light:bg-zinc-200" />
+              <div className="h-px bg-[var(--oc-line)]" />
               <button
                 type="button"
                 onClick={() => {
@@ -1148,7 +1193,7 @@ export function DiscoverClient({
                 }}
                 aria-label="Газрын зургийг жижигрүүлэх"
                 title="Жижигрүүлэх"
-                className="flex h-10 w-10 items-center justify-center text-xl font-medium text-white/85 transition-colors hover:bg-white/10 light:text-zinc-700 light:hover:bg-zinc-100"
+                className="flex h-10 w-10 items-center justify-center text-xl font-medium transition-colors hover:bg-[var(--oc-panel2)] hover:text-[var(--oc-ink)]"
               >
                 −
               </button>
@@ -1171,8 +1216,8 @@ export function DiscoverClient({
               title="Миний байршил"
               className={`flex h-10 w-10 items-center justify-center rounded-xl border shadow-lg transition-colors ${
                 nearMeLocation
-                  ? "border-blue-400/50 bg-blue-600 text-white hover:bg-blue-500"
-                  : "border-white/10 bg-zinc-900/95 text-white/85 hover:bg-white/10 light:border-black/10 light:bg-white/95 light:text-zinc-700 light:hover:bg-zinc-100"
+                  ? "border-[var(--oc-accent)] bg-[var(--oc-accent)] text-[var(--oc-on-accent)] hover:bg-[var(--oc-accent-hi)]"
+                  : "bg-[var(--oc-panel)] text-[var(--oc-ink2)] border-[var(--oc-line)] hover:bg-[var(--oc-panel2)]"
               }`}
             >
               <span className="text-lg leading-none" aria-hidden>
@@ -1181,21 +1226,19 @@ export function DiscoverClient({
             </button>
           </div>
           {mapError ? (
-            <div className="absolute inset-0 flex items-center justify-center text-sm text-white/50 bg-[var(--surface)] rounded-2xl">
+            <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--oc-muted)] bg-[var(--oc-panel2)] rounded-2xl">
               Газрын зураг ачаалж чадсангүй.
             </div>
           ) : null}
           {mapTruncated ? (
-            <div className="absolute bottom-3 left-3 rounded-lg bg-zinc-900/85 px-3 py-2 text-xs text-white/75 shadow-lg light:bg-white/90 light:text-zinc-700">
+            <div className="absolute bottom-3 left-3 rounded-lg border border-[var(--oc-line)] bg-[var(--oc-panel)] px-3 py-2 text-xs text-[var(--oc-muted)] shadow-lg">
               Зарим цэгийг нуусан. Газрын зургийг томруулж үзнэ үү.
             </div>
           ) : null}
 
           {visibleOrgs.length === 0 ? (
-            <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-[var(--surface)]/90 backdrop-blur-sm">
-              <div className="glass rounded-2xl px-8 py-6 border border-white/[0.08] text-center text-sm text-white/40">
-                Энэ хайлтаар газар олдсонгүй.
-              </div>
+            <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-[var(--oc-carbon)]/80 backdrop-blur-sm p-4">
+              <EmptyState />
             </div>
           ) : null}
 
@@ -1204,7 +1247,7 @@ export function DiscoverClient({
               role="status"
               aria-live="polite"
               aria-label="Шүүлтүүрийн үр дүн шинэчлэгдэж байна"
-              className="absolute left-3 top-3 z-20 flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-zinc-900/95 text-white shadow-lg light:border-black/10 light:bg-white/95 light:text-zinc-700"
+              className="absolute left-3 top-3 z-20 flex h-10 w-10 items-center justify-center rounded-xl border bg-[var(--oc-panel)] text-[var(--oc-ink2)] border-[var(--oc-line)] shadow-lg"
             >
               <svg
                 aria-hidden="true"
@@ -1234,26 +1277,15 @@ export function DiscoverClient({
           {/* Сонгосон салбарын мэдээлэл — том, ойлгомжтой карт */}
           {selected ? (
             <div className="absolute left-3 right-3 bottom-3 sm:left-4 sm:right-auto sm:bottom-4 sm:w-[28rem]">
-              <div className="bg-[var(--surface)] rounded-3xl border border-white/[0.14] shadow-2xl overflow-hidden">
+              <div className="bg-[var(--oc-panel)] rounded-2xl border border-[var(--oc-line)] shadow-2xl overflow-hidden">
                 {/* Толгой — лого + газрын нэр */}
                 <div className="flex items-center gap-3.5 p-5 pb-4">
-                  {selected.org.logoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={selected.org.logoUrl}
-                      alt=""
-                      className="w-14 h-14 rounded-2xl object-contain bg-white/[0.05] border border-white/[0.08] shrink-0"
-                    />
-                  ) : (
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500/40 to-blue-500/40 border border-white/[0.08] shrink-0 flex items-center justify-center text-xl font-bold text-white/80">
-                      {selected.org.name.slice(0, 1)}
-                    </div>
-                  )}
+                  <OrgLogo name={selected.org.name} logoUrl={selected.org.logoUrl} size="lg" />
                   <div className="min-w-0 flex-1">
-                    <div className="text-lg font-bold text-white/95 truncate">
+                    <div className="text-lg font-bold text-[var(--oc-ink)] truncate">
                       {selected.org.name}
                     </div>
-                    <div className="text-sm text-white/55 truncate">
+                    <div className="text-sm text-[var(--oc-muted)] truncate">
                       {selected.branch.name}
                     </div>
                     <BranchTagLine tags={selected.branch.tags} />
@@ -1262,7 +1294,7 @@ export function DiscoverClient({
                     type="button"
                     onClick={() => setSelected(null)}
                     aria-label="Хаах"
-                    className="shrink-0 text-white/40 hover:text-white/90 hover:bg-white/[0.08] rounded-full w-8 h-8 flex items-center justify-center transition-colors"
+                    className="shrink-0 text-[var(--oc-muted3)] hover:text-[var(--oc-ink)] hover:bg-[var(--oc-panel2)] rounded-full w-8 h-8 flex items-center justify-center transition-colors"
                   >
                     ✕
                   </button>
@@ -1270,15 +1302,16 @@ export function DiscoverClient({
 
                 {/* Төлөв + мэдээлэл */}
                 <div className="px-5 pb-5 flex flex-col gap-3">
-                  <div>
+                  <div className="flex flex-wrap items-center gap-2">
                     <OpenBadge
                       open={selected.branch.open}
                       hours={selected.branch.hours}
                     />
+                    <RatingBadge rating={selected.branch.rating} count={selected.branch.ratingCount} />
                   </div>
 
                   {selected.branch.distanceKm != null ? (
-                    <div className="flex items-center gap-2.5 text-sm text-violet-200 light:text-violet-700">
+                    <div className="flex items-center gap-2.5 text-sm font-medium text-[var(--oc-accent)]">
                       <span aria-hidden>⌖</span>
                       <span>
                         {distanceLabel(selected.branch.distanceKm)} зайтай
@@ -1286,8 +1319,8 @@ export function DiscoverClient({
                     </div>
                   ) : null}
 
-                  <div className="flex items-start gap-2.5 text-sm text-white/70">
-                    <svg className="w-4 h-4 mt-0.5 text-white/35 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <div className="flex items-start gap-2.5 text-sm text-[var(--oc-ink2)]">
+                    <svg className="w-4 h-4 mt-0.5 text-[var(--oc-muted3)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                       <circle cx="12" cy="10" r="3" />
                     </svg>
@@ -1297,9 +1330,9 @@ export function DiscoverClient({
                   {selected.branch.phone ? (
                     <a
                       href={`tel:${selected.branch.phone}`}
-                      className="flex items-center gap-2.5 text-sm text-white/70 hover:text-violet-300 light:hover:text-violet-700 transition-colors"
+                      className="flex items-center gap-2.5 text-sm text-[var(--oc-ink2)] hover:text-[var(--oc-accent)] transition-colors"
                     >
-                      <svg className="w-4 h-4 text-white/35 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg className="w-4 h-4 text-[var(--oc-muted3)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
                       </svg>
                       <span className="tabular-nums">{selected.branch.phone}</span>
@@ -1308,9 +1341,19 @@ export function DiscoverClient({
 
                   <ServiceTags services={selected.branch.services} />
 
+                  <button
+                    type="button"
+                    onClick={() => openReview(selected, null)}
+                    className="mt-1 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-amber-400/50 bg-amber-400/10 px-4 py-2.5 text-sm font-semibold text-amber-500 light:text-amber-700 transition-colors hover:bg-amber-400/20"
+                  >
+                    ★{" "}
+                    {mine[selected.branch.id] && !pending[selected.branch.id]?.length
+                      ? `Таны үнэлгээ${mine[selected.branch.id].rating ? ` ${mine[selected.branch.id].rating}` : ""} — засах`
+                      : "Үнэлгээ өгөх"}
+                  </button>
                   <Link
                     href={branchDetailHref(selected.org.slug, selected.branch.id)}
-                    className="mt-1 inline-flex w-full items-center justify-center gap-2 bg-violet-600 hover:bg-violet-500 transition-colors px-4 py-3 rounded-2xl text-sm font-semibold"
+                    className="inline-flex w-full items-center justify-center gap-2 bg-[var(--oc-accent)] text-[var(--oc-on-accent)] hover:bg-[var(--oc-accent-hi)] transition-colors px-4 py-3 rounded-xl text-sm font-semibold"
                   >
                     Дэлгэрэнгүй
                     <span aria-hidden>→</span>
@@ -1321,74 +1364,110 @@ export function DiscoverClient({
           ) : null}
         </div>
       ) : visibleOrgs.length === 0 ? (
-        <div className="glass rounded-2xl p-10 border border-white/[0.08] text-center text-sm text-white/40">
-          Энэ хайлтаар газар олдсонгүй.
-        </div>
+        <EmptyState />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 items-start">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 items-start">
           {visibleOrgs.map((org) => (
             <div
               key={org.slug}
-              className="glass rounded-2xl border border-white/[0.08] overflow-hidden"
+              className="group/card rounded-2xl border border-[var(--oc-line)] bg-[var(--oc-panel)] overflow-hidden shadow-sm transition-all hover:shadow-lg hover:border-[var(--oc-muted4)]"
             >
               <Link
                 href={bookingHref(org.slug, org.branches[0].id)}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.03] transition-colors"
+                className="flex items-center gap-3 px-4 pt-4 pb-3"
               >
-                {org.logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={org.logoUrl}
-                    alt=""
-                    className="w-11 h-11 rounded-xl object-contain bg-white/[0.04] border border-white/[0.06] shrink-0"
-                  />
-                ) : (
-                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500/30 to-blue-500/30 border border-white/[0.06] shrink-0 flex items-center justify-center font-bold text-white/70">
-                    {org.name.slice(0, 1)}
-                  </div>
-                )}
+                <OrgLogo name={org.name} logoUrl={org.logoUrl} size="md" />
                 <div className="min-w-0 flex-1">
-                  <div className="font-semibold text-white/90 truncate">
+                  <div className="font-semibold text-[var(--oc-ink)] truncate group-hover/card:text-[var(--oc-accent)] transition-colors">
                     {org.name}
                   </div>
-                  <div className="text-xs text-white/40">
-                    {org.branches.length} салбар
+                  <div className="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--oc-muted3)]">
+                    <span>{org.branches.length} салбар</span>
                     {org.branches[0].distanceKm != null ? (
-                      <span className="text-violet-300 light:text-violet-700">
-                        {` · ${distanceLabel(org.branches[0].distanceKm)} зайтай`}
-                      </span>
+                      <>
+                        <span aria-hidden>·</span>
+                        <span className="font-medium text-[var(--oc-accent)]">
+                          {distanceLabel(org.branches[0].distanceKm)}
+                        </span>
+                      </>
                     ) : null}
                   </div>
                 </div>
-                <span className="text-violet-300 light:text-violet-700 text-sm shrink-0">→</span>
+                <span
+                  aria-hidden
+                  className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-[var(--oc-muted3)] transition-colors group-hover/card:bg-[var(--oc-accent)] group-hover/card:text-[var(--oc-on-accent)]"
+                >
+                  →
+                </span>
               </Link>
 
-              <ul className="divide-y divide-white/[0.04] border-t border-white/[0.04]">
+              <ul className="flex flex-col gap-2 px-3 pb-3">
                 {org.branches.map((b) => (
                   <li key={b.id}>
                     <Link
                       href={branchDetailHref(org.slug, b.id)}
-                      className="flex items-start justify-between gap-3 px-4 py-3 hover:bg-white/[0.03] transition-colors"
+                      className="group/branch block rounded-xl border border-[var(--oc-line2)] bg-[var(--oc-panel2)] px-3.5 py-3 transition-colors hover:border-[var(--oc-accent)]/50"
                     >
-                      <div className="min-w-0">
-                        <div className="text-sm text-white/85">{b.name}</div>
-                        <BranchTagLine tags={b.tags} />
-                        <div className="text-xs text-white/40 mt-0.5 truncate">
-                          {b.address}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-[var(--oc-ink)] truncate">{b.name}</div>
+                          <BranchTagLine tags={b.tags} />
                         </div>
-                        {b.distanceKm != null ? (
-                          <div className="text-xs text-violet-300 light:text-violet-700 mt-1">
-                            {distanceLabel(b.distanceKm)} зайтай
-                          </div>
-                        ) : null}
-                        {b.services.length > 0 ? (
-                          <div className="mt-1.5">
-                            <ServiceTags services={b.services} />
-                          </div>
-                        ) : null}
-                      </div>
-                      <div className="shrink-0">
                         <OpenBadge open={b.open} hours={b.hours} />
+                      </div>
+                      <div className="mt-1.5 flex items-start gap-1.5 text-xs text-[var(--oc-muted)]">
+                        <svg className="w-3.5 h-3.5 mt-px shrink-0 text-[var(--oc-muted3)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                          <circle cx="12" cy="10" r="3" />
+                        </svg>
+                        <span className="min-w-0 truncate">{b.address}</span>
+                      </div>
+                      {b.services.length > 0 ? (
+                        <div className="mt-2">
+                          <ServiceTags services={b.services} />
+                        </div>
+                      ) : null}
+                      <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                        <RatingBadge rating={b.rating} count={b.ratingCount} />
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            openReview({ org, branch: b }, null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              openReview({ org, branch: b }, null);
+                            }
+                          }}
+                          className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold transition-colors ${
+                            pending[b.id]?.length
+                              ? "border-amber-400/50 bg-amber-400/10 text-amber-500 light:text-amber-700 hover:bg-amber-400/20"
+                              : mine[b.id]
+                                ? "border-[var(--oc-line)] text-[var(--oc-muted)] hover:border-amber-400/50"
+                                : "border-[var(--oc-line)] text-[var(--oc-muted)] hover:border-amber-400/50 hover:text-amber-500"
+                          }`}
+                        >
+                          {mine[b.id] && !pending[b.id]?.length ? (
+                            <>
+                              <span className="text-amber-400">★</span> Таны үнэлгээ{mine[b.id].rating ? ` ${mine[b.id].rating}` : ""}
+                            </>
+                          ) : (
+                            "★ Үнэлгээ өгөх"
+                          )}
+                        </span>
+                        {b.distanceKm != null ? (
+                          <span className="text-xs font-medium text-[var(--oc-accent)]">
+                            {distanceLabel(b.distanceKm)} зайтай
+                          </span>
+                        ) : null}
+                        <span className="ml-auto inline-flex items-center gap-1 rounded-lg border border-[var(--oc-accent)]/40 px-3 py-1.5 text-xs font-semibold text-[var(--oc-accent)] transition-colors group-hover/branch:border-[var(--oc-accent)] group-hover/branch:bg-[var(--oc-accent)] group-hover/branch:text-[var(--oc-on-accent)]">
+                          Цаг авах <span aria-hidden>→</span>
+                        </span>
                       </div>
                     </Link>
                   </li>
@@ -1398,6 +1477,107 @@ export function DiscoverClient({
           ))}
         </div>
       )}
+
+      <DiscoverReviewModal
+        target={reviewTarget}
+        loggedIn={loggedIn}
+        orders={reviewTarget ? (pending[reviewTarget.branchId] ?? []) : []}
+        mine={reviewTarget ? (mine[reviewTarget.branchId] ?? null) : null}
+        onClose={() => {
+          setReviewTarget(null);
+        }}
+        onRated={(orderId) => {
+          if (!reviewTarget) return;
+          const bid = reviewTarget.branchId;
+          if (orderId) {
+            setPending((p) => ({ ...p, [bid]: (p[bid] ?? []).filter((o) => o.orderId !== orderId) }));
+          }
+          // «Үнэлсэн» гэж тэмдэглэнэ — дараагийн дарахад дахин асуухгүй; нарийвчилсан утгыг refresh авчирна.
+          setJustRated((m) => ({ ...m, [bid]: { rating: 0, comment: null, reply: null, editable: orderId == null } }));
+          router.refresh();
+        }}
+      />
     </div>
+  );
+}
+
+function FilterChip({
+  active,
+  busy = false,
+  onClick,
+  icon,
+  children,
+}: {
+  active: boolean;
+  busy?: boolean;
+  onClick: () => void;
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      aria-pressed={active}
+      aria-busy={busy}
+      className={`shrink-0 inline-flex items-center gap-1.5 h-8 px-3 rounded-full border text-xs font-medium transition-colors disabled:opacity-60 disabled:cursor-wait ${
+        active
+          ? "border-[var(--oc-accent)] bg-[var(--oc-accent)]/10 text-[var(--oc-accent)]"
+          : "border-[var(--oc-line)] bg-[var(--oc-panel)] text-[var(--oc-ink2)] hover:border-[var(--oc-muted4)] hover:bg-[var(--oc-panel2)]"
+      }`}
+    >
+      {icon}
+      {children}
+      {active ? <span aria-hidden className="ml-0.5">✓</span> : null}
+    </button>
+  );
+}
+
+function OrgLogo({ name, logoUrl, size }: { name: string; logoUrl: string | null; size: "md" | "lg" }) {
+  const box = size === "lg" ? "w-14 h-14 rounded-2xl text-xl" : "w-12 h-12 rounded-xl text-lg";
+  if (logoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={logoUrl}
+        alt=""
+        className={`${box} object-contain bg-[#fff] border border-[var(--oc-line)] shrink-0`}
+      />
+    );
+  }
+  return (
+    <div
+      className={`${box} shrink-0 flex items-center justify-center font-bold bg-[var(--oc-accent)]/10 text-[var(--oc-accent)] border border-[var(--oc-accent)]/20`}
+    >
+      {name.slice(0, 1).toUpperCase()}
+    </div>
+  );
+}
+
+function EmptyState({ children = "Энэ хайлтаар газар олдсонгүй." }: { children?: ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-[var(--oc-line)] bg-[var(--oc-panel)] px-6 py-12 text-center">
+      <div className="mx-auto mb-3 w-12 h-12 rounded-full bg-[var(--oc-panel2)] flex items-center justify-center text-[var(--oc-muted3)]">
+        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+      </div>
+      <div className="text-sm font-medium text-[var(--oc-ink2)]">{children}</div>
+      <div className="mt-1 text-xs text-[var(--oc-muted3)]">Шүүлтүүрээ өөрчилж эсвэл өөр үгээр хайж үзнэ үү.</div>
+    </div>
+  );
+}
+
+/** Салбарын үйлчлүүлэгчийн үнэлгээ (★ дундаж + тоо); үнэлгээгүй бол юу ч харуулахгүй. */
+function RatingBadge({ rating, count }: { rating: number | null; count: number }) {
+  if (rating == null || count === 0) return null;
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-[var(--oc-muted2)]" aria-label={`${rating.toFixed(1)} од, ${count} үнэлгээ`}>
+      <span className="text-amber-400">★</span>
+      <span className="font-plex-mono text-[var(--oc-ink2)]">{rating.toFixed(1)}</span>
+      <span className="text-[var(--oc-muted3)]">({count})</span>
+    </span>
   );
 }

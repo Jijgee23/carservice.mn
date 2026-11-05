@@ -46,6 +46,19 @@ export function periodEndDate(
   return new Date(endUb - UB_OFFSET_MS);
 }
 
+// Багцын загвар:
+//  - FREE (Энгийн): үргэлж үнэгүй, хугацаагүй. Шинэ бүртгэл шууд FREE-тэй эхэлнэ;
+//    төлбөртэй багц дуусахад FREE рүү буцна (түгжигдэхгүй, лимит нь FREE-ийнх).
+//  - BUSINESS: тогтсон үнэтэй (PlanPrice), тенант өөрөө QPay-ээр авна.
+//  - ENTERPRISE: тогтсон үнэгүй — тохиролцож үнээ гаргаад super admin гараар
+//    subscription үүсгэнэ (app/_actions/system-subscriptions.ts).
+export const SELF_SERVE_PLANS: readonly Plan[] = ["BUSINESS"];
+
+export function isSelfServePlan(plan: Plan): boolean {
+  return SELF_SERVE_PLANS.includes(plan);
+}
+
+// Super admin-ий гараар олгох туршилтын (TRIAL) default хугацаа.
 export const TRIAL_DAYS = 14;
 
 // Идэвхтэй subscription дуусахад ийм өдрөөс цөөн үлдвэл "удахгүй дуусна"
@@ -128,8 +141,10 @@ export function trialEndDate(startsAt: Date = new Date()): Date {
 }
 
 /**
- * Тенант идэвхтэй subscription байгаа эсэхийг тогтооно. Trial хугацаа дууссан
- * subscription-ийг "expired" гэж үзнэ.
+ * Тенант идэвхтэй ТӨЛБӨРТЭЙ (FREE-ээс бусад) subscription байгаа эсэхийг
+ * тогтооно. Trial хугацаа дууссан subscription-ийг "expired" гэж үзнэ. FREE
+ * багц хугацаагүй тул subscription-оор илэрхийлэгдэхгүй — хуучин 14 хоногийн
+ * FREE туршилтын мөрүүдийг алгасна (null = тенант FREE дээр байна).
  */
 export function resolveActiveSubscription(
   subs: Pick<Subscription, "id" | "plan" | "status" | "startsAt" | "endsAt">[],
@@ -139,6 +154,7 @@ export function resolveActiveSubscription(
   const candidate = [...subs]
     .filter(
       (s) =>
+        s.plan !== "FREE" &&
         (s.status === "TRIAL" || s.status === "ACTIVE") &&
         s.startsAt.getTime() <= now.getTime(),
     )

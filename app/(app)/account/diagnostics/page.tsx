@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Prisma } from "@/app/generated/prisma/client";
-import { BtnLink } from "@/app/_components/landing-ops-ui";
+import {
+  BackLink,
+  Chevron,
+  DateTile,
+  FilterBar,
+  PageHero,
+} from "@/app/(app)/_components/consumer-ui";
 import { EmptyState } from "@/app/_components/empty-state";
 import { requireAccount } from "@/lib/auth/account";
 import {
@@ -105,28 +111,31 @@ export default async function AccountDiagnosticsPage({
   ].sort((a, b) => b - a);
 
   const hasFilter = Boolean(query);
+  const vehicleCount = new Set(reports.map((r) => r.vehicle.plate)).size;
+  const attentionCount = reports.filter((r) => r.maxSeverity === "WARN" || r.maxSeverity === "BAD").length;
 
   return (
-    <div className="w-full flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Оношилгооны түүх</h1>
-          <p className="text-[var(--oc-muted3)] text-sm mt-0.5">
-            Таны машинд хийгдсэн бүх оношилгоо, үзлэгийн тайлан
-          </p>
-        </div>
-        <BtnLink href="/account" variant="ghost">
-          ← Буцах
-        </BtnLink>
-      </div>
+    <div className="w-full flex flex-col gap-5">
+      <BackLink href="/account">Миний захиалгууд</BackLink>
+
+      <PageHero
+        eyebrow={`${year} он`}
+        title="Оношилгооны түүх"
+        description="Таны машинд хийгдсэн бүх оношилгоо, үзлэгийн тайлан"
+        stats={[
+          { label: "Тайлан", value: reports.length },
+          { label: "Машин", value: vehicleCount },
+          { label: "Анхаарах", value: attentionCount, tone: attentionCount > 0 ? "warn" : undefined },
+        ]}
+      />
 
       {/* Шүүлтүүр — mobile-ийн Оношилгоо табтай ижил: хайлт + он (ноцтой
           байдлын шүүлт хассан — доор дэлгэрэнгүй хуудсанд тона тус бүрийн
           тоотой сегмент байгаа тул давхацна). */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <FilterBar>
         <SearchBox placeholder="Тайлан, машин, салбараар хайх" paramName="q" />
         <YearChips years={availableYears} showAll={false} />
-      </div>
+      </FilterBar>
 
       {reports.length === 0 ? (
         <EmptyState>
@@ -135,44 +144,55 @@ export default async function AccountDiagnosticsPage({
             : "Одоогоор оношилгооны тайлан алга. Үйлчилгээ хийгдэж, тайлан бөглөгдсөний дараа энд харагдана."}
         </EmptyState>
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="grid gap-3 lg:grid-cols-2">
           {reports.map((r) => {
             const tp = r.template.type as DiagnosticType;
+            const sev = r.maxSeverity as ReportSeverity | null;
             return (
               <Link
                 key={r.id}
                 href={`/account/diagnostics/${r.id}`}
-                className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 block hover:bg-[var(--oc-panel2)] transition-colors"
+                className="group relative flex items-start gap-4 overflow-hidden rounded-2xl border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 shadow-sm transition-all hover:border-[var(--oc-accent)]/50 hover:shadow-md"
               >
-                <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span
-                        className={`text-[11px] px-2.5 py-1 rounded-full ${DIAGNOSTIC_TYPE_BADGE[tp]}`}
-                      >
-                        {DIAGNOSTIC_TYPE_LABEL[tp]}
-                      </span>
-                      <span className="font-semibold text-[var(--oc-ink)]">
-                        {r.template.name}
-                      </span>
-                    </div>
-                    <div className="text-sm text-[var(--oc-muted)] mt-1">
-                      {r.vehicle.plate} · {r.vehicle.make} {r.vehicle.model}
-                    </div>
-                    <div className="text-xs text-[var(--oc-muted3)] mt-0.5 tabular-nums">
-                      {formatDate(r.createdAt)} · {r.branch.name}
-                      {r.mileageAtReport != null
-                        ? ` · ${r.mileageAtReport.toLocaleString("mn-MN")} км`
-                        : ""}
-                    </div>
-                  </div>
-                  {r.maxSeverity ? (
-                    <span
-                      className={`shrink-0 text-[11px] px-2.5 py-1 rounded-full border ${SEVERITY_BADGE[r.maxSeverity as ReportSeverity]}`}
-                    >
-                      {SEVERITY_LABEL[r.maxSeverity as ReportSeverity]}
+                <span
+                  aria-hidden
+                  className={`absolute inset-y-0 left-0 w-1 ${
+                    sev === "BAD" ? "bg-red-500" : sev === "WARN" ? "bg-amber-400" : sev === "GOOD" ? "bg-emerald-500" : "bg-[var(--oc-line)]"
+                  }`}
+                />
+                <DateTile date={r.createdAt} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-semibold leading-snug text-[var(--oc-ink)] group-hover:text-[var(--oc-accent)] transition-colors">
+                      {r.template.name}
                     </span>
-                  ) : null}
+                    {sev ? (
+                      <span className={`shrink-0 text-[11px] px-2 py-0.5 rounded-full border ${SEVERITY_BADGE[sev]}`}>
+                        {SEVERITY_LABEL[sev]}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[var(--oc-muted)]">
+                    <span className="rounded-md border border-[var(--oc-line)] bg-[var(--oc-panel2)] px-1.5 py-px font-plex-mono text-xs font-semibold text-[var(--oc-ink2)]">
+                      {r.vehicle.plate}
+                    </span>
+                    <span className="truncate">
+                      {r.vehicle.make} {r.vehicle.model}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--oc-muted3)] tabular-nums">
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full ${DIAGNOSTIC_TYPE_BADGE[tp]}`}>
+                      {DIAGNOSTIC_TYPE_LABEL[tp]}
+                    </span>
+                    <span>{r.branch.name}</span>
+                    {r.mileageAtReport != null ? (
+                      <span>· {r.mileageAtReport.toLocaleString("mn-MN")} км</span>
+                    ) : null}
+                    <span>· {formatDate(r.createdAt)}</span>
+                  </div>
+                </div>
+                <div className="self-center">
+                  <Chevron />
                 </div>
               </Link>
             );

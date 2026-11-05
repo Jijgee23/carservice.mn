@@ -12,7 +12,10 @@ import {
   SUBSCRIPTION_PAYMENT_METHOD_LABEL,
   SUBSCRIPTION_PAYMENT_STATUS_BADGE,
   SUBSCRIPTION_PAYMENT_STATUS_LABEL,
+  SELF_SERVE_PLANS,
 } from "@/lib/subscription";
+import { planFeatureLines } from "@/lib/plan-modules";
+import { getEnabledModules } from "@/lib/plan-modules-server";
 import { PlanCheckout } from "./plan-checkout";
 
 export const metadata = {
@@ -28,7 +31,7 @@ export default async function SubscriptionPage() {
   const user = await requireUser();
   const isOwner = user.isOwner;
 
-  const [subscriptions, planPrices, planFeatures, pendingPayment, payments] = await Promise.all([
+  const [subscriptions, planPrices, pendingPayment, payments, businessModules] = await Promise.all([
     prisma.subscription.findMany({
       where: { tenantId: user.tenantId },
       orderBy: { createdAt: "desc" },
@@ -36,12 +39,10 @@ export default async function SubscriptionPage() {
         createdBy: { select: { firstName: true, lastName: true, email: true } },
       },
     }),
+    // Зөвхөн тогтсон үнэтэй (QPay-ээр авах) багцууд — ENTERPRISE тохиролцоно.
     prisma.planPrice.findMany({
-      where: { isActive: true },
+      where: { isActive: true, plan: { in: [...SELF_SERVE_PLANS] } },
       orderBy: [{ plan: "asc" }, { period: "asc" }],
-    }),
-    prisma.planFeature.findMany({
-      orderBy: [{ plan: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
     }),
     prisma.subscriptionPayment.findFirst({
       where: { tenantId: user.tenantId, status: "PENDING" },
@@ -54,20 +55,9 @@ export default async function SubscriptionPage() {
       take: 50,
       select: { id: true, plan: true, period: true, amount: true, method: true, status: true, createdAt: true, paidAt: true },
     }),
+    // QPay-ээр авах багц (BUSINESS)-ийн модулиуд — картын «юу багтсан» жагсаалт.
+    getEnabledModules("BUSINESS"),
   ]);
-
-  const featuresByPlan: Record<
-    "FREE" | "BUSINESS" | "ENTERPRISE",
-    { label: string; value: string; description: string | null; highlighted: boolean }[]
-  > = { FREE: [], BUSINESS: [], ENTERPRISE: [] };
-  for (const f of planFeatures) {
-    featuresByPlan[f.plan].push({
-      label: f.label,
-      value: f.value,
-      description: f.description,
-      highlighted: f.highlighted,
-    });
-  }
 
   const active = resolveActiveSubscription(
     subscriptions.map((s) => ({
@@ -84,7 +74,7 @@ export default async function SubscriptionPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">Багц / Subscription</h1>
         <p className="text-sm text-[var(--oc-muted3)] mt-1">
-          Тенантынхаа багц, туршилтын статус, төлбөрийн түүх.
+          Тенантынхаа багц, хугацаа, төлбөрийн түүх.
         </p>
       </div>
 
@@ -92,12 +82,12 @@ export default async function SubscriptionPage() {
         {isOwner ? (
           <section className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-5 sm:p-6">
             <h2 className="font-semibold text-[var(--oc-ink)] mb-1">
-              {pendingPayment ? "QPay төлбөр" : "Багц авах / сунгах"}
+              {pendingPayment ? "QPay төлбөр" : "Багц ахиулах / сунгах"}
             </h2>
             <p className="text-xs text-[var(--oc-muted3)] mb-5">
               {pendingPayment
                 ? "QR-аар төлсний дараа багц автоматаар идэвхжинэ."
-                : "Боломжтой багцыг сонгож QPay-ээр төлнө үү."}
+                : "Бизнес багцыг сонгож QPay-ээр төлнө үү. Хугацаа дуусахад үнэгүй FREE багц руу шилжинэ."}
             </p>
             <PlanCheckout
               prices={planPrices.map((p) => ({
@@ -107,7 +97,7 @@ export default async function SubscriptionPage() {
                 amount: p.amount.toString(),
                 currency: p.currency,
                 notes: p.notes,
-                features: featuresByPlan[p.plan],
+                features: planFeatureLines(businessModules),
               }))}
               pending={
                 pendingPayment
@@ -165,10 +155,28 @@ export default async function SubscriptionPage() {
               </div>
             </div>
           ) : (
-            <p className="text-sm text-[var(--oc-muted3)]">
-              Идэвхтэй багц байхгүй. Багц авахын тулд carservice.mn-тэй холбоо
-              барина уу.
-            </p>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <div className="text-xs text-[var(--oc-muted3)]">Багц</div>
+                <div className="mt-1 text-lg font-semibold text-[var(--oc-ink)]">
+                  {/* Subscription-гүй үед tenant.plan-ыг харуулна (ихэвчлэн FREE;
+                      super admin гараар тавьсан багц ч байж болно). */}
+                  {PLAN_LABEL[user.tenant.plan]}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-[var(--oc-muted3)]">Статус</div>
+                <div className="mt-1">
+                  <span className={`text-xs px-2.5 py-1 rounded-full ${SUBSCRIPTION_STATUS_BADGE.ACTIVE}`}>
+                    {user.tenant.plan === "FREE" ? "Үнэгүй" : SUBSCRIPTION_STATUS_LABEL.ACTIVE}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-[var(--oc-muted3)]">Хугацаа</div>
+                <div className="mt-1 text-sm text-[var(--oc-ink2)]">Хугацаагүй</div>
+              </div>
+            </div>
           )}
         </section>
 

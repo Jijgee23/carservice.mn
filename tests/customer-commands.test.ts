@@ -145,32 +145,15 @@ test("the command module is the only one of the three files that talks to prisma
   assert.doesNotMatch(route, /prisma\.account\./);
 });
 
-test("MAX_CUSTOMERS quota is enforced once, inside the command, not per entry point", () => {
-  const commandSource = src("../lib/customers/customer-commands.ts");
-  assert.match(commandSource, /PLAN_LIMIT_CODES\.MAX_CUSTOMERS/);
-  const actions = src("../app/_actions/customers.ts");
-  const quickCreate = src("../app/_actions/quick-create.ts");
-  const route = src("../app/api/v1/customers/route.ts");
-  // Comments in the adapters may mention the quota by name for context; what
-  // must NOT reappear outside the command is the actual enforcement call.
-  assert.doesNotMatch(actions, /enforceCountLimit\(\s*user\.tenantId,\s*PLAN_LIMIT_CODES\.MAX_CUSTOMERS/);
-  assert.doesNotMatch(quickCreate, /enforceCountLimit\(\s*user\.tenantId,\s*PLAN_LIMIT_CODES\.MAX_CUSTOMERS/);
-  assert.doesNotMatch(route, /enforceCountLimit\([^)]*MAX_CUSTOMERS/);
+test("customer creation has no count quota on any entry point", () => {
+  for (const rel of ["../lib/customers/customer-commands.ts", "../app/_actions/customers.ts", "../app/_actions/quick-create.ts", "../app/api/v1/customers/route.ts"]) {
+    assert.doesNotMatch(src(rel), /enforceCountLimit|PLAN_LIMIT_REACHED|DAILY_LIMIT_REACHED|PLAN_LIMIT_CODES\.(MAX_|DAILY_)/, rel);
+  }
 });
 
-test("MAX_CUSTOMERS is enforced unconditionally, on every entry point", () => {
-  // D-154 (2026-09-22) superseded D-151: the user decided the plan limit is
-  // enforced everywhere. Before unification only the dashboard's full create
-  // action checked it, so quick-create and the API route were a way around a
-  // tenant's cap. That bypass is now deliberately closed.
-  //
-  // The per-caller flag is GONE, not set to true — an optional flag is an
-  // invitation to switch it off again. This test fails if one reappears.
+test("no per-caller plan-limit flag exists on customer creation", () => {
   const commandSource = src("../lib/customers/customer-commands.ts");
-  assert.match(commandSource, /PLAN_LIMIT_CODES\.MAX_CUSTOMERS/);
   assert.doesNotMatch(commandSource, /enforcePlanLimit/);
-  assert.doesNotMatch(commandSource, /if \(input\.enforcePlanLimit\)/);
-
   for (const caller of [
     "../app/_actions/customers.ts",
     "../app/_actions/quick-create.ts",

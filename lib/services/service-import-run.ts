@@ -1,6 +1,6 @@
 // Excel импортын мөрүүдийг үүсгэх цөм (server) — мөр бүр тусдаа (all-or-nothing
-// БИШ). Системд бүртгэлтэй кодтой мөрийг алгасна (хэрэглэгчийн шийдвэр),
-// багцын үлдсэн эрхээс хэтэрсэнийг «багцын хязгаар» болгоно. `create`-ийг
+// БИШ). Системд бүртгэлтэй кодтой мөрийг алгасна (хэрэглэгчийн шийдвэр).
+// Багцын тоон хязгаар байхгүй. `create`-ийг
 // inject хийдэг тул fake-ээр тестлэнэ.
 
 import {
@@ -19,8 +19,6 @@ export async function runServiceImport(input: {
   refs: NonNullable<ServiceRefs>;
   /** Тенант + төрөлд аль хэдийн бүртгэлтэй кодууд (UPPER). */
   existingCodes: ReadonlySet<string>;
-  remaining: number | null;
-  limitMessage: string;
   create: (values: ServiceCreateValues) => Promise<CreateServiceResult>;
 }): Promise<{ succeeded: number; failed: number; results: ServiceImportRowResult[] }> {
   const results: ServiceImportRowResult[] = [];
@@ -35,10 +33,6 @@ export async function runServiceImport(input: {
     const { values, errors } = validateServiceCreate(serviceRowToRaw(input.type, row), input.refs);
     if (!values) {
       results.push({ key: row.key, ok: false, error: "Оруулсан мэдээлэл буруу.", fieldErrors: errors });
-      continue;
-    }
-    if (input.remaining !== null && succeeded >= input.remaining) {
-      results.push({ key: row.key, ok: false, error: input.limitMessage });
       continue;
     }
     const created = await input.create(values);

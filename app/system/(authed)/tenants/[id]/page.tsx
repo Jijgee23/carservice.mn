@@ -23,6 +23,7 @@ import {
   formatDaysLeft,
   resolveActiveSubscription,
 } from "@/lib/subscription";
+import { CreditPanel } from "./credit-panel";
 import { SubscriptionPaymentCreateForm } from "./subscription-payment-create-form";
 import { SubscriptionPaymentRow } from "./subscription-payment-row";
 
@@ -176,6 +177,8 @@ export default async function SystemTenantDetailPage({
               />
             </dl>
           </section>
+
+          <CreditPanel tenant={tenant} />
 
           <section className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--oc-line2)]">

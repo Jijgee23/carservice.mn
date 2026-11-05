@@ -196,6 +196,8 @@ sudo certbot --nginx -d carservice.mn -d www.carservice.mn
 0 9 * * * curl -fsS -H "Authorization: Bearer ШИНИЙ_CRON_SECRET" https://carservice.mn/api/cron/subscription-reminders > /dev/null 2>&1
 # Хуучин (уншсан) мэдэгдэл цэвэрлэх — өдөр бүр 03:00
 0 3 * * * curl -fsS -H "Authorization: Bearer ШИНИЙ_CRON_SECRET" https://carservice.mn/api/cron/notifications-prune > /dev/null 2>&1
+# Credit score — өдөр бүр 04:00: оноо тооцож, босгоос доош бол автоматаар блоклоно
+0 4 * * * curl -fsS -H "Authorization: Bearer ШИНИЙ_CRON_SECRET" https://carservice.mn/api/cron/credit-scores > /dev/null 2>&1
 # Хугацаа дууссан ажилтныг идэвхгүй болгох (login өөрөө шалгадаг ч жагсаалтын
 # статусыг тогтвортой байлгана) — өдөр бүр 00:10
 10 0 * * * curl -fsS -H "Authorization: Bearer ШИНИЙ_CRON_SECRET" https://carservice.mn/api/cron/deactivate-expired-users > /dev/null 2>&1

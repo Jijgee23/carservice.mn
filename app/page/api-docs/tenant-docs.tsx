@@ -755,9 +755,12 @@ Res: 200 { "services": [{ "id": "...", "type": "...", "name": "...", "code": "..
 
         <Endpoint method="POST" path="/api/v1/services" auth="bearer" bearerLabel={BEARER} tags={["Багц идэвхтэй байх шаардлагатай"]} title="Шинэ ажил/сэлбэг/оношилгоо үүсгэх.">
           <Code>{`Req:  { "type": "GOODS", "name": "...", "price": 0, "code": "...", "costPrice": 0, "stock": 0, "unitId": "...", "categoryId": "...",
-        "durationValue": 1.5, "durationUnitId": "..." }   // type/name/price заавал
+        "durationValue": 1.5, "durationUnitId": "...", "catalogItemId": "..." }   // type/name/price заавал
+// LABOR/GOODS → нэгдсэн сан: catalogItemId өгвөл тэр мөртэй холбоно; эс бөгөөс кодоор (кодгүй бол нэрээр)
+// таарах мөртэй холбоно, олдохгүй бол санд шинээр нэмнэ. Холбогдсон бол name/code нь сангийнх (PATCH-аар засагдахгүй).
 Res:  200 { "service": {...} }
-400  { "error": "Төрөл буруу байна (LABOR | GOODS | DIAGNOSTIC)" } | { "error": "Нэр заавал шаардлагатай" } | { "error": "Үнэ буруу байна" }`}</Code>
+400  { "error": "Төрөл буруу байна (LABOR | GOODS | DIAGNOSTIC)" } | { "error": "Нэр заавал шаардлагатай" } | { "error": "Үнэ буруу байна" }
+409  { "error": "Энэ ажил/сэлбэг танд аль хэдийн бүртгэлтэй байна." }   // тенант тухайн сангийн мөрийг аль хэдийн холбосон`}</Code>
         </Endpoint>
 
         <Endpoint method="GET" path="/api/v1/services/[id]" auth="bearer" bearerLabel={BEARER} title="Ганц үйлчилгээний дэлгэрэнгүй.">

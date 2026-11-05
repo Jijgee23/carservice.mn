@@ -78,23 +78,23 @@ export function BookingCalendar({
   }
 
   return (
-    <div className="w-full rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
+    <div className="w-full rounded-xl border border-[var(--oc-line)] bg-[var(--oc-panel)] p-3">
       <div className="mb-2 flex items-center justify-between">
         <button
           type="button"
           onClick={prevMonth}
-          className="grid h-8 w-8 place-items-center rounded-lg text-white/60 hover:bg-white/10 hover:text-white transition-colors"
+          className="grid h-8 w-8 place-items-center rounded-lg text-[var(--oc-muted)] hover:bg-[var(--oc-panel2)] hover:text-[var(--oc-ink)] transition-colors"
           aria-label="Өмнөх сар"
         >
           ‹
         </button>
-        <div className="text-sm font-medium text-white">
+        <div className="text-sm font-semibold text-[var(--oc-ink)]">
           {view.year} оны {view.month + 1}-р сар
         </div>
         <button
           type="button"
           onClick={nextMonth}
-          className="grid h-8 w-8 place-items-center rounded-lg text-white/60 hover:bg-white/10 hover:text-white transition-colors"
+          className="grid h-8 w-8 place-items-center rounded-lg text-[var(--oc-muted)] hover:bg-[var(--oc-panel2)] hover:text-[var(--oc-ink)] transition-colors"
           aria-label="Дараах сар"
         >
           ›
@@ -105,7 +105,7 @@ export function BookingCalendar({
         {WEEKDAYS.map((w) => (
           <div
             key={w}
-            className="grid h-7 place-items-center text-[11px] font-medium text-white/35"
+            className="grid h-7 place-items-center text-[11px] font-medium text-[var(--oc-muted3)]"
           >
             {w}
           </div>
@@ -139,13 +139,13 @@ export function BookingCalendar({
               onClick={() => onChange(ds)}
               className={`relative grid h-11 place-items-center rounded-lg text-sm transition-colors ${
                 disabled
-                  ? "cursor-not-allowed text-white/15"
+                  ? "cursor-not-allowed text-[var(--oc-muted4)] opacity-60"
                   : selected
-                    ? "bg-violet-600 font-semibold text-white"
+                    ? "bg-[var(--oc-accent)] font-semibold text-[var(--oc-on-accent)] shadow-sm"
                     : inMonth
-                      ? "text-white/85 hover:bg-white/10"
-                      : "text-white/25 hover:bg-white/5"
-              } ${isToday && !selected ? "ring-1 ring-inset ring-violet-400/50" : ""}`}
+                      ? "text-[var(--oc-ink)] hover:bg-[var(--oc-accent)]/10"
+                      : "text-[var(--oc-muted4)] hover:bg-[var(--oc-panel2)]"
+              } ${isToday && !selected ? "ring-1 ring-inset ring-[var(--oc-accent)]/60" : ""}`}
             >
               {d.getDate()}
             </button>

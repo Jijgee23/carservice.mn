@@ -6,6 +6,7 @@ import { deleteOrderAction } from "@/app/_actions/orders";
 import { ConfirmForm } from "@/app/_components/confirm-form";
 import { Btn } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
+import { getEnabledModules } from "@/lib/plan-modules-server";
 import {
   orderAssignableWhere,
   canCreate,
@@ -66,6 +67,7 @@ export default async function OrderDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const user = await requireUser();
+  const diagnosticsInPlan = (await getEnabledModules(user.tenant.plan)).has("enable_diagnostics");
   if (!canView(user, "orders")) redirect("/dashboard");
   const canChangeItemStatus = hasPermission(user, "orders.itemStatus");
   const canChangeItemPrice = hasPermission(user, "orders.itemPrice");
@@ -370,7 +372,7 @@ export default async function OrderDetailPage({
                   </strong>
                 </p>
               </div>
-              {diagnosticTemplates.length === 0 && canEditOrder ? (
+              {diagnosticTemplates.length === 0 && canEditOrder && diagnosticsInPlan ? (
                 <Link
                   href="/dashboard/services/diagnostics/new"
                   className="shrink-0 text-xs text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)]"

@@ -7,13 +7,33 @@ import { test } from "node:test";
 
 const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 
-test("isTenantPublic hides suspended and test tenants", async () => {
+test("isTenantPublic hides suspended, test and credit-hidden tenants", async () => {
   const { isTenantPublic, PUBLIC_TENANT_WHERE } = await import("../lib/tenant-visibility");
-  assert.equal(isTenantPublic({ suspended: false, isTest: false }), true);
-  assert.equal(isTenantPublic({ suspended: false, isTest: true }), false);
-  assert.equal(isTenantPublic({ suspended: true, isTest: false }), false);
-  assert.deepEqual(PUBLIC_TENANT_WHERE, { suspended: false, isTest: false });
+  assert.equal(isTenantPublic({ suspended: false, isTest: false, creditHidden: false }), true);
+  assert.equal(isTenantPublic({ suspended: false, isTest: true, creditHidden: false }), false);
+  assert.equal(isTenantPublic({ suspended: true, isTest: false, creditHidden: false }), false);
+  assert.equal(isTenantPublic({ suspended: false, isTest: false, creditHidden: true }), false);
+  assert.deepEqual(PUBLIC_TENANT_WHERE, { suspended: false, isTest: false, creditHidden: false });
 });
+
+// Every public tenant query/guard must also exclude tenants hidden by a low credit score.
+for (const file of [
+  "lib/discovery-catalog.ts",
+  "app/(app)/discover/page.tsx",
+  "app/(app)/org/[slug]/page.tsx",
+  "app/(app)/org/[slug]/branch/[branchId]/page.tsx",
+  "app/(app)/book/branch/[branchId]/page.tsx",
+  "app/_actions/book.ts",
+  "app/api/v1/app/orgs/[slug]/route.ts",
+]) {
+  test(`public query excludes credit-hidden tenants: ${file}`, () => {
+    const src = read(file);
+    const all = src.match(/acceptsOnlineBooking: true,?\s*suspended: false/g) ?? [];
+    const hidden = src.match(/acceptsOnlineBooking: true,?\s*suspended: false,?\s*isTest: false,?(?:\s*\/\/[^\n]*)?\s*creditHidden: false/g) ?? [];
+    assert.ok(all.length > 0);
+    assert.equal(hidden.length, all.length, file);
+  });
+}
 
 test("schema + migration add Tenant.isTest defaulting to false", () => {
   assert.match(read("prisma/schema.prisma"), /isTest\s+Boolean\s+@default\(false\)/);
@@ -43,14 +63,14 @@ for (const file of PUBLIC_QUERIES) {
   });
 }
 
-test("online booking guards reject test tenants (staff registration still allowed)", () => {
+test("online booking guards reject test and credit-hidden tenants (staff registration still allowed)", () => {
   assert.match(read("lib/public-availability.ts"), /branch\.tenant\.isTest \|\|/);
   assert.match(
     read("lib/appointment-reservations.ts"),
-    /!input\.staffUserId && \(!branch\.tenant\.acceptsOnlineBooking \|\| branch\.tenant\.isTest\)/,
+    /!input\.staffUserId && \(!branch\.tenant\.acceptsOnlineBooking \|\| branch\.tenant\.isTest \|\| branch\.tenant\.creditHidden\)/,
   );
   for (const file of ["app/_actions/appointments.ts", "app/api/v1/app/appointments/route.ts"]) {
-    assert.match(read(file), /branch\.tenant\.suspended \|\| branch\.tenant\.isTest\)/, file);
+    assert.match(read(file), /branch\.tenant\.suspended \|\| branch\.tenant\.isTest \|\| branch\.tenant\.creditHidden\)/, file);
   }
 });
 

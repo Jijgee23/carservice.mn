@@ -20,6 +20,7 @@ export type ImportServiceKind = "LABOR" | "GOODS";
 export type ServiceImportField =
   | "name"
   | "code"
+  | "barcode"
   | "category"
   | "unit"
   | "price"
@@ -47,6 +48,7 @@ const DESCRIPTION: ImportFieldDef<ServiceImportField> = {
 export const SERVICE_IMPORT_FIELDS: Record<ImportServiceKind, ReadonlyArray<ImportFieldDef<ServiceImportField>>> = {
   GOODS: [
     ...COMMON_HEAD,
+    { key: "barcode", label: "Баркод", required: false, aliases: ["баркод", "barcode", "bar code", "ean", "upc"] },
     { key: "costPrice", label: "Өртөг", required: false, aliases: ["өртөг", "өртөг үнэ", "авах үнэ", "cost"] },
     { key: "stock", label: "Үлдэгдэл", required: false, aliases: ["үлдэгдэл", "нөөц", "тоо ширхэг", "stock", "qty"] },
     DESCRIPTION,
@@ -74,7 +76,7 @@ export function guessServiceMapping(type: ImportServiceKind, headers: readonly s
   const base = guessFieldMapping(fields, headers);
   // Тухайн төрөлд хамаарахгүй талбарууд ч түлхүүртэй байна (null).
   const all: ServiceImportField[] = [
-    "name", "code", "category", "unit", "price", "costPrice", "stock",
+    "name", "code", "barcode", "category", "unit", "price", "costPrice", "stock",
     "durationValue", "durationUnit", "reminderIntervalMonths", "description",
   ];
   return Object.fromEntries(all.map((k) => [k, base[k] ?? null])) as ServiceImportMapping;
@@ -106,6 +108,7 @@ export type ServiceImportRow = {
   excelRow: number;
   name: string;
   code: string;
+  barcode: string;
   categoryId: string;
   categoryRaw: string;
   unitId: string;
@@ -136,6 +139,7 @@ export function buildServiceImportRows(
       excelRow,
       name: get("name"),
       code: get("code").toUpperCase(),
+      barcode: get("barcode"),
       categoryId: matchCategory(categories, categoryRaw),
       categoryRaw,
       unitId: matchUnit(units, unitRaw),
@@ -157,6 +161,7 @@ export function serviceRowToRaw(type: ImportServiceKind, row: ServiceImportRow):
     type,
     name: row.name,
     code: row.code,
+    barcode: type === "GOODS" ? (row.barcode ?? "") : "",
     unitId: row.unitId,
     price: row.price,
     costPrice: type === "GOODS" ? row.costPrice : "",
@@ -198,7 +203,7 @@ export function findInFileDuplicateCodes(rows: readonly ServiceImportRow[]): Map
 export const SERVICE_CODE_EXISTS_MESSAGE = "Энэ код бүртгэлтэй — алгасна.";
 
 const ROW_STRING_FIELDS = [
-  "key", "name", "code", "categoryId", "categoryRaw", "unitId", "unitRaw", "price", "costPrice",
+  "key", "name", "code", "barcode", "categoryId", "categoryRaw", "unitId", "unitRaw", "price", "costPrice",
   "stock", "durationValue", "durationUnitId", "durationUnitRaw", "reminderIntervalMonths", "description",
 ] as const;
 const MAX_CELL = 300;

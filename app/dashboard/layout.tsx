@@ -1,4 +1,4 @@
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import {
   AdminSidebar,
   MobileTopbar,
@@ -14,18 +14,20 @@ import { canChooseAllBranches, eligibleBranchIds } from "@/lib/auth/roles";
 import { ALL_BRANCHES } from "@/lib/auth/session";
 import { resolveTodayLockedBranch } from "@/lib/employee-branch-lock";
 import { getAppStoreLinks } from "@/lib/platform-settings";
+import { MODULE_LIMIT_CODES } from "@/lib/plan-limits";
+import { getEnabledModules } from "@/lib/plan-modules-server";
 import { prisma } from "@/lib/prisma";
 import { getSubscriptionState } from "@/lib/subscription-server";
 import { setTenantContext } from "@/lib/tenant-context";
 
 // Ops Console дизайны фонт — landing/auth хуудсуудтай ижил механизм, зөвхөн
 // dashboard route-д scoped (бусад апп — account/system — Geist хэвээр).
-const plexSans = IBM_Plex_Sans({
+const plexSans = Geist({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-plex-sans",
 });
-const plexMono = IBM_Plex_Mono({
+const plexMono = Geist_Mono({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600"],
   variable: "--font-plex-mono",
@@ -56,7 +58,7 @@ export default async function DashboardLayout({
   const eligible = eligibleBranchIds(user);
   const restrictToEligible = !user.isOwner && eligible.length > 0;
 
-  const [subState, unreadNotifications, switchableBranches, lockedBranch, appLinks] = await Promise.all([
+  const [subState, unreadNotifications, switchableBranches, lockedBranch, appLinks, enabledModules] = await Promise.all([
     getSubscriptionState(user.tenantId),
     prisma.notification.count({
       where: { userId: user.id, readAt: null },
@@ -76,7 +78,10 @@ export default async function DashboardLayout({
     resolveTodayLockedBranch(user),
     // Засварын газрын аппын store холбоос — tenant context-ыг өөрчлөхгүй уншина.
     getAppStoreLinks().then((l) => l.business),
+    // Багцад ороогүй модулиуд — цэсэнд түгжээ тэмдэгтэй харагдана.
+    getEnabledModules(user.tenant.plan),
   ]);
+  const lockedModules = MODULE_LIMIT_CODES.filter((m) => !enabledModules.has(m));
 
   return (
     <ToastProvider>
@@ -91,6 +96,7 @@ export default async function DashboardLayout({
           tenantLogoUrl={user.tenant.logoUrl}
           isOwner={user.isOwner}
           permissions={user.role?.permissions ?? []}
+          lockedModules={lockedModules}
           notificationUnread={unreadNotifications}
           appLinks={appLinks}
         />
@@ -103,6 +109,7 @@ export default async function DashboardLayout({
             initials={initials.toUpperCase()}
             isOwner={user.isOwner}
             permissions={user.role?.permissions ?? []}
+          lockedModules={lockedModules}
             notificationUnread={unreadNotifications}
           appLinks={appLinks}
           />

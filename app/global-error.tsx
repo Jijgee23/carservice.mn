@@ -37,7 +37,7 @@ export default function GlobalError({
             type="button"
             onClick={() => unstable_retry()}
             style={{
-              background: "#7c3aed",
+              background: "#c0392b",
               color: "#fff",
               fontWeight: 600,
               fontSize: "0.875rem",

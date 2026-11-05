@@ -1,5 +1,7 @@
 "use server";
 
+import { moduleDisabledMessage } from "@/lib/plan-modules";
+import { isModuleEnabled } from "@/lib/plan-modules-server";
 import { revalidatePath } from "next/cache";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { requireAccount } from "@/lib/auth/account";
@@ -141,13 +143,13 @@ export async function createAppointment(
     select: {
       id: true,
       tenantId: true,
-      tenant: { select: { acceptsOnlineBooking: true, suspended: true, isTest: true } },
+      tenant: { select: { acceptsOnlineBooking: true, suspended: true, isTest: true, creditHidden: true } },
     },
   });
   if (!branch) {
     return { ok: false, fieldErrors: { branchId: "Салбар олдсонгүй." } };
   }
-  if (!branch.tenant.acceptsOnlineBooking || branch.tenant.suspended || branch.tenant.isTest) {
+  if (!branch.tenant.acceptsOnlineBooking || branch.tenant.suspended || branch.tenant.isTest || branch.tenant.creditHidden) {
     return {
       ok: false,
       message: "Энэ байгууллага онлайн цаг захиалга хүлээн авахгүй байна.",
@@ -326,6 +328,9 @@ export async function registerAppointmentByStaff(
   formData: FormData,
 ): Promise<AppointmentActionState> {
   const user = await requireUser();
+  if (!(await isModuleEnabled(user.tenantId, "enable_appointments"))) {
+    return { ok: false, message: moduleDisabledMessage("enable_appointments") };
+  }
   if (!canCreate(user, "appointments")) {
     return { ok: false, message: "Танд цаг захиалга бүртгэх эрх байхгүй." };
   }
@@ -402,6 +407,9 @@ export async function repairAppointmentOrderLinkAction(
   } catch (e) {
     unstable_rethrow(e);
     return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
+  }
+  if (!(await isModuleEnabled(user.tenantId, "enable_appointments"))) {
+    return { ok: false, message: moduleDisabledMessage("enable_appointments") };
   }
 
   const appointment = await prisma.appointment.findUnique({
@@ -576,6 +584,9 @@ export async function confirmAppointment(
     unstable_rethrow(e);
     return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
   }
+  if (!(await isModuleEnabled(user.tenantId, "enable_appointments"))) {
+    return { ok: false, message: moduleDisabledMessage("enable_appointments") };
+  }
 
   try {
     await confirmAppointmentCommand({
@@ -612,6 +623,9 @@ export async function setAppointmentAssigneeAction(
     } catch (e) {
       unstable_rethrow(e);
       return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
+    }
+    if (!(await isModuleEnabled(user.tenantId, "enable_appointments"))) {
+      return { ok: false, message: moduleDisabledMessage("enable_appointments") };
     }
     await setAppointmentAssigneeCommand({
       actor: actorFrom(user),
@@ -650,6 +664,9 @@ export async function rejectAppointment(
     unstable_rethrow(e);
     return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
   }
+  if (!(await isModuleEnabled(user.tenantId, "enable_appointments"))) {
+    return { ok: false, message: moduleDisabledMessage("enable_appointments") };
+  }
 
   try {
     await rejectAppointmentCommand({ actor: actorFrom(user), appointmentId: id });
@@ -679,6 +696,9 @@ export async function markAppointmentNoShow(
   } catch (e) {
     unstable_rethrow(e);
     return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
+  }
+  if (!(await isModuleEnabled(user.tenantId, "enable_appointments"))) {
+    return { ok: false, message: moduleDisabledMessage("enable_appointments") };
   }
 
   try {
@@ -726,6 +746,9 @@ export async function rescheduleAppointmentAction(
       unstable_rethrow(e);
       logUnexpectedActionError("appointments:reschedule-auth", e);
       return { ok: false, message: ACTION_GENERIC_ERROR_MESSAGE };
+    }
+    if (!(await isModuleEnabled(user.tenantId, "enable_appointments"))) {
+      return { ok: false, message: moduleDisabledMessage("enable_appointments") };
     }
 
     const result = await rescheduleAppointmentCommand({
@@ -777,6 +800,9 @@ export async function markAppointmentArrived(
     unstable_rethrow(e);
     return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
   }
+  if (!(await isModuleEnabled(user.tenantId, "enable_appointments"))) {
+    return { ok: false, message: moduleDisabledMessage("enable_appointments") };
+  }
 
   try {
     await markAppointmentArrivedCommand({ actor: actorFrom(user), appointmentId: id });
@@ -803,6 +829,9 @@ export async function bulkChangeAppointmentCategoryAction(
   } catch (e) {
     unstable_rethrow(e);
     return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
+  }
+  if (!(await isModuleEnabled(user.tenantId, "enable_appointments"))) {
+    return { ok: false, message: moduleDisabledMessage("enable_appointments") };
   }
   if (!canEdit(user, "appointments")) {
     return { ok: false, message: "Танд цаг захиалга удирдах эрх байхгүй." };

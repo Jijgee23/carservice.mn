@@ -166,14 +166,14 @@ export function BookingForm({
                     .map((c) => (
                       <span
                         key={c.id}
-                        className="px-3 py-1.5 rounded-lg border border-violet-500 bg-violet-600 text-white text-sm font-medium"
+                        className="px-3 py-1.5 rounded-full border border-[var(--oc-accent)] bg-[var(--oc-accent)]/10 text-[var(--oc-accent)] text-sm font-medium"
                       >
                         {c.name}
                       </span>
                     ))}
                 </div>
                 {categoryIds.length > 0 ? (
-                  <p className="text-xs text-white/40 mt-2">
+                  <p className="text-xs text-[var(--oc-muted3)] mt-2">
                     Нийт ойролцоогоор {formatDuration(selectedDurationMinutes)}
                   </p>
                 ) : null}
@@ -183,7 +183,7 @@ export function BookingForm({
             <Field label="Үйлчилгээ" htmlFor="category-0" hint="заавал биш">
               <div className="flex flex-col gap-2">
                 {categoryIds.length > 0 ? (
-                  <p className="text-xs text-white/40">
+                  <p className="text-xs text-[var(--oc-muted3)]">
                     Нийт ойролцоогоор {formatDuration(selectedDurationMinutes)}
                   </p>
                 ) : null}
@@ -194,10 +194,10 @@ export function BookingForm({
                       <label
                         key={c.id}
                         htmlFor={`category-${i}`}
-                        className={`px-3 py-1.5 rounded-lg border text-sm cursor-pointer transition-colors select-none ${
+                        className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full border text-sm cursor-pointer transition-colors select-none ${
                           checked
-                            ? "bg-violet-600 border-violet-500 text-white font-medium"
-                            : "border-white/[0.12] bg-white/[0.04] text-white/70 hover:border-violet-500/40"
+                            ? "border-[var(--oc-accent)] bg-[var(--oc-accent)]/10 text-[var(--oc-accent)] font-medium"
+                            : "border-[var(--oc-line)] bg-[var(--oc-panel)] text-[var(--oc-ink2)] hover:border-[var(--oc-muted4)]"
                         }`}
                       >
                         <input
@@ -207,6 +207,7 @@ export function BookingForm({
                           checked={checked}
                           onChange={(e) => toggleCategory(c.id, e.target.checked)}
                         />
+                        {checked ? <span aria-hidden>✓</span> : null}
                         {c.name}
                       </label>
                     );
@@ -275,7 +276,7 @@ export function BookingForm({
               <button
                 type="button"
                 onClick={() => setShowVehForm((v) => !v)}
-                className="shrink-0 px-2.5 rounded-lg border border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/20 text-violet-200 light:bg-violet-100 light:hover:bg-violet-200 light:border-violet-300 light:text-violet-700 text-xs font-medium transition-colors"
+                className="shrink-0 w-10 rounded-lg border border-[var(--oc-accent)]/30 bg-[var(--oc-accent)]/10 hover:bg-[var(--oc-accent)]/20 text-[var(--oc-accent)] text-base font-semibold transition-colors"
                 title="Шинэ машин нэмэх"
               >
                 {showVehForm ? "✕" : "+"}
@@ -317,9 +318,9 @@ export function BookingForm({
       <button
         type="submit"
         disabled={pending || !selectedIso || !branchId}
-        className="self-start bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all px-6 py-2.5 rounded-xl font-medium text-sm"
+        className="w-full sm:w-auto sm:self-end inline-flex items-center justify-center gap-2 bg-[var(--oc-accent)] text-[var(--oc-on-accent)] hover:bg-[var(--oc-accent-hi)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors px-8 py-3 rounded-xl font-semibold text-sm shadow-sm"
       >
-        {pending ? "..." : "Цаг захиалах"}
+        {pending ? "Илгээж байна..." : !selectedIso ? "Өдөр, цагаа сонгоно уу" : <>Цаг захиалах <span aria-hidden>→</span></>}
       </button>
     </form>
   );

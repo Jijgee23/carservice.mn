@@ -47,7 +47,6 @@ function isLimitCode(v: string): v is PlanLimitCode {
  * Form fields:
  *   plan: FREE | BUSINESS | ENTERPRISE
  *   code: PlanLimitCode
- *   intValue: string ("" = unlimited)
  *   boolValue: "on" | undefined
  *   highlighted: "on" | undefined
  */
@@ -59,7 +58,6 @@ export async function updatePlanLimitAction(
 
   const plan = s(formData, "plan");
   const code = s(formData, "code");
-  const intRaw = s(formData, "intValue");
   const boolOn = formData.get("boolValue") === "on";
   const highlighted = formData.get("highlighted") === "on";
 
@@ -68,23 +66,8 @@ export async function updatePlanLimitAction(
 
   const meta = PLAN_LIMIT_META[code];
 
-  let intValue: number | null = null;
-  let boolValue: boolean | null = null;
-  if (meta.kind === "COUNT") {
-    if (intRaw === "" || intRaw === "-") {
-      intValue = null; // unlimited
-    } else {
-      const n = Number.parseInt(intRaw.replace(/\D+/g, ""), 10);
-      if (!Number.isFinite(n) || n < 0) {
-        return { ok: false, fieldErrors: { intValue: "Эерэг бүхэл тоо." } };
-      }
-      intValue = n;
-    }
-  } else {
-    boolValue = boolOn;
-  }
-
-  const def = DEFAULT_PLAN_LIMITS[plan][code];
+  // Зөвхөн модуль (BOOLEAN) — тоон хязгаар байхгүй.
+  const boolValue = boolOn;
 
   try {
     await prisma.planLimit.upsert({
@@ -95,14 +78,13 @@ export async function updatePlanLimitAction(
         label: meta.label,
         description: meta.description,
         kind: meta.kind,
-        intValue: meta.kind === "COUNT" ? intValue : def.intValue,
-        boolValue: meta.kind === "BOOLEAN" ? boolValue : def.boolValue,
+        intValue: null,
+        boolValue,
         sortOrder: meta.sortOrder,
         highlighted,
       },
       update: {
-        intValue: meta.kind === "COUNT" ? intValue : undefined,
-        boolValue: meta.kind === "BOOLEAN" ? boolValue : undefined,
+        boolValue,
         highlighted,
         // label/description гэх мэт meta-г үргэлж шинэчилнэ — кодын тодорхойлолт өөрчилбөл
         label: meta.label,

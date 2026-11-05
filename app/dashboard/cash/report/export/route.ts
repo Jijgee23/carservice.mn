@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth";
+import { moduleGateForPlan } from "@/lib/plan-modules-server";
 import { CashError } from "@/lib/cash/rules";
 import { buildCashSummary } from "@/lib/cash/report";
 import { buildCashSummaryWorkbook, cashSummaryFilename } from "@/lib/cash/report-export";
@@ -8,6 +9,8 @@ import { MAX_REPORT_RANGE_DAYS, parseRange, validateReportRangeParams } from "@/
 // «Мөнгөн гүйлгээний тайлан»-г .xlsx болгож татна (cash.manage). Дата тооцоолол lib/cash/report.ts-д.
 export async function GET(req: Request) {
   const user = await requireUser();
+  const blocked = await moduleGateForPlan(user.tenant.plan, ["enable_finance"]);
+  if (blocked) return blocked;
   const { searchParams } = new URL(req.url);
   const invalid = validateReportRangeParams({ from: searchParams.get("from"), to: searchParams.get("to") });
   if (invalid) return Response.json({ error: invalid.message, code: "VALIDATION", fieldErrors: { [invalid.field]: invalid.message } }, { status: 422 });

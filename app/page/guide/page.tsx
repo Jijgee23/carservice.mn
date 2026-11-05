@@ -1,17 +1,17 @@
 import Link from "next/link";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { Brand } from "@/app/_components/brand";
 import { Footer } from "@/app/_components/footer";
 import { CONTACT } from "@/lib/contact";
 
 // Privacy/terms хуудастай ижил "Ops Console" shell — `.landing-ops` дор
 // `--oc-*` token-ууд dark/light хоёуланд зөв харагдана.
-const plexSans = IBM_Plex_Sans({
+const plexSans = Geist({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-plex-sans",
 });
-const plexMono = IBM_Plex_Mono({
+const plexMono = Geist_Mono({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600"],
   variable: "--font-plex-mono",
@@ -111,8 +111,8 @@ export default function GuidePage() {
         <Section title="Засварын газар, ажилтнуудад зориулсан">
           <ul className="list-disc pl-5 space-y-1">
             <li>
-              <span className="text-[var(--oc-ink2)] font-medium">Бүртгүүлэх:</span> 14 хоног
-              үнэгүй туршилтаар эхлэх боломжтой, карт шаардлагагүй.
+              <span className="text-[var(--oc-ink2)] font-medium">Бүртгүүлэх:</span> үндсэн
+              (FREE) багц үргэлж үнэгүй, карт шаардлагагүй. Хэрэгцээ өсөхөд Бизнес багц руу ахиулна.
             </li>
             <li>
               <span className="text-[var(--oc-ink2)] font-medium">Багаа урих:</span> менежер,

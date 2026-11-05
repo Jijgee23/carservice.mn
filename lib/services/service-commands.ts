@@ -80,6 +80,7 @@
 //     partially succeed. This matches the original action's early-return
 //     shape exactly.
 
+import { isValidBarcode, normalizeBarcode } from "@/lib/catalog/normalize";
 import { categoryAllowsKind, categoryKindLabel } from "@/lib/categories";
 import { Prisma } from "@/app/generated/prisma/client";
 import { logAudit } from "@/lib/audit";
@@ -121,6 +122,8 @@ export type ServiceUpdateInput = {
   type: string;
   name: string;
   code?: string | null;
+  /** Баркод (зөвхөн GOODS). `undefined` = өөрчлөхгүй (хуучин мобайл апп илгээдэггүй). */
+  barcode?: string | null;
   unitId?: string | null;
   price: DecimalInput;
   costPrice?: DecimalInput;
@@ -138,6 +141,8 @@ export type NormalizedServiceUpdateData = {
   type: ServiceKind;
   name: string;
   code: string | null;
+  /** undefined = хөндөхгүй */
+  barcode?: string | null;
   unitId: string | null;
   price: Prisma.Decimal;
   costPrice: Prisma.Decimal | null;
@@ -260,6 +265,13 @@ export function validateServiceUpdateInput(
     }
   }
 
+  // Баркод — зөвхөн GOODS; илгээгээгүй (undefined) бол хөндөхгүй.
+  let barcode: string | null | undefined;
+  if (type === "GOODS" && input.barcode !== undefined) {
+    barcode = normalizeBarcode(input.barcode);
+    if (barcode && !isValidBarcode(barcode)) fieldErrors.barcode = "Баркод буруу (4–64 тэмдэгт: тоо, үсэг, - .).";
+  }
+
   // Бүх төрөлд ангилал заавал.
   if (!categoryIdRaw) {
     fieldErrors.categoryId = "Ангилал сонгоно уу.";
@@ -272,6 +284,7 @@ export function validateServiceUpdateInput(
       type,
       name,
       code: code || null,
+      barcode,
       unitId: unitIdRaw || null,
       price: price ?? new Prisma.Decimal(0),
       costPrice,
@@ -335,11 +348,24 @@ export async function updateServiceCommand(input: {
     throw new ServiceCommandError("Хүсэлт буруу.", 422, "VALIDATION_FAILED", fieldErrors);
   }
 
+  // Нэгдсэн сантай холбогдсон бол нэр/код нь сангийнх — тенант засахгүй
+  // (зөвхөн super admin /system/catalog-оос; холбогдсон service-үүдэд sync).
+  const current = await prisma.service.findFirst({
+    where: { id: serviceId, tenantId: actor.tenantId },
+    select: { catalogItemId: true, name: true, code: true },
+  });
+  if (current?.catalogItemId) {
+    data.name = current.name;
+    data.code = current.code;
+    data.barcode = undefined; // сангийнх — super admin засна
+  }
+
   // `type` and `stock` are intentionally absent from this payload — see
   // module doc comment.
   const update: Prisma.ServiceUncheckedUpdateManyInput = {
     name: data.name,
     code: data.code,
+    barcode: data.barcode,
     price: data.price,
     costPrice: data.costPrice,
     durationValue: data.durationValue,

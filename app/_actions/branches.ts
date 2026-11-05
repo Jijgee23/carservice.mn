@@ -17,8 +17,8 @@ import {
   isWeekday,
 } from "@/lib/branches";
 import { isValidPhone, normalizePhone } from "@/lib/phone";
-import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
-import { enforceCountLimit } from "@/lib/plan-limits-server";
+import { moduleDisabledMessage } from "@/lib/plan-modules";
+import { isModuleEnabled } from "@/lib/plan-modules-server";
 import { prisma } from "@/lib/prisma";
 import { resolveEffectiveSchedule } from "@/lib/branch-effective-schedule";
 import { applyScheduleClips, inspectScheduleImpact, type ScheduleImpact } from "@/lib/branch-schedule-impact";
@@ -275,14 +275,12 @@ export async function createBranchAction(
     return { ok: false, fieldErrors: p.errors };
   }
 
-  // Багцын хязгаар: max_branches
-  const limit = await enforceCountLimit(
-    user.tenantId,
-    PLAN_LIMIT_CODES.MAX_BRANCHES,
-    () => prisma.branch.count({ where: { tenantId: user.tenantId } }),
-  );
-  if (!limit.allowed) {
-    return { ok: false, message: limit.message };
+  // Багцын модуль: «Олон салбар» хаалттай бол зөвхөн нэг салбартай байна.
+  if (!(await isModuleEnabled(user.tenantId, "enable_multi_branch"))) {
+    const existing = await prisma.branch.count({ where: { tenantId: user.tenantId } });
+    if (existing >= 1) {
+      return { ok: false, message: moduleDisabledMessage("enable_multi_branch") };
+    }
   }
 
   const tagIds = await validTagIds(p.tagIds);

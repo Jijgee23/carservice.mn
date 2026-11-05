@@ -61,7 +61,7 @@ export function Modal({
             type="button"
             onClick={onClose}
             aria-label="Хаах"
-            className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-[var(--oc-muted3)] hover:text-[var(--oc-ink)] hover:bg-white/[0.08] transition-colors"
+            className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-[var(--oc-muted3)] hover:text-[var(--oc-ink)] hover:bg-[var(--oc-panel2)] transition-colors"
           >
             <svg
               width="16"

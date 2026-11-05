@@ -14,6 +14,7 @@
 // only one feature can throw — come in through `extraMessages`, and should be
 // passed as named constants shared with their throw site, never as literals.
 
+import { ModuleDisabledError } from "@/lib/plan-modules";
 import { SUBSCRIPTION_LOCKED_MESSAGE } from "@/lib/subscription";
 
 /** What the user sees when the error was not one we recognise. */
@@ -31,6 +32,8 @@ export function knownAuthorizationMessage(
 ): string | null {
   if (!(error instanceof Error)) return null;
   if (error.message === SUBSCRIPTION_LOCKED_MESSAGE) return SUBSCRIPTION_LOCKED_MESSAGE;
+  // Багцад ороогүй модулийн үйлдэл (assertModuleEnabled) — мессеж нь аюулгүй.
+  if (error instanceof ModuleDisabledError) return error.message;
   if (extraMessages.includes(error.message)) return error.message;
   return null;
 }

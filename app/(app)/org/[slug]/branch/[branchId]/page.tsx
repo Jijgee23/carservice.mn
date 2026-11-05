@@ -1,5 +1,16 @@
+import { PublicReviews } from "@/app/_components/public-reviews";
+import { loadPublicReviews } from "@/lib/reviews-public";
 import { BOOKABLE_CATEGORY_WHERE } from "@/lib/categories";
 import Link from "next/link";
+import type { ReactNode } from "react";
+import {
+  BackLink,
+  OpenStatusBadge,
+  Panel,
+  PlaceHeader,
+  RatingPill,
+  ServiceChips,
+} from "@/app/(app)/_components/consumer-ui";
 import { notFound } from "next/navigation";
 import { distanceKm } from "@/lib/branch-filters";
 import {
@@ -24,7 +35,7 @@ export const dynamic = "force-dynamic";
 
 async function loadOrg(slug: string) {
   return await prisma.tenant.findFirst({
-    where: { slug, acceptsOnlineBooking: true, suspended: false, isTest: false },
+    where: { slug, acceptsOnlineBooking: true, suspended: false, isTest: false, creditHidden: false },
     select: { id: true, slug: true, name: true, logoUrl: true, phone1: true },
   });
 }
@@ -43,6 +54,8 @@ async function loadBranch(tenantId: string, branchId: string) {
       latitude: true,
       longitude: true,
       tags: { select: { id: true, name: true } },
+      ratingAvg: true,
+      ratingCount: true,
       ...branchScheduleDisplaySelect(),
     },
   });
@@ -172,122 +185,136 @@ export default async function BranchDetailPage({
     ? `/book/branch/${encodeURIComponent(branch.id)}?keys=${encodeURIComponent(keysParam)}`
     : `/org/${org.slug}?branch=${encodeURIComponent(branch.id)}`;
 
+  const reviews = branch.ratingCount > 0 ? await loadPublicReviews(branch.id, 10) : [];
+
+  const distanceText =
+    distance == null
+      ? null
+      : distance < 1
+        ? `${Math.max(1, Math.round(distance * 1000))} м`
+        : `${distance.toFixed(1)} км`;
+  const rating = branch.ratingAvg == null ? null : Number(branch.ratingAvg.toString());
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <JsonLd data={branchJsonLd(org, branch)} />
-      <Link
-        href="/discover"
-        className="text-sm text-white/40 hover:text-white/70 transition-colors"
-      >
-        ← Бүх газар
-      </Link>
+      <BackLink href="/discover">Бүх газар</BackLink>
 
-      <div className="flex items-center gap-4">
-        {org.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={org.logoUrl}
-            alt=""
-            className="w-16 h-16 rounded-2xl object-contain bg-white/[0.04] border border-white/[0.06] shrink-0"
-          />
-        ) : (
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500/30 to-blue-500/30 border border-white/[0.06] shrink-0 flex items-center justify-center text-xl font-bold text-white/70">
-            {org.name.slice(0, 1)}
-          </div>
-        )}
-        <div>
-          <h1 className="text-2xl font-bold">{branch.name}</h1>
-          <p className="text-white/40 text-sm mt-0.5">
-            {org.name} · {org.phone1}
-          </p>
-        </div>
-      </div>
-
-      <div className="glass rounded-2xl p-5 border border-white/[0.08] flex flex-col gap-4">
-        <div className="flex items-center justify-between gap-3">
-          <span
-            className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border ${status.open
-              ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-              : "bg-zinc-500/15 text-zinc-300 border-zinc-500/30"
-              }`}
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${status.open ? "bg-emerald-400" : "bg-zinc-400"}`} />
-            {status.open ? "Нээлттэй" : "Хаалттай"}
-            {status.hours ? <span className="opacity-70 tabular-nums">· {status.hours}</span> : null}
-            {todayLabel ? <span className="opacity-70">· {todayLabel}</span> : null}
-          </span>
-          {branch.tags.length > 0 ? (
-            <span className="text-xs font-semibold text-violet-300 truncate">
-              {branch.tags.map((t) => t.name).join(" · ")}
-            </span>
-          ) : null}
-        </div>
-
-        <div className="flex items-start gap-2.5 text-sm text-white/70">
-          <svg className="w-4 h-4 mt-0.5 text-white/35 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-            <circle cx="12" cy="10" r="3" />
-          </svg>
-          <div className="min-w-0 flex flex-col gap-1">
-            <span>{formatAddress(branch)}</span>
-            {distance != null ? (
-              <span className="text-violet-300">{distance < 1 ? `${Math.max(1, Math.round(distance * 1000))} м` : `${distance.toFixed(1)} км`} зайтай</span>
+      <PlaceHeader
+        name={org.name}
+        logoUrl={org.logoUrl}
+        eyebrow={branch.tags.length > 0 ? branch.tags.map((t) => t.name).join(" · ") : null}
+        title={branch.name}
+        subtitle={org.name}
+        badges={
+          <>
+            <OpenStatusBadge open={status.open} hours={status.hours} note={todayLabel} />
+            <RatingPill rating={rating} count={branch.ratingCount} />
+            {distanceText ? (
+              <span className="text-xs font-medium text-[var(--oc-accent)]">{distanceText} зайтай</span>
             ) : null}
-            <a
-              href={directionsHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-violet-300 hover:text-violet-200 transition-colors self-start"
-            >
-              Чиглэл харах →
-            </a>
-          </div>
+          </>
+        }
+        aside={
+          <Link
+            href={bookingHref}
+            className="hidden sm:inline-flex items-center gap-2 rounded-xl bg-[var(--oc-accent)] px-5 py-3 text-sm font-semibold text-[var(--oc-on-accent)] shadow-sm hover:bg-[var(--oc-accent-hi)] transition-colors"
+          >
+            Цаг захиалах <span aria-hidden>→</span>
+          </Link>
+        }
+      />
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] items-start">
+        <div className="flex flex-col gap-5 min-w-0">
+          <Panel title="Мэдээлэл">
+            <dl className="flex flex-col divide-y divide-[var(--oc-line2)]">
+              <InfoRow
+                icon={
+                  <>
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                    <circle cx="12" cy="10" r="3" />
+                  </>
+                }
+                label="Хаяг"
+              >
+                <span>{formatAddress(branch)}</span>
+                <a
+                  href={directionsHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)] transition-colors"
+                >
+                  Чиглэл харах <span aria-hidden>↗</span>
+                </a>
+              </InfoRow>
+              {branch.phone ? (
+                <InfoRow
+                  icon={
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
+                  }
+                  label="Утас"
+                >
+                  <a href={`tel:${branch.phone}`} className="tabular-nums hover:text-[var(--oc-accent)] transition-colors">
+                    {branch.phone}
+                  </a>
+                </InfoRow>
+              ) : null}
+              {services.length > 0 ? (
+                <InfoRow
+                  icon={
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                  }
+                  label="Үйлчилгээ"
+                >
+                  <div className="mt-1">
+                    <ServiceChips services={services} />
+                  </div>
+                </InfoRow>
+              ) : null}
+            </dl>
+          </Panel>
+
+          <PublicReviews rating={rating} count={branch.ratingCount} reviews={reviews} />
         </div>
 
-        {branch.phone ? (
-          <a
-            href={`tel:${branch.phone}`}
-            className="flex items-center gap-2.5 text-sm text-white/70 hover:text-violet-300 transition-colors"
+        <aside className="flex flex-col gap-5 lg:sticky lg:top-6">
+          <Panel title="Цагийн хуваарь">
+            <HoursDisclosure
+              weeklyRows={weeklyRows.map(({ day, isOpen, hours, isToday }) => ({
+                weekday: day.value,
+                label: day.long,
+                isOpen,
+                hours,
+                isToday,
+              }))}
+              notices={notices}
+            />
+          </Panel>
+          <Link
+            href={bookingHref}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--oc-accent)] px-5 py-3.5 text-sm font-semibold text-[var(--oc-on-accent)] shadow-sm hover:bg-[var(--oc-accent-hi)] transition-colors"
           >
-            <svg className="w-4 h-4 text-white/35 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
-            </svg>
-            <span className="tabular-nums">{branch.phone}</span>
-          </a>
-        ) : null}
-
-        {services.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {services.map((s) => (
-              <span
-                key={s}
-                className="text-[11px] px-2 py-0.5 rounded-full bg-white/[0.05] text-white/60 border border-white/[0.08]"
-              >
-                {s}
-              </span>
-            ))}
-          </div>
-        ) : null}
-
-        <HoursDisclosure
-          weeklyRows={weeklyRows.map(({ day, isOpen, hours, isToday }) => ({
-            weekday: day.value,
-            label: day.long,
-            isOpen,
-            hours,
-            isToday,
-          }))}
-          notices={notices}
-        />
+            Цаг захиалах <span aria-hidden>→</span>
+          </Link>
+        </aside>
       </div>
+    </div>
+  );
+}
 
-      <Link
-        href={bookingHref}
-        className="inline-flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-500 transition-colors px-5 py-3 rounded-2xl text-sm font-semibold"
-      >
-        Цаг захиалах
-        <span aria-hidden>→</span>
-      </Link>
+function InfoRow({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--oc-panel2)] text-[var(--oc-muted)]">
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          {icon}
+        </svg>
+      </div>
+      <div className="min-w-0 flex-1">
+        <dt className="text-[11px] font-medium uppercase tracking-wide text-[var(--oc-muted3)]">{label}</dt>
+        <dd className="mt-0.5 flex flex-col text-sm text-[var(--oc-ink2)]">{children}</dd>
+      </div>
     </div>
   );
 }

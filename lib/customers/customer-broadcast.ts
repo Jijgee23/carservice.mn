@@ -1,5 +1,5 @@
-// P3-B7 — Customer broadcast. One canon "enforce daily limit → send →
-// audit" sequence shared by the dashboard action
+// P3-B7 — Customer broadcast. One canon "module gate → send → audit"
+// sequence shared by the dashboard action
 // (`app/_actions/customers.ts`, broadcast action only) and the staff API
 // route (`app/api/v1/customers/notify/route.ts`). Mirrors
 // `lib/customers/customer-commands.ts`: typed input/output, a
@@ -13,8 +13,8 @@
 
 import { logAudit } from "@/lib/audit";
 import { broadcastTenantPromo } from "@/lib/notifications";
-import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
-import { enforceCountLimit } from "@/lib/plan-limits-server";
+import { MODULE_DISABLED_CODE, moduleDisabledMessage } from "@/lib/plan-modules";
+import { isModuleEnabled } from "@/lib/plan-modules-server";
 import { prisma } from "@/lib/prisma";
 
 export type CustomerBroadcastActor = {
@@ -57,24 +57,9 @@ export async function countBroadcastRecipients(
 }
 
 /**
- * КНОН "daily limit → broadcastTenantPromo → audit" дараалал.
- *
- * ЗОРИУДЫН ГАЖИГ (design wart) — өөрчлөхгүйгээр өвлүүлж байна: доорх ганц
- * `logAudit` мөр нэгэн зэрэг (a) audit trail-ийн бичлэг ба (b) өдрийн
- * илгээлтийн хязгаарлагчийн тоолуур хоёрын үүрэг гүйцэтгэнэ, `entityId`
- * нь бодит мэдэгдлийн id биш `actor.tenantId` байна. Иймд `enforceCountLimit`
- * "тухайн өдөр ХЭДЭН УДАА илгээх товч дарсан" тоог хязгаарлаж байгаа болохоос
- * "хэдэн хүлээн авагчид хүрсэн" тоог хязгаарлахгүй, тул 0 хүлээн авагчтай
- * илгээлт ч энэ өдрийн нэг "илгээлт"-ийг зарцуулна.
- *
- * Энэ зан төлөвийг ЭНЭ slice дотор ӨӨРЧЛӨХГҮЙ (D-151/D-152-ийн зарчмын дагуу
- * — mobile slice дотор бүтээгдэхүүний шийдвэр гаргахгүй, зөвхөн тэмдэглэнэ).
- * Санал болгож буй засвар: `AuditLog`-аас тусдаа, зөвхөн энэ зорилгод
- * зориулсан тоолуур мөр/хүснэгт (жишээ нь `entity: "NotificationSendCounter"`
- * эсвэл огноогоор түлхүүрлэсэн counter row) нэвтрүүлж, audit trail-ийг
- * бодит илгээлт бүрийн үр дүнгээс (жишээ нь хүлээн авагчийн тоо) тусад нь
- * бичих. Энэ бол бүтээгдэхүүний шийдвэр тул хэрэглэгчид зориулж энд
- * тэмдэглэж байгаа болохоос энд шийдэхгүй.
+ * КНОН "модулийн хаалт → broadcastTenantPromo → audit" дараалал. Өдрийн
+ * илгээлтийн тоон хязгаар устсан (багц модулиар ялгардаг) — audit мөр нь
+ * зөвхөн audit trail. 0 хүлээн авагчтай илгээлт ч audit бичнэ.
  */
 export async function sendCustomerBroadcast(input: {
   actor: CustomerBroadcastActor;
@@ -82,21 +67,12 @@ export async function sendCustomerBroadcast(input: {
 }): Promise<CustomerBroadcastResult> {
   const { actor, data } = input;
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const dailyLimit = await enforceCountLimit(
-    actor.tenantId,
-    PLAN_LIMIT_CODES.DAILY_CUSTOMER_NOTIFICATIONS,
-    () =>
-      prisma.auditLog.count({
-        where: { tenantId: actor.tenantId, entity: "Notification", createdAt: { gte: todayStart } },
-      }),
-  );
-  if (!dailyLimit.allowed) {
+  // Багцын модуль — API (/api/v1/customers/notify) ба action хоёуланд хамаарна.
+  if (!(await isModuleEnabled(actor.tenantId, "enable_customer_broadcast"))) {
     throw new CustomerBroadcastError(
-      dailyLimit.message ?? "Өдрийн зар илгээх хязгаарт хүрсэн байна.",
-      422,
-      "DAILY_LIMIT_REACHED",
+      moduleDisabledMessage("enable_customer_broadcast"),
+      403,
+      MODULE_DISABLED_CODE,
     );
   }
 
@@ -106,10 +82,8 @@ export async function sendCustomerBroadcast(input: {
     body: data.body,
   });
 
-  // See the wart comment above: this row is simultaneously the audit entry
-  // and tomorrow's (today's) rate-limit counter. A zero-recipient send still
-  // writes it, so it still consumes one of the day's sends — preserved
-  // exactly as the pre-extraction inline logic behaved.
+  // Audit trail only (no longer a rate-limit counter). A zero-recipient send
+  // still writes it.
   await logAudit({
     tenantId: actor.tenantId,
     userId: actor.id,

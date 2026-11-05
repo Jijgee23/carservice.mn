@@ -8,9 +8,6 @@ import { requireUser } from "@/lib/auth";
 import { canCreate, canDelete, canEdit } from "@/lib/auth/roles";
 import { assertActiveSubscription } from "@/lib/subscription-server";
 import { type BulkActionState, parseIdsJson } from "@/lib/bulk-action";
-import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
-import { enforceCountLimit } from "@/lib/plan-limits-server";
-import { prisma } from "@/lib/prisma";
 import { SERVICE_KIND_SLUG, type ServiceKind } from "@/lib/services";
 import {
   ServiceCommandError,
@@ -65,6 +62,8 @@ function rawFromForm(fd: FormData): ServiceCreateRaw {
     description: s(fd, "description"),
     categoryId: s(fd, "categoryId"),
     isActive: fd.get("isActive") === "on",
+    catalogItemId: s(fd, "catalogItemId"),
+    barcode: s(fd, "barcode"),
   };
 }
 
@@ -86,16 +85,6 @@ export async function createServiceAction(
   const raw = rawFromForm(formData);
   const { values: data, errors } = validateServiceCreate(raw, await loadServiceRefs(user.tenantId, raw.type));
   if (!data) return { ok: false, fieldErrors: errors };
-
-  // Багцын хязгаар: max_services
-  const limit = await enforceCountLimit(
-    user.tenantId,
-    PLAN_LIMIT_CODES.MAX_SERVICES,
-    () => prisma.service.count({ where: { tenantId: user.tenantId } }),
-  );
-  if (!limit.allowed) {
-    return { ok: false, message: limit.message };
-  }
 
   const created = await createServiceCommand(user, data);
   if (!created.ok) return { ok: false, fieldErrors: created.fieldErrors, message: created.message };
@@ -130,6 +119,7 @@ export async function updateServiceAction(
         type: s(formData, "type"),
         name: s(formData, "name"),
         code: s(formData, "code").toUpperCase(),
+        barcode: formData.has("barcode") ? s(formData, "barcode") : undefined,
         unitId: s(formData, "unitId"),
         price: s(formData, "price"),
         costPrice: s(formData, "costPrice"),

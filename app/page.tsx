@@ -1,4 +1,4 @@
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { getContactPhones } from "@/lib/platform-settings";
 import { AppDownload } from "./_components/app-download";
 import { CtaBanner } from "./_components/cta-banner";
@@ -15,12 +15,12 @@ import { Stats } from "./_components/stats";
 
 // "Ops Console" landing дизайны фонт — зөвхөн энэ хуудсанд scoped (root
 // layout-ийн Geist-г хөндөхгүй), .landing-ops wrapper-т variable-аар холбогдоно.
-const plexSans = IBM_Plex_Sans({
+const plexSans = Geist({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-plex-sans",
 });
-const plexMono = IBM_Plex_Mono({
+const plexMono = Geist_Mono({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600"],
   variable: "--font-plex-mono",

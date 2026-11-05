@@ -1,5 +1,6 @@
 "use server";
 
+import { assertModuleEnabled } from "@/lib/plan-modules-server";
 import { revalidatePath } from "next/cache";
 import { revalidateCashPaths } from "@/lib/cash/revalidate";
 import { unstable_rethrow } from "next/navigation";
@@ -53,6 +54,7 @@ export async function createPostpaidSettlementAction(_prev: SettlementActionStat
   try {
     const user = await requireUser();
     await assertActiveSubscription(user.tenantId);
+    await assertModuleEnabled(user.tenantId, "enable_finance");
     const orderIds = formData.getAll("orderIds").filter((v): v is string => typeof v === "string");
     const settlement = await createPostpaidSettlement({
       actor: user,
@@ -78,6 +80,7 @@ export async function voidPostpaidSettlementAction(_prev: SettlementActionState,
   try {
     const user = await requireUser();
     await assertActiveSubscription(user.tenantId);
+    await assertModuleEnabled(user.tenantId, "enable_finance");
     const settlementId = s(formData, "settlementId");
     if (!settlementId) return { ok: false, message: "Тооцоо шаардлагатай." };
     const settlement = await voidPostpaidSettlement({ actor: user, settlementId, reason: s(formData, "reason") });

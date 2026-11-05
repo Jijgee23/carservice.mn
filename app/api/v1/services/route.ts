@@ -5,12 +5,15 @@ import { requireActiveSubscriptionApi } from "@/lib/subscription-server";
 import { buildMeta, getApiPageInfo } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
 import { serviceRefFieldErrors } from "@/lib/services/service-commands";
+import { linkServiceToCatalog } from "@/lib/services/service-create";
+import { isValidBarcode, normalizeBarcode } from "@/lib/catalog/normalize";
 
 const SERVICE_SELECT = {
   id: true,
   type: true,
   name: true,
   code: true,
+  barcode: true,
   price: true,
   costPrice: true,
   stock: true,
@@ -46,6 +49,8 @@ export async function GET(req: Request) {
       OR: [
         { name: { contains: q, mode: "insensitive" } },
         { code: { contains: q, mode: "insensitive" } },
+        // Баркод уншигчаар хайхад — яг тэнцүү (зай хасаж, том үсгээр).
+        { barcode: q.replace(/\s+/g, "").toUpperCase() },
         { description: { contains: q, mode: "insensitive" } },
       ],
     }),
@@ -90,13 +95,19 @@ export async function POST(req: Request) {
 
   const {
     type, name, code, price, costPrice, stock, description, isActive,
-    unitId, categoryId, durationValue, durationUnitId,
+    unitId, categoryId, durationValue, durationUnitId, catalogItemId, barcode,
   } = body as Record<string, unknown>;
 
   if (!type || !(KINDS as readonly string[]).includes(type as string))
     return jsonError(400, "Төрөл буруу байна (LABOR | GOODS | DIAGNOSTIC)");
   if (!name || typeof name !== "string" || !name.trim())
     return jsonError(400, "Нэр заавал шаардлагатай");
+  if (type === "GOODS" && typeof barcode === "string" && barcode.trim()) {
+    const bc = normalizeBarcode(barcode);
+    if (!bc || !isValidBarcode(bc)) {
+      return jsonError(400, "Баркод буруу байна", { fieldErrors: { barcode: "Баркод буруу (4–64 тэмдэгт: тоо, үсэг, - .)." } });
+    }
+  }
 
   const priceNum = Number(price);
   if (!Number.isFinite(priceNum) || priceNum < 0)
@@ -118,13 +129,31 @@ export async function POST(req: Request) {
     return jsonError(400, Object.values(refErrors)[0], { fieldErrors: refErrors });
   }
 
+  // Ажил/сэлбэг → нэгдсэн сан (вэб формтой ижил: lib/services/service-create.ts).
+  const link = await linkServiceToCatalog(auth.user.tenantId, {
+    type: type as (typeof KINDS)[number],
+    catalogItemId: typeof catalogItemId === "string" && catalogItemId ? catalogItemId : null,
+    name: (name as string).trim(),
+    code: typeof code === "string" && code.trim() ? code.trim().toUpperCase() : null,
+    barcode: type === "GOODS" && typeof barcode === "string" ? normalizeBarcode(barcode) : null,
+    unitId: refs.unitId,
+    durationUnitId: refs.durationUnitId,
+    durationValue: durationNum === null ? null : new Prisma.Decimal(durationNum),
+    categoryId: refs.categoryId,
+    price: new Prisma.Decimal(priceNum),
+    description: typeof description === "string" && description.trim() ? description.trim() : null,
+  });
+  if (!link.ok) return jsonError(409, link.message, { fieldErrors: { name: link.message } });
+
   let service;
   try {
     service = await prisma.service.create({
       data: {
         type: type as (typeof KINDS)[number],
-        name: (name as string).trim(),
-        code: typeof code === "string" && code.trim() ? code.trim().toUpperCase() : null,
+        name: link.name,
+        code: link.code,
+        barcode: link.barcode,
+        catalogItemId: link.catalogItemId,
         price: priceNum,
         costPrice: costPriceNum,
         stock: stockNum,

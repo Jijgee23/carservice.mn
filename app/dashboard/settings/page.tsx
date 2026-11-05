@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { getEnabledModules } from "@/lib/plan-modules-server";
 import { prisma } from "@/lib/prisma";
+import { CreditScoreCard } from "@/app/_components/credit-score-card";
+import type { CreditBreakdown } from "@/lib/credit-score";
+import { getCreditSettings } from "@/lib/credit-score-server";
 import { AppointmentReminderForm } from "./appointment-reminder-form";
 import { LogoForm } from "./logo-form";
 import { TenantForm } from "./tenant-form";
@@ -42,11 +46,13 @@ function SectionPanel({
 
 export default async function SettingsPage() {
   const user = await requireUser();
+  const modules = await getEnabledModules(user.tenant.plan);
 
   const tenant = await prisma.tenant.findUnique({
     where: { id: user.tenantId },
   });
   if (!tenant) redirect("/dashboard");
+  const creditSettings = await getCreditSettings();
 
   return (
     <div className="p-4 sm:p-6 max-w-full flex-1 flex flex-col min-h-0 w-full">
@@ -60,7 +66,7 @@ export default async function SettingsPage() {
       <div className="grid gap-6">
         <SectionPanel
           index={1}
-          total={4}
+          total={5}
           title="Лого"
           description="Платформ дотор болон нэхэмжлэхэд харагдана."
         >
@@ -69,7 +75,7 @@ export default async function SettingsPage() {
 
         <SectionPanel
           index={2}
-          total={4}
+          total={5}
           title="Үндсэн мэдээлэл"
           description="Нэр, регистр, харилцагч мэдээлэл."
         >
@@ -82,21 +88,39 @@ export default async function SettingsPage() {
               phone2: tenant.phone2,
               acceptsOnlineBooking: tenant.acceptsOnlineBooking,
             }}
+            onlineBookingInPlan={modules.has("online_booking")}
           />
         </SectionPanel>
+
+        {modules.has("enable_appointments") ? (
+          <SectionPanel
+            index={3}
+            total={5}
+            title="Цаг захиалгын сануулга"
+            description="Товлосон цагаас хэдэн хугацааны өмнө үйлчлүүлэгчид сануулга илгээхийг тохируулна."
+          >
+            <AppointmentReminderForm
+              initialMinutes={tenant.appointmentReminderLeadMinutes}
+            />
+          </SectionPanel>
+        ) : null}
 
         <SectionPanel
-          index={3}
-          total={4}
-          title="Цаг захиалгын сануулга"
-          description="Товлосон цагаас хэдэн хугацааны өмнө үйлчлүүлэгчид сануулга илгээхийг тохируулна."
+          index={4}
+          total={5}
+          title="Credit score"
+          description="Үйлчлүүлэгчийн үнэлгээ, цаг захиалга баталсан, засвар дуусгасан, хугацаандаа дуусгасан хувиас өдөр бүр тооцогдоно."
         >
-          <AppointmentReminderForm
-            initialMinutes={tenant.appointmentReminderLeadMinutes}
+          <CreditScoreCard
+            score={tenant.creditScore}
+            breakdown={tenant.creditBreakdown as CreditBreakdown | null}
+            updatedAt={tenant.creditUpdatedAt}
+            threshold={creditSettings.threshold}
+            blocked={tenant.creditSuspended ? "suspended" : tenant.creditHidden ? "hidden" : null}
           />
         </SectionPanel>
 
-        <SectionPanel index={4} total={4} title="Бусад">
+        <SectionPanel index={5} total={5} title="Бусад">
           <dl className="grid gap-3 text-sm sm:grid-cols-3">
             <Row label="Slug">
               <span className="font-plex-mono text-[var(--oc-ink2)]">{tenant.slug}</span>

@@ -87,7 +87,7 @@ function IntakeDetails({ notes, photos, signatureUrl, mileageKm, recordedAtLabel
                 type="button"
                 onClick={() => setViewing((viewing - 1 + photos.length) % photos.length)}
                 aria-label="Өмнөх зураг"
-                className="absolute left-2 rounded-full bg-black/60 px-3 py-2 text-white hover:bg-black/80"
+                className="absolute left-2 rounded-full bg-black/60 px-3 py-2 text-[#fff] hover:bg-black/80"
               >
                 ‹
               </button>
@@ -95,7 +95,7 @@ function IntakeDetails({ notes, photos, signatureUrl, mileageKm, recordedAtLabel
                 type="button"
                 onClick={() => setViewing((viewing + 1) % photos.length)}
                 aria-label="Дараагийн зураг"
-                className="absolute right-2 rounded-full bg-black/60 px-3 py-2 text-white hover:bg-black/80"
+                className="absolute right-2 rounded-full bg-black/60 px-3 py-2 text-[#fff] hover:bg-black/80"
               >
                 ›
               </button>

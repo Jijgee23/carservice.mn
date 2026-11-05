@@ -159,8 +159,14 @@ export async function upsertPlanPriceAction(
   const isActive = formData.get("isActive") === "on";
   const notes = s(formData, "notes");
 
-  if (!["BUSINESS", "ENTERPRISE"].includes(planRaw)) {
-    return { ok: false, message: "FREE багц нь зөвхөн туршилт — үнэ бүртгэхгүй." };
+  // Зөвхөн тогтсон үнэтэй багц (BUSINESS). FREE үргэлж үнэгүй, ENTERPRISE-ийн
+  // үнийг тохиролцож гаргадаг (харах: lib/subscription.ts SELF_SERVE_PLANS).
+  if (planRaw !== "BUSINESS") {
+    return {
+      ok: false,
+      message:
+        "Зөвхөн BUSINESS багцад тогтсон үнэ бүртгэнэ (FREE үнэгүй, ENTERPRISE тохиролцоно).",
+    };
   }
   if (!["MONTH", "QUARTER", "YEAR"].includes(periodRaw)) {
     return { ok: false, message: "Хугацаа буруу." };

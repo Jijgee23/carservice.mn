@@ -1,4 +1,4 @@
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { ThemeToggle } from "@/app/_components/theme-toggle";
 import {
@@ -11,12 +11,12 @@ import { ManualSidebar } from "@/app/manual/_components/manual-sidebar";
 // Ops Console дизайны фонт — /manual (ажилтны гарын авлага)-тай ижил механизм
 // болон дизайн, гэхдээ энд нэвтрэлт ШААРДАХГҮЙ — нийтэд нээлттэй (хэрэглэгч
 // нэвтрэхээс өмнө ч уншиж болно).
-const plexSans = IBM_Plex_Sans({
+const plexSans = Geist({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-plex-sans",
 });
-const plexMono = IBM_Plex_Mono({
+const plexMono = Geist_Mono({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600"],
   variable: "--font-plex-mono",

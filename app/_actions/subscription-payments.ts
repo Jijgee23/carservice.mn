@@ -9,7 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { QPayService } from "@/lib/qpay";
 import { confirmSubscriptionPayment } from "@/lib/subscription-payments";
 import { getAppBaseUrl } from "@/lib/subscription-server";
-import { BILLING_PERIOD_LABEL, PLAN_LABEL } from "@/lib/subscription";
+import { BILLING_PERIOD_LABEL, PLAN_LABEL, isSelfServePlan } from "@/lib/subscription";
 
 export type PaymentActionState = {
   ok: boolean;
@@ -46,13 +46,15 @@ export async function createSubscriptionPaymentAction(
     return { ok: false, message: "Сонгосон үнэ олдсонгүй / идэвхгүй." };
   }
 
-  // FREE plan-ыг худалдан авах боломжгүй — энэ нь зөвхөн signup үед 14 хоногийн
-  // нэг удаагийн туршилт хэлбэрээр үүсдэг.
-  if (price.plan === "FREE") {
+  // Зөвхөн тогтсон үнэтэй багцыг (BUSINESS) QPay-ээр авна. FREE үргэлж
+  // үнэгүй; ENTERPRISE-ийн үнийг тохиролцож super admin гараар олгоно.
+  if (!isSelfServePlan(price.plan)) {
     return {
       ok: false,
       message:
-        "Энгийн (FREE) багц нь зөвхөн бүртгүүлэх үед нэг удаагийн туршилт. Худалдаж авах боломжгүй.",
+        price.plan === "FREE"
+          ? "Энгийн (FREE) багц үнэгүй — худалдаж авах шаардлагагүй."
+          : "Энтерпрайз багц тогтсон үнэгүй — «Үнийн санал авах»-аар хүсэлт илгээнэ үү.",
     };
   }
 

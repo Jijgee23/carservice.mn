@@ -11,7 +11,8 @@ import {
 import { DatePicker } from "@/app/_components/date-picker";
 import { Sparkline } from "@/app/_components/sparkline";
 import { IncomeBarChart } from "./income-bar-chart";
-import { PlanUsageRing } from "./plan-usage-ring";
+import { MODULE_LIMIT_CODES, PLAN_LIMIT_META } from "@/lib/plan-limits";
+import { getEnabledModules } from "@/lib/plan-modules-server";
 import { type Trend, loadOverviewData } from "@/lib/overview";
 import { INCOME_QUICK_RANGES, type IncomeRangeKey } from "./income-range";
 import {
@@ -50,8 +51,6 @@ export default async function DashboardPage({
     recentlyUpdatedOrders,
     postpaidVehicleCount,
     receivable,
-    todayOrderCount,
-    planLimits,
     income,
     internalCost,
     orderTrend,
@@ -61,9 +60,10 @@ export default async function DashboardPage({
     branchTrend,
     employeeTrend,
   } = await loadOverviewData(
-    { ...user, tenantPlan: user.tenant.plan, orderAccess: user },
+    { ...user, orderAccess: user },
     params,
   );
+  const enabledModules = await getEnabledModules(user.tenant.plan);
   const incomeUp = income.changePct == null ? true : income.changePct >= 0;
 
   // Статистик карт хэдэн ширхэг байгаагаас хамааруулж xl цонхон дээр яг тэр
@@ -136,9 +136,10 @@ export default async function DashboardPage({
       <section className="mt-6 rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 sm:p-6 lg:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
           <div>
-            <h2 className="font-semibold text-[var(--oc-ink)] mb-1">Багцын хэрэглээ</h2>
+            <h2 className="font-semibold text-[var(--oc-ink)] mb-1">Багцын модулиуд</h2>
             <p className="text-xs text-[var(--oc-muted3)]">
-              {PLAN_LABEL[user.tenant.plan]} багцын лимитүүд одоогийн хэрэглээтэй харьцуулав
+              {PLAN_LABEL[user.tenant.plan]} багцад багтсан модулиуд. Үндсэн хэсэг (засварын хуудас,
+              үйлчлүүлэгч, машин, үйлчилгээ, ажилтан, төлбөр, касс) үргэлж нээлттэй.
             </p>
           </div>
           <Link
@@ -148,32 +149,17 @@ export default async function DashboardPage({
             Багц удирдах →
           </Link>
         </div>
-        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-6">
-          <PlanUsageRing
-            label="Өнөөдрийн засвар"
-            current={todayOrderCount}
-            limit={planLimits.daily_orders}
-            href="/dashboard/orders"
-          />
-          <PlanUsageRing
-            label="Машин"
-            current={vehicleCount}
-            limit={planLimits.max_vehicles}
-            href="/dashboard/vehicles"
-          />
-          <PlanUsageRing
-            label="Ажилтан"
-            current={employeeCount}
-            limit={planLimits.max_users}
-            href="/dashboard/employees"
-          />
-          <PlanUsageRing
-            label="Салбар"
-            current={branchCount}
-            limit={planLimits.max_branches}
-            href="/dashboard/branches"
-          />
-        </div>
+        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {MODULE_LIMIT_CODES.filter((code) => enabledModules.has(code)).map((code) => (
+            <li
+              key={code}
+              className="flex items-center gap-2 rounded-lg border border-[var(--oc-line)] px-3 py-2 text-[13px] text-[var(--oc-ink2)]"
+            >
+              <span aria-hidden="true" className="text-[var(--oc-ok)]">✓</span>
+              <span className="flex-1">{PLAN_LIMIT_META[code].label}</span>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section className="mt-6 rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 sm:p-6 lg:p-8">

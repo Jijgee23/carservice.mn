@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth";
+import { moduleGateForPlan } from "@/lib/plan-modules-server";
 import { canView, workingBranchScopeId } from "@/lib/auth/roles";
 import { parseRange, validateReportRangeParams } from "@/lib/reports";
 import type { StockLevel } from "@/lib/services";
@@ -14,6 +15,8 @@ import {
 // GET /dashboard/reports/stock/export?<same params as the page> — the page's filtered table as .xlsx.
 export async function GET(req: Request) {
   const user = await requireUser();
+  const blocked = await moduleGateForPlan(user.tenant.plan, ["enable_reports", "enable_inventory"]);
+  if (blocked) return blocked;
   if (!canView(user, "services")) return new Response("Forbidden", { status: 403 });
   const sp = new URL(req.url).searchParams;
   const get = (k: string) => sp.get(k) ?? undefined;

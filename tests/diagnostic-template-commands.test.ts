@@ -293,30 +293,24 @@ function commandBody(fnName: string, endMarker: string) {
   return source.slice(start, end);
 }
 
-test("createTemplateCommand checks ENABLE_DIAGNOSTICS then MAX_DIAGNOSTIC_TEMPLATES before creating the row", () => {
+test("createTemplateCommand checks ENABLE_DIAGNOSTICS before creating the row; no template count limit", () => {
   const body = commandBody("createTemplateCommand", "export async function updateTemplateCommand");
   const featureIdx = body.indexOf("isFeatureEnabled(actor.tenantId, PLAN_LIMIT_CODES.ENABLE_DIAGNOSTICS)");
-  const limitIdx = body.indexOf("enforceCountLimit(");
-  const limitCodeIdx = body.indexOf("PLAN_LIMIT_CODES.MAX_DIAGNOSTIC_TEMPLATES");
   const createIdx = body.indexOf("prisma.diagnosticTemplate.create(");
   assert.ok(featureIdx >= 0, "must check ENABLE_DIAGNOSTICS");
-  assert.ok(limitIdx > featureIdx, "must check the count limit after the feature flag");
-  assert.ok(limitCodeIdx > limitIdx, "the count limit must use MAX_DIAGNOSTIC_TEMPLATES");
-  assert.ok(createIdx > limitCodeIdx, "both gates must precede the actual create");
+  assert.ok(createIdx > featureIdx, "the module gate must precede the actual create");
+  assert.doesNotMatch(body, /enforceCountLimit|PLAN_LIMIT_REACHED|DAILY_LIMIT_REACHED|PLAN_LIMIT_CODES\.(MAX_|DAILY_)/);
 });
 
-test("duplicateTemplateCommand checks ENABLE_DIAGNOSTICS then MAX_DIAGNOSTIC_TEMPLATES before creating the row — same gating as create, unlike duplicateTemplateAction today", () => {
+test("duplicateTemplateCommand checks ENABLE_DIAGNOSTICS before creating the row — same gating as create; no count limit", () => {
   const source = src("../lib/diagnostics-templates-server.ts");
   const start = source.indexOf("export async function duplicateTemplateCommand");
   const body = source.slice(start);
   const featureIdx = body.indexOf("isFeatureEnabled(actor.tenantId, PLAN_LIMIT_CODES.ENABLE_DIAGNOSTICS)");
-  const limitIdx = body.indexOf("enforceCountLimit(");
-  const limitCodeIdx = body.indexOf("PLAN_LIMIT_CODES.MAX_DIAGNOSTIC_TEMPLATES");
   const createIdx = body.indexOf("prisma.diagnosticTemplate.create(");
   assert.ok(featureIdx >= 0, "duplicate must check ENABLE_DIAGNOSTICS");
-  assert.ok(limitIdx > featureIdx, "duplicate must check the count limit after the feature flag");
-  assert.ok(limitCodeIdx > limitIdx, "duplicate's count limit must use MAX_DIAGNOSTIC_TEMPLATES");
-  assert.ok(createIdx > limitCodeIdx, "both gates must precede duplicate's actual create");
+  assert.ok(createIdx > featureIdx, "the module gate must precede duplicate's actual create");
+  assert.doesNotMatch(body, /enforceCountLimit|PLAN_LIMIT_REACHED|DAILY_LIMIT_REACHED|PLAN_LIMIT_CODES\.(MAX_|DAILY_)/);
 });
 
 test("updateTemplateCommand does NOT re-check ENABLE_DIAGNOSTICS/MAX_DIAGNOSTIC_TEMPLATES — only create and duplicate create new rows", () => {

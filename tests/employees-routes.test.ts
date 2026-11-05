@@ -96,19 +96,17 @@ test("GET /api/v1/employees gates employees.view before rejecting unknown params
   assert.match(GET, /toEmployeeDto/, "GET must build its response with toEmployeeDto");
 });
 
-test("POST /api/v1/employees gates employees.create, then subscription, then MAX_USERS, before creating", () => {
+test("POST /api/v1/employees gates employees.create, then subscription, before creating; no MAX_USERS quota", () => {
   const source = routeSource("route.ts");
   const { POST } = fnSections(source, "GET", "POST");
   const perm = POST.indexOf('requirePermission(auth.user, "employees.create")');
   const sub = POST.indexOf("requireActiveSubscriptionApi(auth.user)");
   const prep = POST.indexOf("prepareCreateEmployee(");
-  const limit = POST.indexOf("enforceCountLimit(");
   const create = POST.indexOf("createEmployee(prisma, actor,");
   assert.ok(perm >= 0 && sub > perm, "subscription check must run after the permission check");
   assert.ok(prep > sub, "prepareCreateEmployee must run after the subscription gate");
-  assert.ok(limit > prep, "MAX_USERS limit must be enforced after prepare, before create");
-  assert.ok(create > limit, "createEmployee must run after the plan-limit check");
-  assert.match(POST, /PLAN_LIMIT_CODES\.MAX_USERS/, "must enforce the MAX_USERS plan limit");
+  assert.ok(create > prep, "createEmployee must run after prepare");
+  assert.doesNotMatch(POST, /enforceCountLimit|PLAN_LIMIT_REACHED|DAILY_LIMIT_REACHED|PLAN_LIMIT_CODES\.(MAX_|DAILY_)/, "no employee count quota");
   assert.match(POST, /code: prep\.code, fieldErrors: prep\.fieldErrors/, "prepare errors must carry code");
   assert.match(POST, /code: result\.code/, "create errors must carry code");
 });
@@ -155,7 +153,6 @@ test("employees/[id] ERROR_STATUS covers every EmployeeErrorCode with a real HTT
     "SELF_ACTION",
     "LAST_OWNER",
     "FK_CONFLICT",
-    "PLAN_LIMIT_REACHED",
     "UNKNOWN",
   ]) {
     assert.match(source, new RegExp(`${code}:\\s*\\d{3}`), `ERROR_STATUS must map ${code}`);

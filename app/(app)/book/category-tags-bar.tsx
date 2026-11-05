@@ -39,7 +39,7 @@ export function CategoryTagsBar({
               type="button"
               onClick={() => onRemove(k.id)}
               aria-label={`${k.name}-г хасах`}
-              className="w-4 h-4 shrink-0 flex items-center justify-center rounded-full text-[var(--oc-muted3)] hover:text-[var(--oc-ink)] hover:bg-white/[0.12] transition-colors"
+              className="w-4 h-4 shrink-0 flex items-center justify-center rounded-full text-[var(--oc-muted3)] hover:text-[var(--oc-ink)] hover:bg-[var(--oc-panel2)] transition-colors"
             >
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 6 6 18" />

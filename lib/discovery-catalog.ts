@@ -122,6 +122,8 @@ type DiscoveryBranch = {
   scheduleExceptions: Array<Record<string, unknown>>;
   scheduleSeasons: Array<Record<string, unknown>>;
   tags: Array<{ id: string; name: string }>;
+  ratingAvg: { toString(): string } | null;
+  ratingCount: number;
 };
 
 type DiscoveryTenant = {
@@ -157,6 +159,9 @@ export type DiscoveryOrganization = {
     services: string[];
     serviceKeyIds: string[];
     tags: Array<{ id: string; name: string }>;
+    /** Үйлчлүүлэгчийн үнэлгээний дундаж (1..5), үнэлгээгүй бол null. */
+    rating: number | null;
+    ratingCount: number;
     distanceKm?: number;
   }>;
 };
@@ -222,6 +227,7 @@ export async function getDiscoveryCatalog(
       acceptsOnlineBooking: true,
       suspended: false,
       isTest: false, // тест/демо тенант олон нийтэд харагдахгүй (lib/tenant-visibility.ts)
+      creditHidden: false, // credit score бага тул нуугдсан (lib/credit-score.ts)
       plan: { in: allowedPlans },
       branches: { some: branchWhere },
       ...(filters.query
@@ -254,6 +260,8 @@ export async function getDiscoveryCatalog(
           latitude: true,
           longitude: true,
           tags: { select: { id: true, name: true } },
+          ratingAvg: true,
+          ratingCount: true,
           ...branchScheduleDisplaySelect(),
         },
       },
@@ -343,6 +351,8 @@ export async function getDiscoveryCatalog(
         services,
         serviceKeyIds,
         tags: branch.tags,
+        rating: branch.ratingAvg == null ? null : Number(branch.ratingAvg.toString()),
+        ratingCount: branch.ratingCount,
         ...(distance == null ? {} : { distanceKm: Math.round(distance * 10) / 10 }),
       });
     }
@@ -380,7 +390,7 @@ export async function getDiscoveryCatalog(
   // since otherwise it re-runs on every map pan/zoom for no reason.
   const facetBranches = includeFacets
     ? await prisma.branch.findMany({
-        where: { isActive: true, tenant: { acceptsOnlineBooking: true, suspended: false, isTest: false, plan: { in: allowedPlans } } },
+        where: { isActive: true, tenant: { acceptsOnlineBooking: true, suspended: false, isTest: false, creditHidden: false, plan: { in: allowedPlans } } },
         select: { city: true, district: true },
       })
     : [];

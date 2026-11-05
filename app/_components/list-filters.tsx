@@ -210,7 +210,7 @@ export function FilterSelect({
           borderRadius: "0.5rem",
           border: `1px solid ${hasValue ? "var(--filter-active-border, rgba(139, 107, 255, 0.45))" : "var(--input-border)"}`,
           background: hasValue
-            ? "var(--filter-active-bg, rgba(108, 71, 255, 0.18))"
+            ? "var(--filter-active-bg, rgba(231, 76, 60, 0.18))"
             : "var(--input-bg)",
           color: hasValue ? "var(--accent-strong)" : "var(--input-fg)",
           fontSize: "0.875rem",

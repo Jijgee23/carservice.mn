@@ -84,7 +84,8 @@ export function BranchSwitcher({
         isCurrent: !currentIsAll && b.id === currentBranch?.id,
       }),
     ),
-    ...(allowAllBranches
+    // Нэг салбартай үед «Бүх салбар» тэр салбартай ялгаагүй тул санал болгохгүй.
+    ...(allowAllBranches && branches.length > 1
       ? [{ kind: "all", isCurrent: currentIsAll } as Option]
       : []),
   ];

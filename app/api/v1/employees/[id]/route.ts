@@ -59,7 +59,6 @@ const ERROR_STATUS: Record<EmployeeErrorCode, number> = {
   LAST_OWNER: 409,
   FK_CONFLICT: 409,
   OPEN_ORDERS: 409,
-  PLAN_LIMIT_REACHED: 403,
   UNKNOWN: 500,
 };
 

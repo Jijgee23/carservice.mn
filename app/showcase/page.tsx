@@ -23,7 +23,7 @@ export default function ShowcasePage() {
           className="absolute inset-0"
           style={{
             backgroundImage:
-              "radial-gradient(48rem 36rem at 12% -4%, rgba(108,71,255,0.20), transparent 58%)," +
+              "radial-gradient(48rem 36rem at 12% -4%, rgba(231,76,60,0.20), transparent 58%)," +
               "radial-gradient(44rem 38rem at 100% 0%, rgba(59,130,246,0.14), transparent 55%)," +
               "radial-gradient(40rem 40rem at 88% 100%, rgba(16,185,129,0.10), transparent 60%)",
           }}
@@ -236,7 +236,7 @@ function Cell({
 }
 
 const ACCENTS = {
-  violet: { text: "text-violet-300", from: "from-violet-500", to: "to-indigo-400", stroke: "#a78bff", bg: "bg-violet-400" },
+  violet: { text: "text-violet-300", from: "from-violet-500", to: "to-indigo-400", stroke: "#f1948a", bg: "bg-violet-400" },
   blue: { text: "text-sky-300", from: "from-sky-500", to: "to-blue-400", stroke: "#60a5fa", bg: "bg-sky-400" },
   emerald: { text: "text-emerald-300", from: "from-emerald-500", to: "to-teal-400", stroke: "#34d399", bg: "bg-emerald-400" },
   amber: { text: "text-amber-300", from: "from-amber-500", to: "to-orange-400", stroke: "#fbbf24", bg: "bg-amber-400" },
@@ -431,12 +431,12 @@ function AreaChart() {
     >
       <defs>
         <linearGradient id="area-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#6c47ff" stopOpacity="0.45" />
-          <stop offset="100%" stopColor="#6c47ff" stopOpacity="0" />
+          <stop offset="0%" stopColor="#e74c3c" stopOpacity="0.45" />
+          <stop offset="100%" stopColor="#e74c3c" stopOpacity="0" />
         </linearGradient>
         <linearGradient id="area-line" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#a78bff" />
-          <stop offset="50%" stopColor="#6c47ff" />
+          <stop offset="0%" stopColor="#f1948a" />
+          <stop offset="50%" stopColor="#e74c3c" />
           <stop offset="100%" stopColor="#3b82f6" />
         </linearGradient>
       </defs>
@@ -464,7 +464,7 @@ function Radial({ pct }: { pct: number }) {
       <svg width={size} height={size} className="-rotate-90">
         <defs>
           <linearGradient id="radial-grad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#a78bff" />
+            <stop offset="0%" stopColor="#f1948a" />
             <stop offset="100%" stopColor="#3b82f6" />
           </linearGradient>
         </defs>

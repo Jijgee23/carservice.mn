@@ -13,8 +13,8 @@ import sharp from "sharp";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const W = 1200;
 const H = 630;
-const BG = "#F6F5F2";
-const MUTED = "#5C6067";
+const BG = "#ECF0F1";
+const MUTED = "#5F6B6D";
 const TAGLINE = "Авто засвар, үйлчилгээний цагийг онлайнаар захиалаарай";
 
 function findPlexSans() {
@@ -62,7 +62,7 @@ const top = (H - blockH) / 2;
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
   <rect width="${W}" height="${H}" fill="${BG}"/>
-  <rect x="0" y="${H - 10}" width="${W}" height="10" fill="#22D3EE"/>
+  <rect x="0" y="${H - 10}" width="${W}" height="10" fill="#E74C3C"/>
   <g transform="translate(${(W - logoW) / 2} ${top}) scale(${k})">${inner}</g>
   <g transform="translate(${(W - tag.width) / 2} ${top + logoH + gap + 30})"><path fill="${MUTED}" d="${tag.d}"/></g>
 </svg>`;

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { redirect } from "next/navigation";
 import { hasActiveUserSession } from "@/lib/auth";
 import { TenantAuthShell } from "@/app/_components/tenant-auth-shell";
@@ -7,12 +7,12 @@ import { LoginForm } from "./login-form";
 
 // Ops Console дизайны фонт — зөвхөн энэ хуудсанд scoped (root layout-ийн
 // Geist-г хөндөхгүй), landing/page.tsx-тэй ижил механизм.
-const plexSans = IBM_Plex_Sans({
+const plexSans = Geist({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-plex-sans",
 });
-const plexMono = IBM_Plex_Mono({
+const plexMono = Geist_Mono({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600"],
   variable: "--font-plex-mono",

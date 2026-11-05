@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { IBM_Plex_Sans } from "next/font/google";
+import { Geist } from "next/font/google";
 import { BtnLink } from "@/app/_components/landing-ops-ui";
 
 // Root 404 — нүүр («/») доторх route-уудад тохирохгүй бүх URL-д
 // харагдана (app/layout.tsx-ийн доторх, app/page.tsx redirect хийдэг тул
 // логик "нүүр" нь «/»).
-const plexSans = IBM_Plex_Sans({
+const plexSans = Geist({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-plex-sans",

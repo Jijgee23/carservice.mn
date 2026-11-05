@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BtnLink } from "@/app/_components/landing-ops-ui";
 import { requireAccount } from "@/lib/auth/account";
+import { ReviewForm } from "./review-form";
 import {
   ITEM_KIND_BADGE,
   ITEM_KIND_LABEL,
@@ -93,6 +94,7 @@ export default async function AccountWalkInOrderDetailPage({
       tenant: { select: { name: true } },
       branch: { select: { name: true, phone: true } },
       vehicle: { select: { plate: true, make: true, model: true, year: true } },
+      review: { select: { rating: true, comment: true, reply: true } },
       items: {
         orderBy: { createdAt: "asc" },
         select: {
@@ -287,6 +289,13 @@ export default async function AccountWalkInOrderDetailPage({
               );
             })}
           </div>
+        </div>
+      ) : null}
+
+      {order.status === "COMPLETED" ? (
+        <div className="mt-6 rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-5">
+          <h2 className="mb-3 text-sm font-semibold text-[var(--oc-ink)]">Үйлчилгээг үнэлэх</h2>
+          <ReviewForm orderId={order.id} initial={order.review} />
         </div>
       ) : null}
     </div>

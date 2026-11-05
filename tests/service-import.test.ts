@@ -94,7 +94,7 @@ test("rows auto-match category by name and unit by name or code", async () => {
         { excelRow: 3, cells: ["Угаалга", "", "Угаалга", "м2", "15000", "", ""] },
       ],
     },
-    { name: 0, code: 1, category: 2, unit: 3, price: 4, durationValue: 5, durationUnit: 6, costPrice: null, stock: null, reminderIntervalMonths: null, description: null },
+    { name: 0, code: 1, barcode: null, category: 2, unit: 3, price: 4, durationValue: 5, durationUnit: 6, costPrice: null, stock: null, reminderIntervalMonths: null, description: null },
     categories,
     units,
   );
@@ -116,7 +116,7 @@ test("client row validation explains unmatched names and in-file code duplicates
   assert.equal(dups.has("r4"), false);
 });
 
-test("runServiceImport: skips existing codes, validates, enforces the plan quota", async () => {
+test("runServiceImport: skips existing codes, validates, has no plan quota", async () => {
   const { runServiceImport } = await import("../lib/services/service-import-run");
   const created: string[] = [];
   const result = await runServiceImport({
@@ -126,23 +126,20 @@ test("runServiceImport: skips existing codes, validates, enforces the plan quota
       row({ key: "r3", excelRow: 3, code: "AF-1", name: "Агаарын шүүлтүүр" }),
       row({ key: "r4", excelRow: 4, code: "BAD", price: "үнэгүй" }),
       row({ key: "r5", excelRow: 5, code: "", name: "Кодгүй" }),
-      row({ key: "r6", excelRow: 6, code: "X-9", name: "Хязгаараас хэтэрсэн" }),
+      row({ key: "r6", excelRow: 6, code: "X-9", name: "Гурав дахь" }),
     ],
     refs,
     existingCodes: new Set(["OF-1"]),
-    remaining: 2,
-    limitMessage: "Багцын хязгаар",
     create: async (v) => {
       created.push(v.name);
       return { ok: true, id: `id-${created.length}` };
     },
   });
-  assert.deepEqual(result.results.map((r) => [r.key, r.ok]), [["r2", false], ["r3", true], ["r4", false], ["r5", true], ["r6", false]]);
+  assert.deepEqual(result.results.map((r) => [r.key, r.ok]), [["r2", false], ["r3", true], ["r4", false], ["r5", true], ["r6", true]]);
   assert.match(result.results[0]!.error!, /бүртгэлтэй — алгасна/);
   assert.equal(result.results[2]!.fieldErrors?.price, "Үнэ буруу.");
-  assert.equal(result.results[4]!.error, "Багцын хязгаар");
-  assert.deepEqual(created, ["Агаарын шүүлтүүр", "Кодгүй"]);
-  assert.equal(result.succeeded, 2);
+  assert.deepEqual(created, ["Агаарын шүүлтүүр", "Кодгүй", "Гурав дахь"]);
+  assert.equal(result.succeeded, 3);
 });
 
 test("payload guard rejects non-string fields and oversized batches", async () => {
@@ -160,14 +157,16 @@ test("export workbook columns equal the import fields (+ Төлөв) and parse b
   const buffer = await buildServiceWorkbook({
     type: "GOODS",
     withStatus: true,
-    rows: [{ code: "OF-1", name: "Шүүлтүүр", category: "Хөдөлгүүр", unit: "ширхэг", price: "25000", costPrice: "18000", stock: "7", durationValue: null, durationUnit: null, reminderIntervalMonths: null, description: null, isActive: true }],
+    rows: [{ code: "OF-1", barcode: "8801234567890", name: "Шүүлтүүр", category: "Хөдөлгүүр", unit: "ширхэг", price: "25000", costPrice: "18000", stock: "7", durationValue: null, durationUnit: null, reminderIntervalMonths: null, description: null, isActive: true }],
   });
   const sheet = await parseImportWorkbook(buffer);
-  assert.deepEqual(sheet.headers, ["Код", "Нэр", "Ангилал", "Нэгж", "Үнэ", "Өртөг", "Үлдэгдэл", "Тайлбар", "Төлөв"]);
+  assert.deepEqual(sheet.headers, ["Код", "Нэр", "Ангилал", "Нэгж", "Үнэ", "Баркод", "Өртөг", "Үлдэгдэл", "Тайлбар", "Төлөв"]);
   const rows = buildServiceImportRows(sheet, guessServiceMapping("GOODS", sheet.headers), categories, units);
   assert.equal(rows[0]!.categoryId, "c-engine");
   assert.equal(rows[0]!.unitId, "u-pcs");
   assert.equal(rows[0]!.stock, "7");
+  // Баркод текстээр хадгалагдаж, буцаж яг уншигдана (8.8E+12 болохгүй).
+  assert.equal(rows[0]!.barcode, "8801234567890");
   void ExcelJS;
 });
 
@@ -175,7 +174,7 @@ test("actions and routes are permission-gated; list toolbar links them", () => {
   const actions = read("app/_actions/service-import.ts");
   assert.match(actions, /canCreate\(user, "services"\)/);
   assert.match(actions, /assertActiveSubscription\(user\.tenantId\)/);
-  assert.match(actions, /PLAN_LIMIT_CODES\.MAX_SERVICES/);
+  assert.doesNotMatch(actions, /enforceCountLimit|PLAN_LIMIT_REACHED|DAILY_LIMIT_REACHED|PLAN_LIMIT_CODES\.(MAX_|DAILY_)/);
   assert.match(actions, /auditSuffix: " · Excel-ээс"/);
   assert.match(read("app/dashboard/services/export/route.ts"), /canView\(user, "services"\)/);
   assert.match(read("app/dashboard/services/import/template/route.ts"), /canCreate\(user, "services"\)/);

@@ -1,25 +1,21 @@
-// Зөвхөн server-аас дуудах (Prisma-тай) runtime enforcement helper-ууд.
+// Зөвхөн server-аас дуудах (Prisma-тай) багцын модулийн helper-ууд.
 // Client component-аас ЭНЭ ФАЙЛЫГ ИМПОРТЛОХ ХЭРЭГГҮЙ — `lib/plan-limits.ts`
-// дотроос тогтмол өгөгдлийг авна.
+// дотроос тогтмол өгөгдлийг авна. Тоон хязгаар байхгүй (багц модулиар ялгардаг).
 
 import type { Plan } from "@/app/generated/prisma/enums";
-import {
-  DEFAULT_PLAN_LIMITS,
-  PLAN_LIMIT_META,
-  type PlanLimitCode,
-} from "./plan-limits";
+import { DEFAULT_PLAN_LIMITS, type PlanLimitCode } from "./plan-limits";
 import { prisma } from "./prisma";
 
 const ALL_PLANS: Plan[] = ["FREE", "BUSINESS", "ENTERPRISE"];
 
 /**
- * Тенантын идэвхтэй plan-аас хязгаарыг авна. PlanLimit-д бичлэг байхгүй бол
- * DEFAULT_PLAN_LIMITS-аас уншина.
+ * Тенантын багцад тухайн модуль (BOOLEAN код) нээлттэй эсэх — super admin-ий
+ * PlanLimit override, байхгүй бол DEFAULT_PLAN_LIMITS.
  */
-export async function getLimit(
+export async function isFeatureEnabled(
   tenantId: string,
   code: PlanLimitCode,
-): Promise<{ plan: Plan; intValue: number | null; boolValue: boolean | null }> {
+): Promise<boolean> {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: { plan: true },
@@ -28,78 +24,10 @@ export async function getLimit(
 
   const limit = await prisma.planLimit.findUnique({
     where: { plan_code: { plan: tenant.plan, code } },
-    select: { intValue: true, boolValue: true },
+    select: { boolValue: true },
   });
-  if (limit) {
-    return {
-      plan: tenant.plan,
-      intValue: limit.intValue,
-      boolValue: limit.boolValue,
-    };
-  }
-  const def = DEFAULT_PLAN_LIMITS[tenant.plan][code];
-  return { plan: tenant.plan, intValue: def.intValue, boolValue: def.boolValue };
-}
-
-/**
- * COUNT хязгаарыг шалгана. Тоологч функцийг өгөх ёстой (одоо хэдэн ширхэг
- * байгааг буцаана).
- */
-export async function enforceCountLimit(
-  tenantId: string,
-  code: PlanLimitCode,
-  count: () => Promise<number>,
-): Promise<{ allowed: boolean; current: number; limit: number | null; message?: string }> {
-  const { plan, intValue } = await getLimit(tenantId, code);
-  if (intValue == null) {
-    return { allowed: true, current: 0, limit: null };
-  }
-  const current = await count();
-  if (current >= intValue) {
-    const meta = PLAN_LIMIT_META[code];
-    return {
-      allowed: false,
-      current,
-      limit: intValue,
-      message: `${meta.label}: таны багц (${plan}) дээр ${intValue} хязгаартай. Одоо ${current}. Багцаа сайжруулна уу.`,
-    };
-  }
-  return { allowed: true, current, limit: intValue };
-}
-
-/**
- * Хэд хэдэн COUNT хязгаарыг НЭГ query-ээр авна (dashboard-ийн хэрэглээний
- * заагуур мэт олон код зэрэг хэрэгтэй үед `getLimit`-ийг давтан дуудахаас
- * зайлсхийнэ). `plan`-г дуудагч тал өөрөө дамжуулна (ихэвчлэн аль хэдийн
- * ачаалсан `user.tenant.plan`) — нэмэлт tenant.findUnique хийхгүй.
- */
-export async function getLimitsMap<T extends PlanLimitCode>(
-  plan: Plan,
-  codes: T[],
-): Promise<Record<T, number | null>> {
-  const overrides = await prisma.planLimit.findMany({
-    where: { plan, code: { in: codes } },
-    select: { code: true, intValue: true },
-  });
-  const overrideMap = new Map(overrides.map((o) => [o.code, o.intValue]));
-  const result = {} as Record<T, number | null>;
-  for (const code of codes) {
-    result[code] = overrideMap.has(code)
-      ? overrideMap.get(code)!
-      : DEFAULT_PLAN_LIMITS[plan][code].intValue;
-  }
-  return result;
-}
-
-/**
- * BOOLEAN хязгаарыг шалгана.
- */
-export async function isFeatureEnabled(
-  tenantId: string,
-  code: PlanLimitCode,
-): Promise<boolean> {
-  const { boolValue } = await getLimit(tenantId, code);
-  return boolValue === true;
+  if (limit && limit.boolValue != null) return limit.boolValue === true;
+  return DEFAULT_PLAN_LIMITS[tenant.plan][code].boolValue === true;
 }
 
 /**

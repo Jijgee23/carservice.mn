@@ -13,30 +13,31 @@
    `*-white/x` utility ашигладаг тул light үед `--color-white`-г бараан болгож
    массаар эргүүлнэ; өнгөт (accent) товчны цагаан текстийг safeguard-аар хадгална. */
 :root {
-  --bg-primary: #0a0a0f;
-  --bg-secondary: #0d0d14;
-  --surface: #0d0d14; /* sidebar, dropdown, цул гадаргуу */
+  --bg-primary: #1e2b38;
+  --bg-secondary: #17222d;
+  --surface: #17222d; /* sidebar, dropdown, цул гадаргуу */
   --glass-bg: rgba(255, 255, 255, 0.04);
   --glass-border: rgba(255, 255, 255, 0.08);
   --input-bg: rgba(255, 255, 255, 0.04);
   --input-border: rgba(255, 255, 255, 0.1);
   --input-fg: #ffffff;
   --placeholder: rgba(255, 255, 255, 0.25);
-  --option-bg: #0d0d14;
-  --popover: #15151f; /* custom dropdown цэс */
+  --option-bg: #17222d;
+  --popover: #2c3e50; /* custom dropdown цэс */
   --hover-bg: rgba(255, 255, 255, 0.06);
-  --accent: #6c47ff;
-  --accent-light: #8b6bff;
-  --accent-glow: rgba(108, 71, 255, 0.25);
+  /* Midnight + Alizarin (designs: carservice.mn өнгөний схем, 13/14). */
+  --accent: #e74c3c;
+  --accent-light: #ec7063;
+  --accent-glow: rgba(231, 76, 60, 0.25);
   /* Сонгогдсон (идэвхтэй) шүүлтүүр/dropdown-ы текстийн өнгө.
      Dark-д цайвар ягаан; light-д тод ягаан (доор override). */
-  --accent-strong: #8b6bff;
+  --accent-strong: #f1948a;
   /* График (SVG) — тэнхлэгийн шошго, grid, hover. Inline SVG-д Tailwind
      хэрэглэх боломжгүй тул theme-aware var-аар. */
   --chart-grid: rgba(255, 255, 255, 0.06);
   --chart-label: rgba(255, 255, 255, 0.35);
   --chart-crosshair: rgba(255, 255, 255, 0.18);
-  --chart-marker-ring: #14141f;
+  --chart-marker-ring: #2c3e50;
   /* Нимгэн, цэвэрхэн scrollbar-ын thumb өнгө. */
   --scrollbar-thumb: rgba(255, 255, 255, 0.12);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.22);
@@ -48,35 +49,35 @@
      designs/design_example.html-ийн ink scale: bg=ink-900, sidebar/surface=
      ink-950. Landing/auth зэрэг sidebar-гүй хуудсууд --bg-primary/--surface-
      ээ хэвээр ашиглана. Light mode-д доор ердийнхтэй адилхан болгоно. */
-  --shell-bg-primary: #12142b; /* ink-900 */
-  --shell-surface: #0e1024; /* ink-950 */
+  --shell-bg-primary: #1e2b38; /* midnight */
+  --shell-surface: #17222d; /* midnight deep */
 }
 
 html.light {
-  --bg-primary: #f4f5fa;
+  --bg-primary: #ecf0f1;
   --bg-secondary: #ffffff;
   --surface: #ffffff;
   --glass-bg: rgba(255, 255, 255, 0.75);
-  --glass-border: rgba(17, 20, 45, 0.1);
+  --glass-border: rgba(44, 62, 80, 0.1);
   --input-bg: #ffffff;
-  --input-border: rgba(17, 20, 45, 0.16);
-  --input-fg: #14151c;
-  --placeholder: rgba(17, 20, 45, 0.4);
+  --input-border: rgba(44, 62, 80, 0.16);
+  --input-fg: #2c3e50;
+  --placeholder: rgba(44, 62, 80, 0.4);
   --option-bg: #ffffff;
   --popover: #ffffff;
-  --hover-bg: rgba(17, 20, 45, 0.05);
+  --hover-bg: rgba(44, 62, 80, 0.05);
   /* Бүх `text/bg/border-white/x` utility-г бараан болгож эргүүлнэ. */
-  --color-white: #14151c;
+  --color-white: #2c3e50;
   /* Гэрэлт горимд сонгогдсон шүүлтүүрийн цайвар ягаан текст цайвар дэвсгэр
      дээр бүдгэрдэг тул тод ягаан (violet-700) болгоно. */
-  --accent-strong: #6d28d9;
+  --accent-strong: #c0392b;
   /* Графикийн цагаан шошго/grid гэрэлт дэвсгэр дээр алга болдог тул бараан. */
-  --chart-grid: rgba(17, 20, 45, 0.09);
-  --chart-label: rgba(17, 20, 45, 0.5);
-  --chart-crosshair: rgba(17, 20, 45, 0.25);
+  --chart-grid: rgba(44, 62, 80, 0.09);
+  --chart-label: rgba(44, 62, 80, 0.5);
+  --chart-crosshair: rgba(44, 62, 80, 0.25);
   --chart-marker-ring: #ffffff;
-  --scrollbar-thumb: rgba(17, 20, 45, 0.18);
-  --scrollbar-thumb-hover: rgba(17, 20, 45, 0.32);
+  --scrollbar-thumb: rgba(44, 62, 80, 0.18);
+  --scrollbar-thumb-hover: rgba(44, 62, 80, 0.32);
   /* Light mode-д app shell ердийн --bg-primary/--surface-тэй адил харагдана
      (ink scale нь зөвхөн dark mode-д хэрэглэгдэнэ). */
   --shell-bg-primary: var(--bg-primary);
@@ -86,6 +87,23 @@ html.light {
 @theme inline {
   --font-sans: var(--font-geist);
   --color-accent: var(--accent);
+}
+
+/* Брэндийн өмнөх violet-ыг Alizarin улаан руу дахин зурна — `*-violet-*`
+   utility ашигладаг хуучин хуудсууд (үйлчлүүлэгчийн апп, систем) кодоо
+   өөрчлөхгүйгээр шинэ өнгөтэй болно. */
+@theme {
+  --color-violet-50: #fdedec;
+  --color-violet-100: #fadbd8;
+  --color-violet-200: #f5b7b1;
+  --color-violet-300: #f1948a;
+  --color-violet-400: #ec7063;
+  --color-violet-500: #e74c3c;
+  --color-violet-600: #cb4335;
+  --color-violet-700: #b03a2e;
+  --color-violet-800: #943126;
+  --color-violet-900: #78281f;
+  --color-violet-950: #4a1812;
 }
 
 /* ₮ (U+20AE) глиф Geist-д байхгүй тул fallback фонтоос өөр baseline/хэмжээтэй
@@ -136,22 +154,7 @@ html.light
   z-index: -10;
   pointer-events: none;
   background-color: var(--bg-primary);
-  background-image:
-    radial-gradient(
-      60rem 48rem at 18% 0%,
-      rgba(108, 71, 255, 0.13),
-      transparent 60%
-    ),
-    radial-gradient(
-      52rem 44rem at 100% 8%,
-      rgba(59, 130, 246, 0.09),
-      transparent 55%
-    ),
-    radial-gradient(
-      48rem 48rem at 90% 100%,
-      rgba(139, 107, 255, 0.06),
-      transparent 60%
-    );
+  /* Midnight + Alizarin: хавтгай дэвсгэр (gradient туяагүй). */
 }
 @media (min-width: 1024px) {
   /* Clear the sidebar so the backdrop only covers the content column. */
@@ -183,22 +186,7 @@ html.light
   z-index: -10;
   pointer-events: none;
   background-color: var(--shell-bg-primary);
-  background-image:
-    radial-gradient(
-      60rem 48rem at 18% 0%,
-      rgba(108, 71, 255, 0.13),
-      transparent 60%
-    ),
-    radial-gradient(
-      52rem 44rem at 100% 8%,
-      rgba(59, 130, 246, 0.09),
-      transparent 55%
-    ),
-    radial-gradient(
-      48rem 48rem at 90% 100%,
-      rgba(139, 107, 255, 0.06),
-      transparent 60%
-    );
+  /* Midnight + Alizarin: хавтгай дэвсгэр (gradient туяагүй). */
 }
 @media (min-width: 1024px) {
   .shell-content-bg {
@@ -216,7 +204,7 @@ html.light
     box-shadow 0.2s ease;
 }
 .sidebar-collapse-btn:hover {
-  box-shadow: 0 4px 16px -4px rgba(108, 71, 255, 0.5);
+  box-shadow: 0 4px 16px -4px rgba(231, 76, 60, 0.45);
 }
 .sidebar-collapse-btn[data-collapsed="true"] {
   rotate: 180deg;
@@ -241,67 +229,96 @@ html.light
    апп (dashboard/account/system) энэ token-уудыг мэдэхгүй, --accent/--bg-primary
    зэрэг глобал token-той огт мөргөлдөхгүй (тусдаа `--oc-` угтвар). */
 .landing-ops {
-  --oc-carbon: #0b0d10;
-  --oc-panel: #0e1116;
-  --oc-panel2: #101318;
-  --oc-line: #23272e;
-  --oc-line2: #191d23;
-  --oc-ink: #f4f5f7;
-  --oc-ink2: #edeef0;
-  --oc-muted: #a7adb6;
-  --oc-muted2: #8a8f98;
-  --oc-muted3: #6e747e;
-  --oc-muted4: #4a4d54;
-  --oc-accent: #22d3ee;
-  --oc-accent-hi: #67e8f9;
-  --oc-ok: #3ddc97;
-  --oc-warn: #dc7f4f;
-  /* Accent товч/badge дээрх текст — dark-д (цайвар cyan accent) бараан,
-     light-д (бараан teal accent) цагаан (доорх html.light override). */
-  --oc-on-accent: #14120c;
-  /* Ажлын хувиарын салбар бүрийн өнгө (designs/Schedule Calendar) — салбарын
-     индексээр ээлжлэн оноогдоно; light-д бараан хувилбар. */
-  --oc-b1: #22d3ee;
-  --oc-b2: #f5b74e;
-  --oc-b3: #a78bfa;
-  --oc-b4: #4ade80;
-  --oc-b5: #f472b6;
-  --oc-b6: #fb923c;
-  /* `Select`/`FilterSelect`/`DatePicker` зэрэг олон хуудсанд хуваалцдаг
-     компонентууд дотроо ердийн violet брэндийн CSS var/inline-style ашигладаг
-     тул энд Ops Console (cyan) руу дарж бичнэ — компонентын код өөрчлөгдөхгүй. */
+  /* Midnight + Alizarin — dark (designs: 14). */
+  --oc-carbon: #1e2b38;
+  --oc-panel: #2c3e50;
+  --oc-panel2: #26374a;
+  --oc-line: #3b5167;
+  --oc-line2: #314559;
+  --oc-ink: #ecf0f1;
+  --oc-ink2: #dde3e6;
+  --oc-muted: #bdc6c8;
+  --oc-muted2: #a9b4b6;
+  --oc-muted3: #95a5a6;
+  --oc-muted4: #5d6d7e;
+  --oc-accent: #e74c3c;
+  --oc-accent-hi: #f1948a;
+  --oc-ok: #58d68d;
+  --oc-warn: #f7c948;
+  --oc-on-accent: #ffffff;
+  /* Ажлын хувиарын салбар бүрийн өнгө — салбарын индексээр ээлжлэн. */
+  --oc-b1: #ec7063;
+  --oc-b2: #f7c948;
+  --oc-b3: #bb8fce;
+  --oc-b4: #58d68d;
+  --oc-b5: #f1948a;
+  --oc-b6: #5dade2;
+  /* `Select`/`FilterSelect`/`DatePicker` — Alizarin руу дарж бичнэ. */
   --accent-strong: var(--oc-accent-hi);
-  --select-option-active-bg: rgba(34, 211, 238, 0.18);
-  --filter-active-border: rgba(34, 211, 238, 0.45);
-  --filter-active-bg: rgba(34, 211, 238, 0.18);
+  --select-option-active-bg: rgba(231, 76, 60, 0.2);
+  --filter-active-border: rgba(231, 76, 60, 0.5);
+  --filter-active-bg: rgba(231, 76, 60, 0.2);
 }
 html.light .landing-ops {
-  --oc-carbon: #f6f5f2;
+  /* Midnight + Alizarin — light (designs: 13): #2C3E50 · #7F8C8D · #E74C3C · #ECF0F1 */
+  --oc-carbon: #ecf0f1;
   --oc-panel: #ffffff;
-  --oc-panel2: #faf9f8;
-  --oc-line: #e3e0da;
-  --oc-line2: #eae7e1;
-  --oc-ink: #16171b;
-  --oc-ink2: #1e1f24;
-  --oc-muted: #5c6067;
-  --oc-muted2: #74787f;
-  --oc-muted3: #90949b;
-  --oc-muted4: #b7babf;
-  --oc-accent: #0e7490;
-  --oc-accent-hi: #0891b2;
+  --oc-panel2: #f4f6f7;
+  --oc-line: #d5dcdf;
+  --oc-line2: #e1e6e8;
+  --oc-ink: #2c3e50;
+  --oc-ink2: #34495e;
+  --oc-muted: #5f6b6d;
+  --oc-muted2: #6b777a;
+  --oc-muted3: #7f8c8d;
+  --oc-muted4: #a9b4b6;
+  --oc-accent: #c0392b;
+  --oc-accent-hi: #e74c3c;
   --oc-on-accent: #ffffff;
-  --oc-ok: #1e9f6e;
-  --oc-warn: #b45309;
-  --oc-b1: #0e7490;
-  --oc-b2: #b45309;
-  --oc-b3: #6d28d9;
-  --oc-b4: #15803d;
-  --oc-b5: #be185d;
-  --oc-b6: #c2410c;
-  --accent-strong: var(--oc-accent-hi);
-  --select-option-active-bg: rgba(14, 116, 144, 0.14);
-  --filter-active-border: rgba(14, 116, 144, 0.4);
-  --filter-active-bg: rgba(14, 116, 144, 0.14);
+  --oc-ok: #1e8449;
+  --oc-warn: #9a6700;
+  --oc-b1: #c0392b;
+  --oc-b2: #9a6700;
+  --oc-b3: #7d3c98;
+  --oc-b4: #1e8449;
+  --oc-b5: #b03a2e;
+  --oc-b6: #2471a3;
+  --accent-strong: var(--oc-accent);
+  --select-option-active-bg: rgba(192, 57, 43, 0.12);
+  --filter-active-border: rgba(192, 57, 43, 0.4);
+  --filter-active-bg: rgba(192, 57, 43, 0.12);
+}
+
+/* Sidebar — дизайн дээр хоёр горимд хоёуланд нь шөнийн хөх (Midnight).
+   `.oc-side` доторх бүх `var(--oc-*)` эндээс авна; `white/x` utility цагаан. */
+.landing-ops .oc-side {
+  --oc-carbon: #2c3e50;
+  --oc-panel: #2c3e50;
+  --oc-panel2: #34495e;
+  --oc-line: #3b5167;
+  --oc-line2: #3b5167;
+  --oc-ink: #ffffff;
+  --oc-ink2: #ecf0f1;
+  --oc-muted: #d5dcdf;
+  --oc-muted2: #bdc6c8;
+  --oc-muted3: #a9b4b6;
+  --oc-muted4: #7f8c8d;
+  --oc-accent: #e74c3c;
+  --oc-accent-hi: #f1948a;
+  --oc-on-accent: #ffffff;
+  --oc-side-active: #3b5167;
+  --oc-side-active-ink: #ffffff;
+  --color-white: #ffffff;
+  color: var(--oc-ink2);
+}
+html:not(.light) .landing-ops .oc-side {
+  --oc-carbon: #17222d;
+  --oc-panel: #17222d;
+  --oc-panel2: #1e2b38;
+  --oc-line: #2c3e50;
+  --oc-line2: #2c3e50;
+  --oc-muted3: #95a5a6;
+  --oc-side-active: #2c3e50;
 }
 
 /* Ажлын хувиарын салбарын өнгө (designs/Schedule Calendar). `.branch-c1..c6`
@@ -365,15 +382,15 @@ html.light .landing-ops {
 .landing-ops .font-plex-mono {
   font-family: var(--font-plex-mono), "TugrikGlyph", Arial, sans-serif;
 }
-/* .auth-input-ийн focus өнгө нь ердийн violet бренд-д зориулагдсан тул Ops
-   Console (cyan) хуудсуудад (жнь: /page/login) энд түрж дарна. */
+/* .auth-input-ийн focus өнгө нь ердийн violet бренд-д зориулагдсан тул Midnight +
+   Alizarin хуудсуудад (жнь: /page/login) энд түрж дарна. */
 .landing-ops .auth-input:focus {
-  border-color: rgba(34, 211, 238, 0.6);
-  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15);
+  border-color: rgba(231, 76, 60, 0.6);
+  box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.15);
 }
 .landing-ops .compact-input:focus {
-  border-color: rgba(34, 211, 238, 0.6);
-  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15);
+  border-color: rgba(231, 76, 60, 0.6);
+  box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.15);
 }
 /* /discover-ийн Select (Аймаг/хот, Сум/дүүрэг) нь ердийн `.auth-input`
    (форм-ийн 44px өндөр) ашигладаг ч энэ хуудсанд tab товч/хайлтын input-тай
@@ -392,8 +409,8 @@ html.light .landing-ops {
   padding-bottom: 0;
   font-size: 0.875rem;
 }
-/* `BrandWordmark`-ийн "care" хэсэг ердийн violet брэндэд зориулагдсан ч Ops
-   Console (cyan) хуудсуудад (dashboard sidebar, /system/login гэх мэт)
+/* `BrandWordmark`-ийн "care" хэсэг ердийн violet брэндэд зориулагдсан ч Midnight +
+   Alizarin хуудсуудад (dashboard sidebar, /system/login гэх мэт)
    энд түрж дарна — /page/guide зэрэг хараахан шилжээгүй хуудсууд
    энэ scope-д ороогүй тул violet хэвээрээ үлдэнэ. */
 .landing-ops .brand-care-accent {
@@ -409,59 +426,59 @@ html.light .landing-ops {
    хаа нэгтээ .landing-ops байгаа эсэх"-ийг шалгаж, олдвол body-ийн аль ч
    удамд (portal хамаарна) дарж бичнэ. */
 body:has(.landing-ops) .dp-accent-border {
-  border-color: rgba(34, 211, 238, 0.6) !important;
-  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.15) !important;
+  border-color: rgba(231, 76, 60, 0.6) !important;
+  box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.15) !important;
 }
 body:has(.landing-ops) .dp-accent-active {
-  background-color: #22d3ee !important;
-  color: #14120c !important;
+  background-color: #e74c3c !important;
+  color: #ffffff !important;
 }
 body:has(.landing-ops) .dp-accent-inrange {
-  background-color: rgba(34, 211, 238, 0.15) !important;
+  background-color: rgba(231, 76, 60, 0.15) !important;
 }
 body:has(.landing-ops) .dp-accent-ring {
-  --tw-ring-color: rgba(34, 211, 238, 0.5);
+  --tw-ring-color: rgba(231, 76, 60, 0.5);
 }
 body:has(.landing-ops) .dp-accent-text {
-  color: #22d3ee !important;
+  color: #e74c3c !important;
 }
 body:has(.landing-ops) .dp-accent-text:hover {
-  background-color: rgba(34, 211, 238, 0.1) !important;
+  background-color: rgba(231, 76, 60, 0.1) !important;
 }
 body:has(.landing-ops) .dp-accent-btn {
-  background-color: #22d3ee !important;
-  color: #14120c !important;
+  background-color: #e74c3c !important;
+  color: #ffffff !important;
 }
 body:has(.landing-ops) .dp-accent-btn:hover {
-  background-color: #67e8f9 !important;
+  background-color: #f1948a !important;
 }
 /* Гэрэлт горим — `.landing-ops`-ийн light override-той тааруулав. */
 html.light body:has(.landing-ops) .dp-accent-border {
-  border-color: rgba(14, 116, 144, 0.55) !important;
-  box-shadow: 0 0 0 2px rgba(14, 116, 144, 0.15) !important;
+  border-color: rgba(192, 57, 43, 0.55) !important;
+  box-shadow: 0 0 0 2px rgba(192, 57, 43, 0.15) !important;
 }
 html.light body:has(.landing-ops) .dp-accent-active {
-  background-color: #0e7490 !important;
+  background-color: #c0392b !important;
   color: #ffffff !important;
 }
 html.light body:has(.landing-ops) .dp-accent-inrange {
-  background-color: rgba(14, 116, 144, 0.14) !important;
+  background-color: rgba(192, 57, 43, 0.14) !important;
 }
 html.light body:has(.landing-ops) .dp-accent-ring {
-  --tw-ring-color: rgba(14, 116, 144, 0.45);
+  --tw-ring-color: rgba(192, 57, 43, 0.45);
 }
 html.light body:has(.landing-ops) .dp-accent-text {
-  color: #0e7490 !important;
+  color: #c0392b !important;
 }
 html.light body:has(.landing-ops) .dp-accent-text:hover {
-  background-color: rgba(14, 116, 144, 0.1) !important;
+  background-color: rgba(192, 57, 43, 0.1) !important;
 }
 html.light body:has(.landing-ops) .dp-accent-btn {
-  background-color: #0e7490 !important;
+  background-color: #c0392b !important;
   color: #ffffff !important;
 }
 html.light body:has(.landing-ops) .dp-accent-btn:hover {
-  background-color: #0891b2 !important;
+  background-color: #e74c3c !important;
 }
 @keyframes float {
   0%, 100% { transform: translateY(0px); }
@@ -511,14 +528,14 @@ html.light .light-only { display: block; }
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, #a78bff 0%, #6c47ff 50%, #3b82f6 100%);
+  background: linear-gradient(135deg, #f1948a 0%, #e74c3c 50%, #c0392b 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .hero-glow {
-  background: radial-gradient(ellipse 60% 40% at 50% 0%, rgba(108,71,255,0.18) 0%, transparent 70%);
+  background: radial-gradient(ellipse 60% 40% at 50% 0%, rgba(231,76,60,0.18) 0%, transparent 70%);
 }
 
 /* Нимгэн, орчин үеийн scrollbar — sidebar нав гэх мэт. Firefox + WebKit.
@@ -622,13 +639,13 @@ html.light .light-only { display: block; }
   box-shadow:
     inset 0 0 0 1px rgba(167, 139, 255, 0.3),
     inset 2px 0 10px -4px rgba(167, 139, 255, 0.6),
-    0 8px 26px -10px rgba(108, 71, 255, 0.7);
+    0 8px 26px -10px rgba(231, 76, 60, 0.7);
 }
 /* Гэрэлт горимд hover дээр текст цагаан болвол (color:#fff) цагаан гадаргуу
    дээр алга болно — бараан болгож, гэрэлтэлтийг зөөлрүүлнэ. */
 html.light .nav-item:hover {
   color: #14151c;
-  text-shadow: 0 0 12px rgba(108, 71, 255, 0.22);
+  text-shadow: 0 0 12px rgba(231, 76, 60, 0.22);
 }
 .nav-item .nav-icon {
   display: inline-flex;
@@ -659,7 +676,7 @@ html.light .nav-item:hover {
 }
 .card-hover:hover {
   transform: translateY(-4px);
-  box-shadow: 0 8px 40px rgba(108, 71, 255, 0.2);
+  box-shadow: 0 8px 40px rgba(231, 76, 60, 0.2);
 }
 
 .auth-input {
@@ -676,7 +693,7 @@ html.light .nav-item:hover {
 .auth-input::placeholder { color: var(--placeholder); }
 .auth-input:focus {
   border-color: rgba(139, 107, 255, 0.6);
-  box-shadow: 0 0 0 3px rgba(108, 71, 255, 0.15);
+  box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.15);
 }
 /* Алдаатай талбар. `.auth-input` нь layer-гүй тул Tailwind-ийн
    `border-red-500/50` utility (@layer utilities)-г дардаг — `Select` болон
@@ -700,7 +717,7 @@ html.light .nav-item:hover {
 .compact-input::placeholder { color: var(--placeholder); }
 .compact-input:focus {
   border-color: rgba(139, 107, 255, 0.5);
-  box-shadow: 0 0 0 2px rgba(108, 71, 255, 0.15);
+  box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.15);
 }
 /* Browser-н native dropdown-д option-ууд цайвар background дээр цагаан текстээр
    хүндэгдэхээс сэргийлж — select бол dark background + readable text аар бичүүлнэ */

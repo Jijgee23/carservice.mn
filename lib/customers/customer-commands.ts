@@ -12,8 +12,6 @@ import { Prisma } from "@/app/generated/prisma/client";
 import { logAudit } from "@/lib/audit";
 import { orgRegnumError } from "@/lib/customers/org-regnum";
 import { isValidPhone, normalizePhone } from "@/lib/phone";
-import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
-import { enforceCountLimit } from "@/lib/plan-limits-server";
 import { prisma } from "@/lib/prisma";
 
 export type CustomerCommandActor = {
@@ -200,24 +198,6 @@ export async function createCustomerCommand(input: {
   const { data, fieldErrors } = validateCustomerInput(input.data);
   if (Object.keys(fieldErrors).length > 0) {
     throw new CustomerCommandError("Хүсэлт буруу.", 422, "VALIDATION_FAILED", fieldErrors);
-  }
-
-  // `MAX_CUSTOMERS` — БҮХ entry point дээр шалгана (D-154, 2026-09-22
-  // хэрэглэгчийн шийдвэр; D-151-ийг орлоно). Урьд нь зөвхөн dashboard-ын
-  // бүрэн create action шалгадаг байсан бөгөөд quick-create болон API route
-  // хязгаарыг тойрч гардаг байв. Тухайн алгасалтыг зориудаар хаасан тул
-  // энд түг байхгүй: команд дуудагдсан бол хязгаар үргэлж шалгагдана.
-  const limit = await enforceCountLimit(
-    actor.tenantId,
-    PLAN_LIMIT_CODES.MAX_CUSTOMERS,
-    () => prisma.customer.count({ where: { tenantId: actor.tenantId } }),
-  );
-  if (!limit.allowed) {
-    throw new CustomerCommandError(
-      limit.message ?? "Үйлчлүүлэгчийн хязгаарт хүрсэн байна.",
-      422,
-      "PLAN_LIMIT_REACHED",
-    );
   }
 
   const account = await prisma.account.findUnique({

@@ -15,6 +15,7 @@ export async function GET(req: Request) {
     orderBy: [{ isActive: "desc" }, { name: "asc" }],
     select: {
       code: true,
+      barcode: true,
       name: true,
       price: true,
       costPrice: true,
@@ -33,6 +34,7 @@ export async function GET(req: Request) {
     withStatus: true,
     rows: services.map((s) => ({
       code: s.code,
+      barcode: s.barcode,
       name: s.name,
       category: s.category?.name ?? null,
       unit: s.unit?.name ?? null,

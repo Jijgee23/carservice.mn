@@ -1,5 +1,6 @@
 "use server";
 
+import { assertModuleEnabled } from "@/lib/plan-modules-server";
 import { unstable_rethrow } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { hasPermission } from "@/lib/auth/roles";
@@ -50,6 +51,7 @@ export async function createCashEntryAction(_prev: CashActionState, formData: Fo
   try {
     const user = await requireUser();
     await assertActiveSubscription(user.tenantId);
+    await assertModuleEnabled(user.tenantId, "enable_finance");
     const entry = await createCashEntry({
       actor: user,
       direction: s(formData, "direction"),
@@ -78,6 +80,7 @@ export async function voidCashEntryAction(_prev: CashActionState, formData: Form
   try {
     const user = await requireUser();
     await assertActiveSubscription(user.tenantId);
+    await assertModuleEnabled(user.tenantId, "enable_finance");
     const entryId = s(formData, "entryId");
     if (!entryId) return { ok: false, message: "Бичлэг шаардлагатай." };
     await voidCashEntry({ actor: user, entryId, reason: s(formData, "reason") });
@@ -94,6 +97,7 @@ export async function createCashTypeAction(_prev: CashActionState, formData: For
   try {
     const user = await requireUser();
     await assertActiveSubscription(user.tenantId);
+    await assertModuleEnabled(user.tenantId, "enable_finance");
     const type = await createCashType({ actor: user, direction: s(formData, "direction"), name: s(formData, "name") });
     revalidateCash();
     return { ok: true, typeId: type.id };
@@ -108,6 +112,7 @@ export async function updateCashTypeAction(_prev: CashActionState, formData: For
   try {
     const user = await requireUser();
     await assertActiveSubscription(user.tenantId);
+    await assertModuleEnabled(user.tenantId, "enable_finance");
     const typeId = s(formData, "typeId");
     if (!typeId) return { ok: false, message: "Төрөл шаардлагатай." };
     const isActiveRaw = s(formData, "isActive");
@@ -134,6 +139,7 @@ export async function uploadCashAttachmentAction(formData: FormData): Promise<{ 
     const user = await requireUser();
     if (!hasPermission(user, "cash.manage")) return { ok: false, message: "Танд кассыг удирдах эрх байхгүй." };
     await assertActiveSubscription(user.tenantId);
+    await assertModuleEnabled(user.tenantId, "enable_finance");
     const file = formData.get("file");
     if (!(file instanceof File) || file.size === 0) return { ok: false, message: "Зураг сонгоно уу." };
     validateUpload(file);

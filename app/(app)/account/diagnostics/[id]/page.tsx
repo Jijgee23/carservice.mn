@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
-import { BtnLink } from "@/app/_components/landing-ops-ui";
+import { BackLink } from "@/app/(app)/_components/consumer-ui";
 import { AdvancedPDFButton } from "@/app/dashboard/diagnostics/reports/[id]/pdf-generator";
-import { ReportAnswers } from "@/app/dashboard/diagnostics/reports/[id]/report-answers";
+import { ReportCustomerView } from "@/app/dashboard/diagnostics/reports/[id]/report-customer-view";
 import { requireAccount } from "@/lib/auth/account";
 import {
   DIAGNOSTIC_TYPE_BADGE,
@@ -68,24 +68,60 @@ export default async function AccountDiagnosticDetailPage({
   const data = (report.data ?? {}) as ReportData;
   const tp = report.template.type as DiagnosticType;
 
+  const sev = report.maxSeverity as ReportSeverity | null;
+
   return (
     <div className="w-full max-w-full flex flex-col gap-5">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold">{report.template.name}</h1>
-          <p className="text-[var(--oc-muted)] text-sm mt-0.5">
-            {report.vehicle.plate} · {report.vehicle.make} {report.vehicle.model}
-            {report.vehicle.year ? ` · ${report.vehicle.year}` : ""}
-          </p>
-          <p className="text-[var(--oc-muted3)] text-xs mt-0.5">
-            {report.createdAt.toLocaleString("mn-MN", { hour12: false })} ·{" "}
-            {report.branch.name}
-            {report.mileageAtReport != null
-              ? ` · ${report.mileageAtReport.toLocaleString("mn-MN")} км`
-              : ""}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
+      <BackLink href="/account/diagnostics">Оношилгооны түүх</BackLink>
+
+      <div className="relative overflow-hidden rounded-2xl border border-[var(--oc-line)] bg-[var(--oc-panel)] p-5 sm:p-6">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[var(--oc-accent)]/10 blur-2xl"
+        />
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`text-[11px] px-2.5 py-0.5 rounded-full ${DIAGNOSTIC_TYPE_BADGE[tp]}`}>
+                {DIAGNOSTIC_TYPE_LABEL[tp]}
+              </span>
+              {sev ? (
+                <span className={`text-[11px] px-2.5 py-0.5 rounded-full border ${SEVERITY_BADGE[sev]}`}>
+                  {SEVERITY_LABEL[sev]}
+                </span>
+              ) : null}
+            </div>
+            <h1 className="mt-2 text-2xl font-bold leading-tight text-[var(--oc-ink)]">{report.template.name}</h1>
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[var(--oc-muted)]">
+              <span className="rounded-md border border-[var(--oc-line)] bg-[var(--oc-panel2)] px-1.5 py-px font-plex-mono text-xs font-semibold text-[var(--oc-ink2)]">
+                {report.vehicle.plate}
+              </span>
+              <span>
+                {report.vehicle.make} {report.vehicle.model}
+                {report.vehicle.year ? ` · ${report.vehicle.year}` : ""}
+              </span>
+            </div>
+            <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs">
+              <div className="flex gap-1.5">
+                <dt className="text-[var(--oc-muted3)]">Огноо</dt>
+                <dd className="tabular-nums text-[var(--oc-ink2)]">
+                  {report.createdAt.toLocaleString("mn-MN", { hour12: false })}
+                </dd>
+              </div>
+              <div className="flex gap-1.5">
+                <dt className="text-[var(--oc-muted3)]">Салбар</dt>
+                <dd className="text-[var(--oc-ink2)]">{report.branch.name}</dd>
+              </div>
+              {report.mileageAtReport != null ? (
+                <div className="flex gap-1.5">
+                  <dt className="text-[var(--oc-muted3)]">Гүйлт</dt>
+                  <dd className="tabular-nums text-[var(--oc-ink2)]">
+                    {report.mileageAtReport.toLocaleString("mn-MN")} км
+                  </dd>
+                </div>
+              ) : null}
+            </dl>
+          </div>
           <AdvancedPDFButton
             label="PDF татах"
             report={{
@@ -107,36 +143,16 @@ export default async function AccountDiagnosticDetailPage({
               data,
             }}
           />
-          <BtnLink href="/account/diagnostics" variant="ghost">
-            ← Буцах
-          </BtnLink>
         </div>
-      </div>
-
-      <div className="flex items-center gap-2 flex-wrap">
-        <span
-          className={`text-xs px-2.5 py-1 rounded-full ${DIAGNOSTIC_TYPE_BADGE[tp]}`}
-        >
-          {DIAGNOSTIC_TYPE_LABEL[tp]}
-        </span>
-        {report.maxSeverity ? (
-          <span
-            className={`text-xs px-2.5 py-1 rounded-full border ${SEVERITY_BADGE[report.maxSeverity as ReportSeverity]}`}
-          >
-            {SEVERITY_LABEL[report.maxSeverity as ReportSeverity]}
-          </span>
+        {report.notes ? (
+          <div className="relative mt-4 rounded-xl border-l-2 border-[var(--oc-accent)] bg-[var(--oc-panel2)] px-4 py-3 text-sm text-[var(--oc-ink2)]">
+            <div className="mb-0.5 text-xs font-semibold text-[var(--oc-muted)]">Мастерын тэмдэглэл</div>
+            <p className="whitespace-pre-wrap">{report.notes}</p>
+          </div>
         ) : null}
       </div>
 
-      {report.notes ? (
-        <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 text-sm text-[var(--oc-muted2)]">
-          {report.notes}
-        </div>
-      ) : null}
-
-      {/* Customer тал дээр нэмэлт өнгө (хэвийн/анхаарах/солих) шүүлт —
-          mobile аппын тайлангийн дэлгэрэнгүйтэй ижил дүрэмтэй. */}
-      <ReportAnswers schema={schema} data={data} toneFilter />
+      <ReportCustomerView schema={schema} data={data} />
     </div>
   );
 }

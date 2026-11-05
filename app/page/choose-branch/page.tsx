@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { EmptyState } from "@/app/_components/empty-state";
 import { TenantAuthShellWide } from "@/app/_components/tenant-auth-shell";
 import { requireUser } from "@/lib/auth";
@@ -7,12 +7,12 @@ import { canChooseAllBranches, eligibleBranchIds } from "@/lib/auth/roles";
 import { prisma } from "@/lib/prisma";
 import { ChooseBranchForm } from "./choose-branch-form";
 
-const plexSans = IBM_Plex_Sans({
+const plexSans = Geist({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-plex-sans",
 });
-const plexMono = IBM_Plex_Mono({
+const plexMono = Geist_Mono({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600"],
   variable: "--font-plex-mono",

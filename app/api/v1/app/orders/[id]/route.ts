@@ -38,6 +38,9 @@ export async function GET(
       ...INTAKE_VIEW_SELECT,
       tenant: { select: { name: true, slug: true } },
       branch: { select: { name: true, phone: true } },
+      // Үйлчлүүлэгчийн үнэлгээ (POST /api/v1/app/orders/[id]/review) — нуусан ч өөрийнхөө үнэлгээг харна.
+      review: { select: { rating: true, comment: true, reply: true, repliedAt: true, updatedAt: true } },
+      customer: { select: { accountId: true } },
       vehicle: {
         select: { plate: true, make: true, model: true, year: true },
       },
@@ -71,10 +74,12 @@ export async function GET(
   if (!order) return jsonError(404, "Засварын хуудас олдсонгүй.");
 
   // Intake-н raw багана болон ажилтны нэрийг ил гаргахгүй (recordedBy үргэлж null).
-  const { reports, ...rest } = omitIntakeColumns(order);
+  const { reports, customer, ...rest } = omitIntakeColumns(order);
   return jsonOk({
     order: {
       ...rest,
+      // Зөвхөн тухайн засварын үйлчлүүлэгч, дууссан засварт үнэлгээ өгнө.
+      canReview: order.status === "COMPLETED" && customer.accountId === account.id,
       intake: toIntakeView(order, { includeRecordedBy: false }),
       reports: reports.map((r) => ({
         id: r.id,

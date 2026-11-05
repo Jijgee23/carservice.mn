@@ -30,8 +30,8 @@
 //     assignableBranchIds?: string[], isActive?: boolean, activeUntil?:
 //     string (ISO), isOwner?: boolean }
 //   201: { employee: EmployeeDto }
-//   Errors: 400 (bad JSON), 401, 403 (permission / SUBSCRIPTION_EXPIRED /
-//     PLAN_LIMIT_REACHED), 422 (VALIDATION / DUPLICATE fieldErrors) — every
+//   Errors: 400 (bad JSON), 401, 403 (permission / SUBSCRIPTION_EXPIRED),
+//     422 (VALIDATION / DUPLICATE fieldErrors) — every
 //     branch includes `code`.
 
 import { jsonError, jsonOk, requireApiUser, requirePermission } from "@/lib/api";
@@ -41,8 +41,6 @@ import { createEmployee, prepareCreateEmployee } from "@/lib/employees/core";
 import type { EmployeeActor } from "@/lib/employees/types";
 import { optionalText, parseYesNo, parsePagination, rejectUnknownParams } from "@/lib/list-query-params";
 import { buildMeta } from "@/lib/pagination";
-import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
-import { enforceCountLimit } from "@/lib/plan-limits-server";
 import { requireActiveSubscriptionApi } from "@/lib/subscription-server";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/app/generated/prisma/client";
@@ -180,15 +178,6 @@ export async function POST(req: Request) {
   const prep = await prepareCreateEmployee(prisma, actor, formData);
   if (!prep.ok) {
     return jsonError(422, prep.error, { code: prep.code, fieldErrors: prep.fieldErrors });
-  }
-
-  const limit = await enforceCountLimit(
-    actor.tenantId,
-    PLAN_LIMIT_CODES.MAX_USERS,
-    () => prisma.user.count({ where: { tenantId: actor.tenantId, deletedAt: null } }),
-  );
-  if (!limit.allowed) {
-    return jsonError(403, limit.message ?? "Ажилтны хязгаарт хүрсэн байна.", { code: "PLAN_LIMIT_REACHED" });
   }
 
   const result = await createEmployee(prisma, actor, prep.data, prep.wantsOwner);

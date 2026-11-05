@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { formatTugrik } from "@/lib/orders";
 import { prisma } from "@/lib/prisma";
+import { planFeatureLines } from "@/lib/plan-modules";
+import { getEnabledModules } from "@/lib/plan-modules-server";
+import { isSelfServePlan } from "@/lib/subscription";
 import { setBypassContext } from "@/lib/tenant-context";
 import { Container, Eyebrow } from "./landing-ops-ui";
 
@@ -8,9 +11,8 @@ type PlanKey = "FREE" | "BUSINESS" | "ENTERPRISE";
 
 const PLAN_ORDER: PlanKey[] = ["FREE", "BUSINESS", "ENTERPRISE"];
 
-// Маркетингийн текст (нэр, тайлбар, CTA) код дотор. Үнэ + боломжийн жагсаалт нь
-// backend-аас (PlanPrice / PlanFeature) ирнэ. DB-д тухайн багцын боломж байхгүй
-// бол доорх fallback-ийг харуулна.
+// Маркетингийн текст (нэр, тайлбар, CTA) код дотор. Үнэ нь PlanPrice-аас,
+// «юу багтсан» жагсаалт нь багцын модулиудаас (planFeatureLines) автоматаар.
 const PLAN_META: Record<
   PlanKey,
   {
@@ -20,7 +22,6 @@ const PLAN_META: Record<
     href: string;
     highlighted: boolean;
     fallbackPrice: string;
-    fallbackFeatures: string[];
   }
 > = {
   FREE: {
@@ -30,98 +31,60 @@ const PLAN_META: Record<
     href: "/page/signup",
     highlighted: false,
     fallbackPrice: "Үнэгүй",
-    fallbackFeatures: [
-      "1 салбар",
-      "3 хүртэлх хэрэглэгч",
-      "Засварын хуудас & машины түүх",
-      "Үндсэн тайлан",
-    ],
   },
   BUSINESS: {
     name: "Бизнес",
     desc: "Олон мастертай, өсөн нэмэгдэж буй сервисүүдэд.",
-    cta: "14 хоног үнэгүй",
+    cta: "Эхлэх",
     href: "/page/signup?plan=business",
     highlighted: true,
     fallbackPrice: "Захиалгат",
-    fallbackFeatures: [
-      "5 хүртэл салбар",
-      "30 хүртэлх хэрэглэгч",
-      "SMS сануулга",
-      "Дэвшилтэт тайлан & экспорт",
-      "API хандалт",
-    ],
   },
   ENTERPRISE: {
     name: "Энтерпрайз",
     desc: "Сүлжээ, олон салбартай байгууллагуудад.",
-    cta: "Холбоо барих",
-    href: "/contact",
+    cta: "Үнийн санал авах",
+    href: "/page/quote",
     highlighted: false,
     fallbackPrice: "Захиалгат",
-    fallbackFeatures: [
-      "Хязгааргүй салбар & хэрэглэгч",
-      "SSO & SLA",
-      "Зориулсан тохиргоо",
-      "Тусгай интеграц",
-    ],
   },
 };
-
-function isAbsent(v: string): boolean {
-  const s = v.trim().toLowerCase();
-  return ["", "—", "-", "үгүй", "байхгүй", "no", "false", "x"].includes(s);
-}
-function isYes(v: string): boolean {
-  const s = v.trim().toLowerCase();
-  return ["тийм", "бий", "байгаа", "yes", "true", "✓"].includes(s);
-}
-function featureText(label: string, value: string): string | null {
-  if (isAbsent(value)) return null;
-  if (isYes(value)) return label;
-  return `${label}: ${value}`;
-}
 
 export async function Pricing() {
   // Нийтэд нээлттэй landing хуудасны бүрэлдэхүүн хэсэг — session/tenant байхгүй.
   setBypassContext();
-  const [prices, features] = await Promise.all([
+  const [prices, ...planModules] = await Promise.all([
     prisma.planPrice.findMany({
       where: { isActive: true, period: "MONTH" },
       select: { plan: true, amount: true },
     }),
-    prisma.planFeature.findMany({
-      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      select: { plan: true, label: true, value: true },
-    }),
+    ...PLAN_ORDER.map((p) => getEnabledModules(p)),
   ]);
+  const modulesByPlan = new Map(PLAN_ORDER.map((p, i) => [p, planModules[i]]));
 
   const priceByPlan = new Map(prices.map((p) => [p.plan, p.amount]));
 
   const plans = PLAN_ORDER.map((plan) => {
     const meta = PLAN_META[plan];
-    const amount = priceByPlan.get(plan);
+    // Зөвхөн тогтсон үнэтэй багц (BUSINESS) DB-ийн үнийг харуулна: FREE үргэлж
+    // үнэгүй, ENTERPRISE тохиролцоно (lib/subscription.ts SELF_SERVE_PLANS).
+    const amount = isSelfServePlan(plan) ? priceByPlan.get(plan) : undefined;
     const hasPaidPrice = amount != null && Number(amount.toString()) > 0;
 
     let price: string;
     let period: string;
-    if (hasPaidPrice) {
-      price = formatTugrik(amount.toString());
-      period = "/сар";
-    } else if (plan === "FREE") {
+    if (plan === "FREE") {
       price = "Үнэгүй";
       period = "үргэлж";
+    } else if (hasPaidPrice) {
+      price = formatTugrik(amount.toString());
+      period = "/сар";
     } else {
       price = meta.fallbackPrice;
       period = "";
     }
 
-    const dbFeatures = features
-      .filter((f) => f.plan === plan)
-      .map((f) => featureText(f.label, f.value))
-      .filter((t): t is string => t !== null);
-    const featureList =
-      dbFeatures.length > 0 ? dbFeatures : meta.fallbackFeatures;
+    const featureList = planFeatureLines(modulesByPlan.get(plan) ?? new Set());
 
     return {
       key: plan,
@@ -152,7 +115,7 @@ export async function Pricing() {
               key={p.key}
               className={
                 p.highlighted
-                  ? "rounded-[10px] border border-[var(--oc-accent)] bg-[var(--oc-panel2)] px-8 py-[30px] shadow-[0_24px_60px_-30px_rgba(34,211,238,0.35)]"
+                  ? "rounded-[10px] border border-[var(--oc-accent)] bg-[var(--oc-panel2)] px-8 py-[30px] shadow-[0_24px_60px_-30px_rgba(192,57,43,0.3)]"
                   : "rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] px-8 py-[30px]"
               }
             >

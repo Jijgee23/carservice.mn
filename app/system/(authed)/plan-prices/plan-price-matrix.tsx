@@ -6,7 +6,8 @@ import { Btn } from "@/app/_components/landing-ops-ui";
 import { formatPriceInput, liveFormatPriceInput } from "@/lib/orders";
 import { BILLING_PERIOD_LABEL, PLAN_LABEL } from "@/lib/subscription";
 
-const PLANS = ["BUSINESS", "ENTERPRISE"] as const;
+// Тогтсон үнэтэй багц л үнэ авна: FREE үргэлж үнэгүй, ENTERPRISE тохиролцоно.
+const PLANS = ["BUSINESS"] as const;
 const PERIODS = ["MONTH", "QUARTER", "YEAR"] as const;
 const CURRENCY = "MNT";
 
@@ -40,8 +41,8 @@ export function PlanPriceMatrix({ prices }: { prices: PlanPriceMatrixRow[] }) {
           (сарын) болон тенантын «Захиалга» хуудас шууд шинэчлэгдэнэ.
           <span className="text-[var(--oc-muted3)]">
             {" "}
-            FREE багц нь зөвхөн бүртгүүлэх үед 14 хоногийн туршилт — үнэ
-            оруулдаггүй.
+            FREE багц үргэлж үнэгүй. ENTERPRISE-ийн үнийг тохиролцож гаргаад
+            тенантын хуудаснаас subscription-ийг гараар үүсгэнэ.
           </span>
         </p>
       </div>

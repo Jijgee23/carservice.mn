@@ -1,7 +1,8 @@
 "use client";
 
 import { categoryAllowsKind, type CategoryKind } from "@/lib/categories";
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
+import { type CatalogSearchHit, searchCatalogAction } from "@/app/_actions/catalog";
 import {
   type ServiceActionState,
   createServiceAction,
@@ -35,6 +36,9 @@ type Initial = {
   description: string | null;
   isActive: boolean;
   categoryId: string | null;
+  /** Нэгдсэн сантай холбогдсон бол нэр/код засагдахгүй. */
+  catalogItemId?: string | null;
+  barcode?: string | null;
 };
 
 export type CategoryOption = {
@@ -105,6 +109,7 @@ export function ServiceForm({
   // Controlled — action амжилтгүй болсон үед утгууд цэвэрлэгдэхгүй
   const [name, setName] = useState(initial?.name ?? "");
   const [code, setCode] = useState(initial?.code ?? "");
+  const [barcode, setBarcode] = useState(initial?.barcode ?? "");
   // Мөнгөн дүнг мянгатын таслалтай ("45,000") бичүүлнэ — засварын хуудасны
   // үнийн талбартай ижил; сервер тал (parseDecimal) таслалыг цэвэрлэнэ.
   const [price, setPrice] = useState(
@@ -125,6 +130,62 @@ export function ServiceForm({
 
   const fe = state?.fieldErrors ?? {};
   const isGoods = type === "GOODS";
+
+  // --- Нэгдсэн сан (ажил/сэлбэг) ---------------------------------------
+  // Шинэ бичлэгт нэрийг сангаас хайж сонгоно (нэр/код түгжигдэж, нэгж/үнэ/
+  // ангилал бөглөгдөнө). Олдохгүй бол шинээр бичнэ → хадгалахад санд нэмэгдэнэ.
+  // Засах үед сантай холбогдсон бол нэр/код засагдахгүй (super admin л засна).
+  const usesCatalog = type === "LABOR" || type === "GOODS";
+  const lockedByCatalog = isEdit && Boolean(initial?.catalogItemId);
+  const [picked, setPicked] = useState<CatalogSearchHit | null>(null);
+  const [hits, setHits] = useState<CatalogSearchHit[]>([]);
+  const [hitsOpen, setHitsOpen] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchSeq = useRef(0);
+
+  function onNameInput(value: string) {
+    setName(value);
+    if (isEdit || !usesCatalog) return;
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (value.trim().length < 2) {
+      setHits([]);
+      return;
+    }
+    const seq = ++searchSeq.current;
+    searchTimer.current = setTimeout(() => {
+      void searchCatalogAction(type, value).then((rows) => {
+        if (seq !== searchSeq.current) return;
+        setHits(rows);
+        setHitsOpen(true);
+      });
+    }, 250);
+  }
+
+  function pickCatalog(hit: CatalogSearchHit) {
+    setPicked(hit);
+    setHitsOpen(false);
+    setName(hit.name);
+    setCode(hit.code ?? "");
+    if (hit.barcode) setBarcode(hit.barcode);
+    setPrice(formatPriceInput(hit.price));
+    const unit = units.find((u) => u.isActive && u.name === hit.unitName);
+    if (unit) setUnitId(unit.id);
+    if (hit.durationValue) setDurationValue(hit.durationValue);
+    const durUnit = units.find((u) => u.isActive && u.name === hit.durationUnitName);
+    if (durUnit) setDurationUnitId(durUnit.id);
+    if (hit.categoryId && categories.some((c) => c.id === hit.categoryId)) setCategoryId(hit.categoryId);
+    if (hit.description && !description) setDescription(hit.description);
+  }
+
+  function clearCatalog() {
+    setPicked(null);
+    setName("");
+    setCode("");
+    setBarcode("");
+    setHits([]);
+  }
+
+  const nameCodeLocked = lockedByCatalog || Boolean(picked);
 
   const backHref = `/dashboard/services/${SERVICE_KIND_SLUG[type]}`;
 
@@ -223,15 +284,35 @@ export function ServiceForm({
           />
         </Field>
 
-        <Field label="Нэр" required htmlFor="name" error={fe.name} className={FIELD_MW}>
+        <Field
+          label="Нэр"
+          required
+          htmlFor="name"
+          error={fe.name}
+          hint={
+            lockedByCatalog
+              ? "Нэгдсэн сангийн нэр — системийн админ засна"
+              : picked
+                ? "Нэгдсэн сангаас сонгосон"
+                : usesCatalog && !isEdit
+                  ? "Нэгдсэн сангаас хайна; олдохгүй бол шинээр нэмэгдэнэ"
+                  : undefined
+          }
+          className={`${FIELD_MW} relative`}
+        >
+          {picked ? <input type="hidden" name="catalogItemId" value={picked.id} /> : null}
           <input
             id="name"
             name="name"
             type="text"
             required
+            autoComplete="off"
             value={name}
-            onChange={(e) => setName(e.target.value)}
-            className={`auth-input ${fe.name ? "border-red-500/50" : ""}`}
+            readOnly={nameCodeLocked}
+            onChange={(e) => onNameInput(e.target.value)}
+            onFocus={() => hits.length > 0 && !picked && setHitsOpen(true)}
+            onBlur={() => setTimeout(() => setHitsOpen(false), 150)}
+            className={`auth-input ${nameCodeLocked ? "opacity-80" : ""} ${fe.name ? "border-red-500/50" : ""}`}
             placeholder={
               isGoods
                 ? "Жишээ: 5W-30 моторын тос"
@@ -240,6 +321,37 @@ export function ServiceForm({
                   : "Жишээ: Тосны солилт"
             }
           />
+          {picked && !isEdit ? (
+            <button
+              type="button"
+              onClick={clearCatalog}
+              className="mt-1 text-[11px] text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)]"
+            >
+              Сонголтыг цуцлах
+            </button>
+          ) : null}
+          {hitsOpen && hits.length > 0 && !picked ? (
+            <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-lg border border-[var(--oc-line)] bg-[var(--oc-panel)] py-1 shadow-xl">
+              {hits.map((h) => (
+                <li key={h.id}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pickCatalog(h)}
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-[var(--oc-panel2)]"
+                  >
+                    <span className="min-w-0 truncate text-[var(--oc-ink2)]">
+                      {h.name}
+                      {h.code ? <span className="ml-1.5 font-plex-mono text-[11px] text-[var(--oc-muted3)]">{h.code}</span> : null}
+                    </span>
+                    <span className="shrink-0 font-plex-mono text-[11px] text-[var(--oc-muted3)]">
+                      {formatPriceInput(h.price)}₮ · {h.unitName}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </Field>
         <Field
           label={isGoods ? "SKU / код" : "Код"}
@@ -253,11 +365,38 @@ export function ServiceForm({
             name="code"
             type="text"
             value={code}
+            readOnly={nameCodeLocked}
             onChange={(e) => setCode(e.target.value)}
-            className={`auth-input uppercase ${fe.code ? "border-red-500/50" : ""}`}
+            className={`auth-input uppercase ${nameCodeLocked ? "opacity-80" : ""} ${fe.code ? "border-red-500/50" : ""}`}
             placeholder={isGoods ? "OIL-5W30" : "LAB-OIL"}
           />
         </Field>
+        {isGoods ? (
+          <Field
+            label="Баркод"
+            htmlFor="barcode"
+            hint={lockedByCatalog ? "Нэгдсэн сангийнх" : "заавал биш · уншигчаар уншуулж болно"}
+            error={fe.barcode}
+            className={FIELD_MW}
+          >
+            <input
+              id="barcode"
+              name="barcode"
+              type="text"
+              inputMode="text"
+              autoComplete="off"
+              value={barcode}
+              readOnly={lockedByCatalog || Boolean(picked?.barcode)}
+              onChange={(e) => setBarcode(e.target.value)}
+              onKeyDown={(e) => {
+                // Баркод уншигч Enter дардаг — маягтыг санамсаргүй илгээхгүй.
+                if (e.key === "Enter") e.preventDefault();
+              }}
+              className={`auth-input font-plex-mono ${lockedByCatalog || picked?.barcode ? "opacity-80" : ""} ${fe.barcode ? "border-red-500/50" : ""}`}
+              placeholder="8801234567890"
+            />
+          </Field>
+        ) : null}
 
         <Field
           label="Хэмжих нэгж"

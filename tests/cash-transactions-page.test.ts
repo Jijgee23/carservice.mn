@@ -21,7 +21,10 @@ test("old income / expense URLs redirect with their direction; the cash index la
     assert.ok(s.includes(`qs.set("direction", "${direction}")`), file);
     assert.match(s, /redirect\(`\$\{CASH_TRANSACTIONS_PATH\}\?/);
   }
-  assert.match(await src("app/dashboard/cash/page.tsx"), /redirect\("\/dashboard\/cash\/transactions"\)/);
+  // With the finance module in plan it lands on the combined page; without it,
+  // on the always-available cash sessions (finance screens are hidden).
+  const index = await src("app/dashboard/cash/page.tsx");
+  assert.match(index, /redirect\(finance \? "\/dashboard\/cash\/transactions" : "\/dashboard\/cash\/sessions"\)/);
 });
 
 test("sidebar: one «Орлого, зарлага» entry, no separate income / expense links", async () => {

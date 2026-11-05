@@ -8,7 +8,6 @@ import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import {
   canChooseAllBranches,
   eligibleBranchIds,
-  seedWorkingBranchId,
 } from "@/lib/auth/roles";
 import { safeNext } from "@/lib/safe-redirect";
 import {
@@ -25,6 +24,7 @@ import {
 import { getSession } from "@/lib/auth";
 import { issueOtp, revokeAllOtps, verifyOtp } from "@/lib/auth/otp";
 import { revokeAllForUser } from "@/lib/auth/refresh-token";
+import { resolveInitialWorkingBranchId } from "@/lib/auth/initial-working-branch";
 import { ALL_BRANCHES, signSession } from "@/lib/auth/session";
 import { resolveTodayLockedBranch } from "@/lib/employee-branch-lock";
 import { notifySuperAdmins } from "@/lib/notifications";
@@ -58,7 +58,6 @@ import {
   isValidTime,
   isWeekday,
 } from "@/lib/branches";
-import { trialEndDate } from "@/lib/subscription";
 import { DEFAULT_UNITS } from "@/lib/units";
 import {
   DEFAULT_INTAKE_TEMPLATE_NAME,
@@ -391,18 +390,8 @@ export async function signUpAction(
         },
       });
 
-      // 14 хоногийн free trial subscription автоматаар үүсгэнэ
-      const trialStart = new Date();
-      await tx.subscription.create({
-        data: {
-          tenantId: tenant.id,
-          plan: "FREE",
-          status: "TRIAL",
-          startsAt: trialStart,
-          endsAt: trialEndDate(trialStart),
-          notes: "Бүртгэлийн үед автоматаар үүсгэсэн 14 хоногийн туршилт.",
-        },
-      });
+      // Subscription үүсгэхгүй: шинэ тенант үргэлж үнэгүй FREE багцтай
+      // (Tenant.plan @default(FREE)) эхэлнэ — харах: lib/subscription.ts.
 
       // Үндсэн салбар үүсгэнэ — тенант бүртгэлийн утсыг өвлүүлж, бүртгэлийн
       // үед хэрэглэгчийн бөглөсөн хаяг/цагийн мэдээллийг хадгална.
@@ -451,7 +440,8 @@ export async function signUpAction(
         },
       });
 
-      return { userId: user.id, tenantId: tenant.id, isOwner: user.isOwner };
+      // Шинэ байгууллага ганц салбартай — салбар сонгох алхмыг алгасна.
+      return { userId: user.id, tenantId: tenant.id, isOwner: user.isOwner, workingBranchId: branch.id };
     });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
@@ -707,13 +697,14 @@ export async function signInAction(
   // ажилладаг гэж тооцно; Owner/2+ салбарт ажилладаг ажилтныг undefined-ээр
   // үлдээж, дараагийн /dashboard хүсэлт дээр proxy.ts /page/choose-branch
   // руу чиглүүлнэ (харах: lib/auth/roles.ts seedWorkingBranchId).
-  const locked = await resolveTodayLockedBranch(user);
+  // Сонгох салбар ганцхан бол (хувиараар түгжигдсэн, 1 eligible, эсвэл
+  // байгууллага 1 салбартай) choose-branch-ийг алгасна.
   const token = await signSession({
     userId: user.id,
     tenantId: user.tenantId,
     isOwner: user.isOwner,
     sid: session.id,
-    workingBranchId: locked?.branchId ?? seedWorkingBranchId(user),
+    workingBranchId: await resolveInitialWorkingBranchId(user),
   });
   await setSessionCookie(token);
 
@@ -1114,13 +1105,14 @@ export async function activateAccountAction(
     h.get("x-real-ip") ||
     null;
   const session = await createUserSession({ userId: user.id, userAgent: ua, ip });
-  const locked = await resolveTodayLockedBranch(user);
+  // Сонгох салбар ганцхан бол (хувиараар түгжигдсэн, 1 eligible, эсвэл
+  // байгууллага 1 салбартай) choose-branch-ийг алгасна.
   const token = await signSession({
     userId: user.id,
     tenantId: user.tenantId,
     isOwner: user.isOwner,
     sid: session.id,
-    workingBranchId: locked?.branchId ?? seedWorkingBranchId(user),
+    workingBranchId: await resolveInitialWorkingBranchId(user),
   });
   await setSessionCookie(token);
 

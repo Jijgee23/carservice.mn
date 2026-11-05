@@ -119,6 +119,8 @@ export default async function EditServicePage({
               description: svc.description,
               isActive: svc.isActive,
               categoryId: svc.categoryId,
+              catalogItemId: svc.catalogItemId,
+              barcode: svc.barcode,
             }}
           />
         </div>

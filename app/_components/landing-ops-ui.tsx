@@ -106,7 +106,7 @@ export function Field({
 const SUBMIT_TONE = {
   accent:
     "bg-[var(--oc-accent)] hover:bg-[var(--oc-accent-hi)] text-[var(--oc-on-accent)]",
-  danger: "bg-red-600 hover:bg-red-500 text-white",
+  danger: "bg-red-600 hover:bg-red-500 text-[#fff]",
 } as const;
 
 export function SubmitButton({
@@ -336,7 +336,7 @@ export function TagChip({ children }: { children: ReactNode }) {
 function tabPillClass(active: boolean): string {
   return `text-xs px-3 py-1.5 rounded-lg font-medium transition-colors whitespace-nowrap ${active
     ? "bg-[var(--oc-accent)] text-[var(--oc-on-accent)]"
-    : "text-[var(--oc-muted2)] hover:text-[var(--oc-ink2)] hover:bg-white/[0.05]"
+    : "text-[var(--oc-muted2)] hover:text-[var(--oc-ink2)] hover:bg-[var(--oc-panel2)]"
     }`;
 }
 

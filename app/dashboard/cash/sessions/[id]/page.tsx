@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Chip } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
+import { getEnabledModules } from "@/lib/plan-modules-server";
 import { hasPermission } from "@/lib/auth/roles";
 import { CashError } from "@/lib/cash/rules";
 import { getSessionDetail } from "@/lib/cash/session";
@@ -98,6 +99,7 @@ function EntriesTable({ entries, showVoid }: { entries: DetailEntry[]; showVoid?
 
 export default async function CashSessionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
+  const financeInPlan = (await getEnabledModules(user.tenant.plan)).has("enable_finance");
   if (!hasPermission(user, "cash.manage")) redirect("/dashboard");
   const { id } = await params;
 
@@ -194,11 +196,15 @@ export default async function CashSessionDetailPage({ params }: { params: Promis
         )}
         {truncated.entries ? (
           <p className="px-5 py-3 text-xs text-[var(--oc-muted3)] border-t border-[var(--oc-line)]">
-            Сүүлийн {truncated.cap} бичлэгийг харуулав ({totals.count} бичлэгээс); дээрх нийлбэр бүх бичлэгийг хамарна. Бүрэн жагсаалтыг{" "}
-            <Link href="/dashboard/cash/transactions" className="text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)]">
-              орлого, зарлагын жагсаалт
-            </Link>{" "}
-            дээрээс шүүж үзнэ үү.
+            Сүүлийн {truncated.cap} бичлэгийг харуулав ({totals.count} бичлэгээс); дээрх нийлбэр бүх бичлэгийг хамарна. {financeInPlan ? (
+              <>
+                Бүрэн жагсаалтыг{" "}
+                <Link href="/dashboard/cash/transactions" className="text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)]">
+                  орлого, зарлагын жагсаалт
+                </Link>{" "}
+                дээрээс шүүж үзнэ үү.
+              </>
+            ) : null}
           </p>
         ) : null}
       </section>

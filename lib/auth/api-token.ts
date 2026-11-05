@@ -80,7 +80,7 @@ export async function getApiUserFromRequest(req: Request) {
       activeUntil: true,
       deactivatedAt: true,
       lockedAt: true,
-      tenant: { select: { suspended: true } },
+      tenant: { select: { suspended: true, plan: true } },
     },
   });
   if (!user) return null;
@@ -98,5 +98,10 @@ export async function getApiUserFromRequest(req: Request) {
     return null;
   }
   // D-180: nullable for tokens signed before this claim existed.
-  return { ...profile, refreshTokenId: payload.refreshTokenId ?? null };
+  // tenantPlan: /api/v1 модулийн хаалтад (requireApiUser → lib/plan-modules-server).
+  return {
+    ...profile,
+    tenantPlan: tenant.plan,
+    refreshTokenId: payload.refreshTokenId ?? null,
+  };
 }

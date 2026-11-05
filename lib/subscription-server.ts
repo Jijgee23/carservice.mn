@@ -13,9 +13,12 @@ import {
 } from "@/lib/subscription";
 
 export type SubscriptionState = {
-  // Идэвхтэй (TRIAL/ACTIVE, эхэлсэн, endsAt хараахан өнгөрөөгүй) subscription.
+  // Идэвхтэй төлбөртэй (BUSINESS/ENTERPRISE; TRIAL/ACTIVE, эхэлсэн, endsAt
+  // хараахан өнгөрөөгүй) subscription. null = тенант үнэгүй FREE багц дээр.
   active: ActiveSubscriptionInfo | null;
-  // Идэвхтэй subscription байхгүй → mutation хийхийг хориглоно (read-only).
+  // Read-only (mutation хориглох) горим. FREE багц үргэлж үнэгүй тул төлбөртэй
+  // багц дуусахад FREE рүү буцна — одоогоор хэзээ ч true болохгүй. Талбар,
+  // guard-ууд нь API/мобайлын нийцлийн тулд үлдсэн.
   locked: boolean;
   // Идэвхтэй ч удахгүй дуусах гэж буй эсэх (daysLeft <= SUBSCRIPTION_WARN_DAYS).
   expiringSoon: boolean;
@@ -62,7 +65,7 @@ export const getSubscriptionState = cache(
 
     return {
       active,
-      locked: !active,
+      locked: false,
       expiringSoon:
         !!active &&
         active.expiresAt != null &&

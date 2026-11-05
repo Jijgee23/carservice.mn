@@ -1,15 +1,15 @@
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import { redirect } from "next/navigation";
 import { ConsumerAuthShell } from "@/app/_components/consumer-auth-shell";
 import { getAccount } from "@/lib/auth/account";
 import { AccountLoginForm } from "./login-form";
 
-const plexSans = IBM_Plex_Sans({
+const plexSans = Geist({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-plex-sans",
 });
-const plexMono = IBM_Plex_Mono({
+const plexMono = Geist_Mono({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600"],
   variable: "--font-plex-mono",

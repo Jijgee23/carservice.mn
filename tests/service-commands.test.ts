@@ -506,7 +506,7 @@ test("createServiceAction delegates to the shared create rules + command (also u
   const updateStart = actions.indexOf("export async function updateServiceAction");
   const createBody = actions.slice(createStart, updateStart);
   assert.match(createBody, /validateServiceCreate\(raw, await loadServiceRefs\(user\.tenantId, raw\.type\)\)/);
-  assert.match(createBody, /enforceCountLimit\(/);
+  assert.doesNotMatch(createBody, /enforceCountLimit\(/);
   assert.match(createBody, /createServiceCommand\(user, data\)/);
   assert.doesNotMatch(createBody, /prisma\.service\.create\(/);
 });

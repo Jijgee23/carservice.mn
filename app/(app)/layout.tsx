@@ -1,4 +1,4 @@
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 import {
   ConsumerMobileTopbar,
@@ -13,12 +13,12 @@ import { setBypassContext } from "@/lib/tenant-context";
 
 // Ops Console дизайны фонт — dashboard-тай ижил механизм, зөвхөн энэ
 // (жолооч/хэрэглэгчийн) route бүлэгт scoped.
-const plexSans = IBM_Plex_Sans({
+const plexSans = Geist({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-plex-sans",
 });
-const plexMono = IBM_Plex_Mono({
+const plexMono = Geist_Mono({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600"],
   variable: "--font-plex-mono",

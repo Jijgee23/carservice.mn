@@ -34,7 +34,7 @@ const STATUS_STYLE: Record<AppointmentStatus, string> = {
 function DriverPanel() {
   return (
     <aside className="relative hidden lg:flex flex-col overflow-hidden bg-oc-grid border-r border-[var(--oc-line2)]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_520px_at_10%_0%,rgba(34,211,238,0.12),transparent_70%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_520px_at_10%_0%,rgba(231,76,60,0.06),transparent_70%)]" />
 
       <div className="relative flex items-center justify-between px-8 py-5 border-b border-[var(--oc-line2)]">
         <div className="flex items-center gap-3">

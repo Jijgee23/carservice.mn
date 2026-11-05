@@ -30,8 +30,6 @@
 import { logAudit } from "@/lib/audit";
 import { normalizeWheelPosition } from "@/lib/hur_service";
 import { resolveOwnerRegnumForNewVehicle } from "@/lib/hur-lookup";
-import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
-import { enforceCountLimit } from "@/lib/plan-limits-server";
 import { prisma } from "@/lib/prisma";
 import type { PrismaTransactionClient } from "@/lib/prisma";
 import {
@@ -349,22 +347,6 @@ export async function createVehicleCommand(input: {
       });
     }
     if (customer.isOrganization && customer.orgRegnum) orgRegnumKey = customer.orgRegnum;
-  }
-
-  // `MAX_VEHICLES` — БҮХ entry point дээр шалгана (D-154, 2026-09-22
-  // хэрэглэгчийн шийдвэр; D-151-ийг орлоно). Хязгаарын тойрч гарах зам
-  // зориудаар хаагдсан тул түг байхгүй.
-  const limit = await enforceCountLimit(
-    actor.tenantId,
-    PLAN_LIMIT_CODES.MAX_VEHICLES,
-    () => prisma.tenantVehicle.count({ where: { tenantId: actor.tenantId } }),
-  );
-  if (!limit.allowed) {
-    throw new VehicleCommandError(
-      limit.message ?? "Машины хязгаарт хүрсэн байна.",
-      422,
-      "PLAN_LIMIT_REACHED",
-    );
   }
 
   const canonPlate = normalizePlate(data.plate);

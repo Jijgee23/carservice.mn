@@ -14,6 +14,7 @@ import { RowActionsMenu, RowMenuFormItem } from "@/app/_components/row-actions";
 import { SearchBox } from "@/app/_components/list-filters";
 import { buildMeta, getPageInfo } from "@/lib/pagination";
 import { requireUser } from "@/lib/auth";
+import { getEnabledModules } from "@/lib/plan-modules-server";
 import { canCreate, canDelete, canEdit, canView } from "@/lib/auth/roles";
 import { redirect } from "next/navigation";
 import { formatAddress, formatWorkDays, formatWorkHoursSummary } from "@/lib/branches";
@@ -38,6 +39,8 @@ export default async function BranchesPage({
   const user = await requireUser();
   if (!canView(user, "branches")) redirect("/dashboard");
   const canAdd = canCreate(user, "branches");
+  // «Олон салбар» модуль багцад ороогүй бол зөвхөн анхны салбарыг үүсгэнэ.
+  const multiBranch = (await getEnabledModules(user.tenant.plan)).has("enable_multi_branch");
   const canRemove = canDelete(user, "branches");
   const canModify = canEdit(user, "branches");
 
@@ -92,7 +95,7 @@ export default async function BranchesPage({
           <a href={exportHref} className={btnClass("ghost", "md")}>
             Excel татах
           </a>
-          {canAdd ? (
+          {canAdd && (multiBranch || totalBranches === 0) ? (
             <AddLinkButton href="/dashboard/branches/new">Салбар нэмэх</AddLinkButton>
           ) : null}
         </div>

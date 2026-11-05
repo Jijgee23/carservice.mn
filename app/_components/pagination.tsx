@@ -78,7 +78,7 @@ export function Pagination({
           <Link
             href={makeHref(page - 1)}
             scroll={false}
-            className="text-[var(--oc-muted)] hover:text-[var(--oc-ink)] px-2.5 py-1 rounded-md hover:bg-white/[0.04] transition-colors"
+            className="text-[var(--oc-muted)] hover:text-[var(--oc-ink)] px-2.5 py-1 rounded-md hover:bg-[var(--oc-panel2)] transition-colors"
           >
             ← Өмнөх
           </Link>
@@ -104,7 +104,7 @@ export function Pagination({
                 key={p}
                 href={makeHref(p)}
                 scroll={false}
-                className="min-w-[1.75rem] text-center px-2 py-1 rounded-md text-[var(--oc-muted)] hover:text-[var(--oc-ink)] hover:bg-white/[0.04] transition-colors"
+                className="min-w-[1.75rem] text-center px-2 py-1 rounded-md text-[var(--oc-muted)] hover:text-[var(--oc-ink)] hover:bg-[var(--oc-panel2)] transition-colors"
               >
                 {p}
               </Link>
@@ -116,7 +116,7 @@ export function Pagination({
           <Link
             href={makeHref(page + 1)}
             scroll={false}
-            className="text-[var(--oc-muted)] hover:text-[var(--oc-ink)] px-2.5 py-1 rounded-md hover:bg-white/[0.04] transition-colors"
+            className="text-[var(--oc-muted)] hover:text-[var(--oc-ink)] px-2.5 py-1 rounded-md hover:bg-[var(--oc-panel2)] transition-colors"
           >
             Дараах →
           </Link>

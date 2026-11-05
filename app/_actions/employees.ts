@@ -20,8 +20,6 @@ import {
   updateEmployee,
 } from "@/lib/employees/core";
 import type { EmployeeActor } from "@/lib/employees/types";
-import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
-import { enforceCountLimit } from "@/lib/plan-limits-server";
 import { purgeStaffAccess } from "@/lib/account-closure/staff";
 import { prisma } from "@/lib/prisma";
 
@@ -62,16 +60,6 @@ export async function createEmployeeAction(
   const prep = await prepareCreateEmployee(prisma, user, formData);
   if (!prep.ok) {
     return { ok: false, fieldErrors: prep.fieldErrors };
-  }
-
-  // Багцын хязгаар: max_users
-  const limit = await enforceCountLimit(
-    user.tenantId,
-    PLAN_LIMIT_CODES.MAX_USERS,
-    () => prisma.user.count({ where: { tenantId: user.tenantId, deletedAt: null } }),
-  );
-  if (!limit.allowed) {
-    return { ok: false, message: limit.message };
   }
 
   const result = await createEmployee(prisma, user, prep.data, prep.wantsOwner);

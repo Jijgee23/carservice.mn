@@ -13,6 +13,7 @@ const SERVICE_DETAIL_SELECT = {
   type: true,
   name: true,
   code: true,
+  barcode: true,
   price: true,
   costPrice: true,
   stock: true,
@@ -92,7 +93,7 @@ export async function PATCH(
   const {
     type, name, code, unitId, price, costPrice, stock,
     durationValue, durationUnitId, reminderIntervalMonths,
-    description, isActive, categoryId,
+    description, isActive, categoryId, barcode,
   } = body as Record<string, unknown>;
 
   let updated;
@@ -108,6 +109,8 @@ export async function PATCH(
         type: typeof type === "string" ? type : "",
         name: typeof name === "string" ? name : "",
         code: typeof code === "string" ? code : null,
+        // Илгээгээгүй бол (хуучин апп) баркодыг хөндөхгүй.
+        barcode: typeof barcode === "string" ? barcode : barcode === null ? null : undefined,
         unitId: typeof unitId === "string" ? unitId : null,
         price: typeof price === "string" || typeof price === "number" ? price : null,
         costPrice: typeof costPrice === "string" || typeof costPrice === "number" ? costPrice : null,

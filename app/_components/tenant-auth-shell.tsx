@@ -41,7 +41,7 @@ function todayLabel(): string {
 function ConsolePanel() {
   return (
     <aside className="relative hidden lg:flex flex-col overflow-hidden bg-oc-grid border-r border-[var(--oc-line2)]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_520px_at_10%_0%,rgba(34,211,238,0.12),transparent_70%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_520px_at_10%_0%,rgba(231,76,60,0.06),transparent_70%)]" />
 
       <div className="relative flex items-center justify-between px-8 py-5 border-b border-[var(--oc-line2)]">
         <div className="flex items-center gap-3">
@@ -210,7 +210,7 @@ export function TenantAuthShellWide({
 }) {
   return (
     <div className="landing-ops min-h-screen flex flex-col bg-[var(--oc-carbon)] bg-oc-grid">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(1100px_600px_at_50%_-10%,rgba(34,211,238,0.08),transparent_70%)]" />
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(1100px_600px_at_50%_-10%,rgba(231,76,60,0.05),transparent_70%)]" />
 
       <header className="relative flex items-center justify-between px-6 sm:px-10 py-5">
         <Link href="/">

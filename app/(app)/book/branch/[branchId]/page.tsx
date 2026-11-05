@@ -1,5 +1,10 @@
 import { BOOKABLE_CATEGORY_WHERE } from "@/lib/categories";
-import Link from "next/link";
+import {
+  BackLink,
+  LoginPrompt,
+  Panel,
+  PlaceHeader,
+} from "@/app/(app)/_components/consumer-ui";
 import { notFound } from "next/navigation";
 import { BookingForm } from "@/app/(app)/org/[slug]/booking-form";
 import { loadAccountVehicles } from "@/lib/account-vehicles-catalog";
@@ -17,7 +22,7 @@ async function loadBranch(branchId: string) {
     where: {
       id: branchId,
       isActive: true,
-      tenant: { acceptsOnlineBooking: true, suspended: false, isTest: false },
+      tenant: { acceptsOnlineBooking: true, suspended: false, isTest: false, creditHidden: false },
     },
     select: {
       id: true,
@@ -98,75 +103,46 @@ export default async function BookBranchPage({
     .map((c) => c.id);
 
   return (
-    <div className="flex flex-col gap-6">
-      <Link
-        href={`/book?keys=${selectedKeyIds.map(encodeURIComponent).join(",")}`}
-        className="text-sm text-white/40 hover:text-white/70 transition-colors"
-      >
-        ← Салбар дахин сонгох
-      </Link>
+    <div className="flex flex-col gap-5">
+      <BackLink href={`/book?keys=${selectedKeyIds.map(encodeURIComponent).join(",")}`}>
+        Салбар дахин сонгох
+      </BackLink>
 
-      <div className="flex items-center gap-4">
-        {branch.tenant.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={branch.tenant.logoUrl}
-            alt=""
-            className="w-16 h-16 rounded-2xl object-contain bg-white/[0.04] border border-white/[0.06] shrink-0"
+      <PlaceHeader
+        name={branch.tenant.name}
+        logoUrl={branch.tenant.logoUrl}
+        eyebrow={branch.tenant.name}
+        title={branch.name}
+        subtitle={branch.tenant.phone1}
+      />
+
+      <Panel title="Цаг захиалах" description="Машин, өдөр, цагаа сонгоод захиалгаа илгээнэ үү.">
+        {account ? (
+          <BookingForm
+            branches={[
+              {
+                id: branch.id,
+                name: branch.name,
+                openWeekdays: openWeekdaysOf(branch),
+                schedule: {
+                  openTime: branch.openTime,
+                  closeTime: branch.closeTime,
+                  schedules: branch.schedules,
+                  scheduleExceptions: branch.scheduleExceptions,
+                  scheduleSeasons: branch.scheduleSeasons,
+                },
+                categories: branchCategories,
+              },
+            ]}
+            vehicles={vehicles}
+            initialBranchId={branch.id}
+            initialCategoryIds={preselectedCategoryIds}
+            lockCategories
           />
         ) : (
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500/30 to-blue-500/30 border border-white/[0.06] shrink-0 flex items-center justify-center text-xl font-bold text-white/70">
-            {branch.tenant.name.slice(0, 1)}
-          </div>
+          <LoginPrompt />
         )}
-        <div>
-          <h1 className="text-2xl font-bold">{branch.name}</h1>
-          <p className="text-white/40 text-sm mt-0.5">
-            {branch.tenant.name} · {branch.tenant.phone1}
-          </p>
-        </div>
-      </div>
-
-      <div className="w-full">
-        <div className="glass rounded-2xl p-5 border border-white/[0.08]">
-          <h2 className="font-semibold mb-4">Цаг захиалах</h2>
-          {account ? (
-            <BookingForm
-              branches={[
-                {
-                  id: branch.id,
-                  name: branch.name,
-                  openWeekdays: openWeekdaysOf(branch),
-                  schedule: {
-                    openTime: branch.openTime,
-                    closeTime: branch.closeTime,
-                    schedules: branch.schedules,
-                    scheduleExceptions: branch.scheduleExceptions,
-                    scheduleSeasons: branch.scheduleSeasons,
-                  },
-                  categories: branchCategories,
-                },
-              ]}
-              vehicles={vehicles}
-              initialBranchId={branch.id}
-              initialCategoryIds={preselectedCategoryIds}
-              lockCategories
-            />
-          ) : (
-            <div className="flex flex-col gap-3">
-              <p className="text-sm text-white/50">
-                Цаг захиалахын тулд эхлээд нэвтэрнэ үү.
-              </p>
-              <Link
-                href="/login"
-                className="self-start bg-violet-600 hover:bg-violet-500 transition-colors px-5 py-2.5 rounded-xl font-medium text-sm"
-              >
-                Нэвтрэх / Бүртгүүлэх →
-              </Link>
-            </div>
-          )}
-        </div>
-      </div>
+      </Panel>
     </div>
   );
 }

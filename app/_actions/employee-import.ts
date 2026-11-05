@@ -15,8 +15,6 @@ import {
 } from "@/lib/employees/import";
 import { ImportParseError, parseEmployeeWorkbook } from "@/lib/employees/import-server";
 import type { EmployeeActor } from "@/lib/employees/types";
-import { PLAN_LIMIT_CODES, PLAN_LIMIT_META } from "@/lib/plan-limits";
-import { enforceCountLimit } from "@/lib/plan-limits-server";
 import { prisma } from "@/lib/prisma";
 import { assertActiveSubscription } from "@/lib/subscription-server";
 
@@ -119,21 +117,7 @@ export async function importEmployeesAction(payload: unknown): Promise<ImportEmp
   const rows = parseImportRowsPayload(payload);
   if (!rows) return { ok: false, message: "Оруулах мөр алга эсвэл хүсэлт буруу." };
 
-  // Багцын хязгаар: max_users — ганцаар үүсгэхтэй адил тоолно, гэхдээ
-  // үлдсэн эрхээс хэтэрсэн мөрүүдийг тус тусад нь алдаатай буцаана.
-  const limit = await enforceCountLimit(
-    user.tenantId,
-    PLAN_LIMIT_CODES.MAX_USERS,
-    () => prisma.user.count({ where: { tenantId: user.tenantId, deletedAt: null } }),
-  );
-  const remaining = limit.limit === null ? null : Math.max(0, limit.limit - limit.current);
-  const limitMessage =
-    limit.message ??
-    `${PLAN_LIMIT_META[PLAN_LIMIT_CODES.MAX_USERS].label}: багцын хязгаар (${limit.limit}) хүрсэн. Багцаа сайжруулна уу.`;
-
   const result = await importEmployees(prisma, user, rows, {
-    remaining,
-    limitMessage,
     onCreated: (created) =>
       logAudit({
         tenantId: user.tenantId,

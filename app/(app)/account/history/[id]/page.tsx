@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { BtnLink } from "@/app/_components/landing-ops-ui";
+import { ReviewForm } from "@/app/(app)/account/orders/[id]/review-form";
 import { EmptyState } from "@/app/_components/empty-state";
 import { requireAccount } from "@/lib/auth/account";
 import {
@@ -90,6 +91,7 @@ export default async function AccountHistoryDetailPage({
       completedAt: true,
       createdAt: true,
       notes: true,
+      review: { select: { rating: true, comment: true, reply: true } },
       totalAmount: true,
       paidAmount: true,
       ...INTAKE_VIEW_SELECT,
@@ -122,6 +124,34 @@ export default async function AccountHistoryDetailPage({
 
   if (!order) notFound();
   const intake = toIntakeView(order, { includeRecordedBy: false });
+  const canReview = order.status === "COMPLETED";
+  const reviewCard = canReview ? (
+    <div
+      id="review"
+      className={`scroll-mt-4 rounded-2xl border p-5 ${
+        order.review
+          ? "border-[var(--oc-line)] bg-[var(--oc-panel)]"
+          : "border-amber-400/40 bg-amber-400/[0.06]"
+      }`}
+    >
+      <div className="mb-3 flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-xl text-amber-400">
+          ★
+        </div>
+        <div>
+          <h2 className="text-base font-semibold text-[var(--oc-ink)]">
+            {order.review ? "Таны үнэлгээ" : "Үйлчилгээг үнэлэх"}
+          </h2>
+          <p className="text-xs text-[var(--oc-muted3)]">
+            {order.review
+              ? "Үнэлгээгээ хүссэн үедээ засаж болно."
+              : `${order.tenant.name} · ${order.branch.name}-ийн үйлчилгээ танд хэр таалагдсан бэ? Таны үнэлгээ бусад хэрэглэгчдэд тусална.`}
+          </p>
+        </div>
+      </div>
+      <ReviewForm orderId={id} initial={order.review} />
+    </div>
+  ) : null;
 
   return (
     <div className="w-full max-w-full flex flex-col gap-5">
@@ -142,6 +172,8 @@ export default async function AccountHistoryDetailPage({
           ← Буцах
         </BtnLink>
       </div>
+
+      {reviewCard}
 
       {/* Товч мэдээлэл */}
       <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-5 grid gap-3 sm:grid-cols-2">

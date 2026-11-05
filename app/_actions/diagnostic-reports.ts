@@ -1,6 +1,8 @@
 "use server";
 
 
+import { moduleDisabledMessage } from "@/lib/plan-modules";
+import { assertModuleEnabled, isModuleEnabled } from "@/lib/plan-modules-server";
 import type { ConfirmActionResult } from "@/lib/confirm-action";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -50,6 +52,9 @@ export async function createReportAction(
   formData: FormData,
 ): Promise<ReportActionState> {
   const user = await requireUser();
+  if (!(await isModuleEnabled(user.tenantId, "enable_diagnostics"))) {
+    return { ok: false, message: moduleDisabledMessage("enable_diagnostics") };
+  }
 
   const templateId = s(formData, "templateId");
   const orderId = s(formData, "orderId");
@@ -292,6 +297,7 @@ export async function startDiagnosticItemAction(
   itemId: string,
 ): Promise<void> {
   const user = await requireUser();
+  await assertModuleEnabled(user.tenantId, "enable_diagnostics");
   if (!orderId || !itemId) return;
   const scope = workingBranchScopeId(user);
 
@@ -334,6 +340,9 @@ export async function startDiagnosticItemAction(
 
 export async function deleteReportAction(formData: FormData): Promise<ConfirmActionResult> {
   const user = await requireUser();
+  if (!(await isModuleEnabled(user.tenantId, "enable_diagnostics"))) {
+    return { error: moduleDisabledMessage("enable_diagnostics") };
+  }
   const id = s(formData, "id");
   if (!id) return;
 
