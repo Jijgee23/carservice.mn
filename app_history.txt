@@ -2161,3 +2161,10 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - lib/email.ts: infosystems.mn/macs.mn-тэй ижил (nodemailer, smtp.mail.mn:465, SMTP_SECURE, connection/greeting/socket timeout, SMTP_PASSWORD хуучин нэр).
 - EMAIL_REDIRECT_TO: тохируулсан бол бүх имейл тэр хаяг руу (гарчигт «[→ жинхэнэ хүлээн авагч]»). Прод-д одоохондоо jijgee647@gmail.com.
 - Прод .env-д SMTP_HOST/PORT/USER/PASS/FROM + EMAIL_REDIRECT_TO-г хэрэглэгч тохируулна (нууц үгийг өөр апп-аас хуулаагүй).
+
+[2026-11-05] Deploy 2bd39a5 → прод (carservice.mn)
+- pg_dump нөөц: ~/backups/carcare_pre_deploy_20261105_1712_2bd39a5.dump; 6 migration амжилттай; catalog backfill (7 service → 7 сангийн мөр).
+- Credit-scores cron-ийг хараахан нэмээгүй (эхний ажиллагаа автоматаар блоклож болзошгүй — оноог шалгасны дараа).
+
+[2026-11-05] Dashboard-аас «Багцын модулиуд» хэсгийг хассан
+- app/dashboard/page.tsx: модулийн жагсаалтын хэсэг + getEnabledModules/MODULE_LIMIT_CODES import устгасан (багцын мэдээлэл /dashboard/settings/subscription-д хэвээр).

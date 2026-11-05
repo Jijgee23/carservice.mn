@@ -11,8 +11,6 @@ import {
 import { DatePicker } from "@/app/_components/date-picker";
 import { Sparkline } from "@/app/_components/sparkline";
 import { IncomeBarChart } from "./income-bar-chart";
-import { MODULE_LIMIT_CODES, PLAN_LIMIT_META } from "@/lib/plan-limits";
-import { getEnabledModules } from "@/lib/plan-modules-server";
 import { type Trend, loadOverviewData } from "@/lib/overview";
 import { INCOME_QUICK_RANGES, type IncomeRangeKey } from "./income-range";
 import {
@@ -63,7 +61,6 @@ export default async function DashboardPage({
     { ...user, orderAccess: user },
     params,
   );
-  const enabledModules = await getEnabledModules(user.tenant.plan);
   const incomeUp = income.changePct == null ? true : income.changePct >= 0;
 
   // Статистик карт хэдэн ширхэг байгаагаас хамааруулж xl цонхон дээр яг тэр
@@ -132,35 +129,6 @@ export default async function DashboardPage({
           />
         ) : null}
       </div>
-
-      <section className="mt-6 rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 sm:p-6 lg:p-8">
-        <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
-          <div>
-            <h2 className="font-semibold text-[var(--oc-ink)] mb-1">Багцын модулиуд</h2>
-            <p className="text-xs text-[var(--oc-muted3)]">
-              {PLAN_LABEL[user.tenant.plan]} багцад багтсан модулиуд. Үндсэн хэсэг (засварын хуудас,
-              үйлчлүүлэгч, машин, үйлчилгээ, ажилтан, төлбөр, касс) үргэлж нээлттэй.
-            </p>
-          </div>
-          <Link
-            href="/dashboard/settings/subscription"
-            className="font-plex-mono text-[11px] text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)] transition-colors shrink-0"
-          >
-            Багц удирдах →
-          </Link>
-        </div>
-        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {MODULE_LIMIT_CODES.filter((code) => enabledModules.has(code)).map((code) => (
-            <li
-              key={code}
-              className="flex items-center gap-2 rounded-lg border border-[var(--oc-line)] px-3 py-2 text-[13px] text-[var(--oc-ink2)]"
-            >
-              <span aria-hidden="true" className="text-[var(--oc-ok)]">✓</span>
-              <span className="flex-1">{PLAN_LIMIT_META[code].label}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
 
       <section className="mt-6 rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 sm:p-6 lg:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
