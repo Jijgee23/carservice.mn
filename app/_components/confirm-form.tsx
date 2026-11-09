@@ -46,8 +46,10 @@ function ConfirmationDialog({
 
   if (!open || typeof document === "undefined") return null;
 
+  // `document.body`-руу portal хийдэг тул `.landing-ops` wrapper заавал —
+  // эс бөгөөс `--oc-*` token тодорхойлогдохгүй, дэвсгэр/текст/товч алга болно.
   return createPortal(
-    <>
+    <div className="landing-ops">
       <button
         type="button"
         tabIndex={-1}
@@ -108,7 +110,7 @@ function ConfirmationDialog({
           </button>
         </div>
       </div>
-    </>,
+    </div>,
     document.body,
   );
 }

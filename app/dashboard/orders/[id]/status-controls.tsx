@@ -189,23 +189,25 @@ export function StatusControls({
         </div>
       </div>
 
+      {/* Portal → `.landing-ops` wrapper заавал (`--oc-*` token). z-[200+] —
+          жагсаалтын «Төлөв өөрчлөх» Modal (z-110)-ийн дээр гарна. */}
       {confirmCancel && typeof document !== "undefined"
         ? createPortal(
-            <>
+            <div className="landing-ops">
               <button
                 type="button"
                 tabIndex={-1}
                 aria-label="Хаах"
                 onClick={() => setConfirmCancel(false)}
-                className="fixed inset-0 z-[100] cursor-default bg-black/60"
+                className="fixed inset-0 z-[200] cursor-default bg-black/60 backdrop-blur-sm"
               />
               <div
                 role="alertdialog"
                 aria-modal="true"
-                className="fixed left-1/2 top-1/2 z-[110] w-[min(92vw,24rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-[var(--surface)] p-5 shadow-2xl backdrop-blur-xl"
+                className="fixed left-1/2 top-1/2 z-[210] w-[min(92vw,24rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--oc-line)] bg-[var(--oc-panel)] p-5 shadow-2xl"
               >
                 <div className="flex items-start gap-3">
-                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-red-500/15 text-red-300 light:text-red-700">
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--oc-accent)]/15 text-[var(--oc-accent)]">
                     <svg
                       width="18"
                       height="18"
@@ -222,8 +224,8 @@ export function StatusControls({
                     </svg>
                   </div>
                   <div className="min-w-0">
-                    <h3 className="font-semibold text-white">Засварын хуудас цуцлах уу?</h3>
-                    <p className="mt-1 text-sm text-white/50">
+                    <h3 className="font-semibold text-[var(--oc-ink)]">Засварын хуудас цуцлах уу?</h3>
+                    <p className="mt-1 text-sm text-[var(--oc-muted)]">
                       Энэ үйлдлийг буцаах боломжгүй. Засварын хуудсыг цуцлахдаа итгэлтэй
                       байна уу?
                     </p>
@@ -235,7 +237,7 @@ export function StatusControls({
                     type="button"
                     onClick={() => setConfirmCancel(false)}
                     disabled={pending}
-                    className="rounded-lg border border-white/10 bg-white/[0.04] px-3.5 py-2 text-sm text-white/70 transition-colors hover:bg-white/[0.08] disabled:opacity-50"
+                    className="rounded-lg border border-[var(--oc-line)] bg-[var(--oc-panel2)] px-3.5 py-2 text-sm text-[var(--oc-muted)] transition-colors hover:bg-[var(--oc-line2)] hover:text-[var(--oc-ink)] disabled:opacity-50"
                   >
                     Болих
                   </button>
@@ -252,32 +254,31 @@ export function StatusControls({
                   </form>
                 </div>
               </div>
-            </>,
+            </div>,
             document.body,
           )
         : null}
 
-
       {confirmStart && typeof document !== "undefined"
         ? createPortal(
-            <>
+            <div className="landing-ops">
               <button
                 type="button"
                 tabIndex={-1}
                 aria-label="Хаах"
                 onClick={() => setConfirmStart(false)}
-                className="fixed inset-0 z-[100] cursor-default bg-black/60"
+                className="fixed inset-0 z-[200] cursor-default bg-black/60 backdrop-blur-sm"
               />
               <div
                 role="alertdialog"
                 aria-modal="true"
-                className="fixed left-1/2 top-1/2 z-[110] w-[min(92vw,24rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-[var(--surface)] p-5 shadow-2xl backdrop-blur-xl"
+                className="fixed left-1/2 top-1/2 z-[210] w-[min(92vw,24rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--oc-line)] bg-[var(--oc-panel)] p-5 shadow-2xl"
               >
                 <div className="min-w-0">
-                  <h3 className="font-semibold text-white">
+                  <h3 className="font-semibold text-[var(--oc-ink)]">
                     Ойролцоо үргэлжлэх хугацаа
                   </h3>
-                  <p className="mt-1 text-sm text-white/50">
+                  <p className="mt-1 text-sm text-[var(--oc-muted)]">
                     Энэ захиалгад хугацааны тооцоолол алга байна. Ажлын байрны
                     эзэмшлийг зөв тооцоолохын тулд ажлыг эхлүүлэхийн өмнө
                     ойролцоо хугацааг оруулна уу.
@@ -294,9 +295,9 @@ export function StatusControls({
                       placeholder="Цаг"
                       value={startHours}
                       onChange={(e) => setStartHours(e.target.value)}
-                      className="w-20 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-sm text-white outline-none focus:border-[var(--oc-accent)]/60"
+                      className="w-20 rounded-lg border border-[var(--oc-line)] bg-[var(--oc-panel2)] px-2.5 py-1.5 text-sm text-[var(--oc-ink)] placeholder:text-[var(--oc-muted4)] outline-none focus:border-[var(--oc-accent)]/60"
                     />
-                    <span className="text-sm text-white/40">ц</span>
+                    <span className="text-sm text-[var(--oc-muted3)]">ц</span>
                     <input
                       type="number"
                       name="durationMinutes"
@@ -305,9 +306,9 @@ export function StatusControls({
                       placeholder="Мин"
                       value={startMinutes}
                       onChange={(e) => setStartMinutes(e.target.value)}
-                      className="w-20 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-sm text-white outline-none focus:border-[var(--oc-accent)]/60"
+                      className="w-20 rounded-lg border border-[var(--oc-line)] bg-[var(--oc-panel2)] px-2.5 py-1.5 text-sm text-[var(--oc-ink)] placeholder:text-[var(--oc-muted4)] outline-none focus:border-[var(--oc-accent)]/60"
                     />
-                    <span className="text-sm text-white/40">мин</span>
+                    <span className="text-sm text-[var(--oc-muted3)]">мин</span>
                   </div>
                   {state?.fieldErrors?.duration ? (
                     <p className="text-xs text-red-400">{state.fieldErrors.duration}</p>
@@ -317,7 +318,7 @@ export function StatusControls({
                       type="button"
                       onClick={() => setConfirmStart(false)}
                       disabled={pending}
-                      className="rounded-lg border border-white/10 bg-white/[0.04] px-3.5 py-2 text-sm text-white/70 transition-colors hover:bg-white/[0.08] disabled:opacity-50"
+                      className="rounded-lg border border-[var(--oc-line)] bg-[var(--oc-panel2)] px-3.5 py-2 text-sm text-[var(--oc-muted)] transition-colors hover:bg-[var(--oc-line2)] hover:text-[var(--oc-ink)] disabled:opacity-50"
                     >
                       Болих
                     </button>
@@ -331,7 +332,7 @@ export function StatusControls({
                   </div>
                 </form>
               </div>
-            </>,
+            </div>,
             document.body,
           )
         : null}
