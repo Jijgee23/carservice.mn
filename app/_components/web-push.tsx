@@ -66,12 +66,16 @@ function waitForServiceWorkerActivation(
   });
 }
 
-export function WebPushToggle({
-  target,
-}: {
-  target: "account" | "user" | "system-admin";
-}) {
+type PushTarget = "account" | "user" | "system-admin";
+
+/**
+ * Push мэдэгдлийн төлөв + асаах үйлдэл. Mount болмогц: зөвшөөрсөн бол token-оо
+ * чимээгүй шинэчилж foreground мессежийг сонсоно (UI нуугдсан ч ажиллана).
+ * `checked` — анхны шалгалт дууссан эсэх (түүнээс өмнө UI харуулахгүй, анивчихгүй).
+ */
+function useWebPush(target: PushTarget) {
   const [status, setStatus] = useState<Status>("idle");
+  const [checked, setChecked] = useState(false);
 
   // Background мессеж (service worker-ийн onBackgroundMessage) нь
   // web-push.tsx-ийн onMessage-ийг ДАМЖИХГҮЙ тул NotificationBell-ийн
@@ -95,13 +99,24 @@ export function WebPushToggle({
     let cancelled = false;
     async function init() {
       if (!isFirebaseConfigured() || typeof Notification === "undefined") {
-        if (!cancelled) setStatus("unsupported");
+        if (!cancelled) {
+          setStatus("unsupported");
+          setChecked(true);
+        }
         return;
       }
       if (Notification.permission === "granted") {
-        await enable(true); // зөвшөөрсөн бол token-оо чимээгүй шинэчилнэ
-      } else if (Notification.permission === "denied") {
-        if (!cancelled) setStatus("denied");
+        // Зөвшөөрсөн → мөр харуулахгүй тул token шинэчлэлтийг хүлээлгүй шалгасанд тооцно.
+        if (!cancelled) {
+          setStatus("granted");
+          setChecked(true);
+        }
+        await enable(true); // token-оо чимээгүй шинэчилнэ
+      } else {
+        if (!cancelled) {
+          if (Notification.permission === "denied") setStatus("denied");
+          setChecked(true);
+        }
       }
     }
     void init();
@@ -112,7 +127,13 @@ export function WebPushToggle({
   }, []);
 
   async function enable(silent = false) {
-    setStatus("working");
+    // Чимээгүй (аль хэдийн зөвшөөрсөн) шинэчлэлтэд «Тохируулж байна» төлөв
+    // харуулахгүй — эс бөгөөс нуугдсан мөр түр гарч ирнэ.
+    if (!silent) setStatus("working");
+    // Аль хэдийн зөвшөөрсөн төхөөрөмжийн чимээгүй token шинэчлэлт бүтэлгүйтвэл
+    // өмнөх token хүчинтэй хэвээр байх магадлалтай — хуудас бүрт алдааны мөр
+    // гаргахгүй, «идэвхтэй» хэвээр үлдээнэ (алдаа консолд бичигдэнэ).
+    const fail = () => setStatus(silent ? "granted" : "error");
     try {
       const messaging = await getClientMessaging();
       if (!messaging || !vapidKey) {
@@ -158,7 +179,7 @@ export function WebPushToggle({
         serviceWorkerRegistration: reg,
       });
       if (!token) {
-        setStatus("error");
+        fail();
         return;
       }
 
@@ -178,7 +199,7 @@ export function WebPushToggle({
             ? await registerUserDevice(input)
             : await registerSuperAdminDevice(input);
       if (!res.ok) {
-        setStatus("error");
+        fail();
         return;
       }
 
@@ -205,9 +226,16 @@ export function WebPushToggle({
       setStatus("granted");
     } catch (e) {
       console.error("[web-push]", e);
-      setStatus("error");
+      fail();
     }
   }
+
+  return { status, checked, enable };
+}
+
+/** Тохиргооны хуудсанд (account) — төлөвийг товч/текстээр харуулна. */
+export function WebPushToggle({ target }: { target: PushTarget }) {
+  const { status, enable } = useWebPush(target);
 
   if (status === "unsupported") return null;
 
@@ -241,5 +269,133 @@ export function WebPushToggle({
           ? "Дахин оролдох"
           : "🔔 Мэдэгдэл асаах"}
     </button>
+  );
+}
+
+const BAR_DISMISS_KEY = "carcare:pushBarDismissedAt:";
+/** Хаасан мөрийг дахин санал болгох хүртэлх хугацаа. */
+const BAR_DISMISS_MS = 14 * 86_400_000;
+
+function readDismissed(target: PushTarget): boolean {
+  try {
+    const at = Number(localStorage.getItem(BAR_DISMISS_KEY + target) ?? 0);
+    return Number.isFinite(at) && at > 0 && Date.now() - at < BAR_DISMISS_MS;
+  } catch {
+    return false;
+  }
+}
+
+const BellIcon = ({ off = false }: { off?: boolean }) => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {off ? (
+      <>
+        <path d="M8.7 3A6 6 0 0 1 18 8c0 2.7.6 4.6 1.3 6" />
+        <path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7" />
+        <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+        <path d="m2 2 20 20" />
+      </>
+    ) : (
+      <>
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+      </>
+    )}
+  </svg>
+);
+
+/**
+ * Layout-ын дээд талын нимгэн мөр: push асаагаагүй бол «Асаах», блоклогдсон
+ * бол товч тайлбар. Идэвхтэй / дэмжигдээгүй / хаасан (14 хоног) бол юу ч
+ * харуулахгүй — hook нь ажилласаар (token шинэчлэл, foreground мессеж).
+ */
+export function WebPushBar({
+  target,
+  description,
+  className = "",
+}: {
+  target: PushTarget;
+  /** Юуны мэдэгдэл ирэх тухай богино тайлбар (том дэлгэц дээр харагдана). */
+  description: string;
+  className?: string;
+}) {
+  const { status, checked, enable } = useWebPush(target);
+  const [dismissed, setDismissed] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    // localStorage зөвхөн client дээр — mount-ийн дараа уншина.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDismissed(readDismissed(target));
+  }, [target]);
+
+  if (!checked || dismissed !== false) return null;
+  if (status === "unsupported" || status === "granted") return null;
+
+  function dismiss() {
+    try {
+      localStorage.setItem(BAR_DISMISS_KEY + target, String(Date.now()));
+    } catch {
+      // хадгалж чадахгүй бол зөвхөн энэ удаад нууна
+    }
+    setDismissed(true);
+  }
+
+  const denied = status === "denied";
+  return (
+    <div className={className}>
+      <div
+        role="status"
+        className={`flex items-center gap-2.5 rounded-full border py-1 pl-1 pr-1.5 text-xs ${
+          denied
+            ? "border-[var(--oc-line)] bg-[var(--oc-panel)]"
+            : "border-[var(--oc-accent)]/25 bg-[var(--oc-accent)]/[0.06]"
+        }`}
+      >
+        <span
+          className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${
+            denied
+              ? "bg-white/[0.06] text-[var(--oc-muted3)] light:bg-black/[0.05]"
+              : "bg-[var(--oc-accent)]/15 text-[var(--oc-accent)]"
+          }`}
+        >
+          <BellIcon off={denied} />
+        </span>
+        <span className="min-w-0 flex-1 truncate">
+          {denied ? (
+            <>
+              <span className="font-medium text-[var(--oc-ink2)]">Мэдэгдэл хаалттай</span>
+              <span className="text-[var(--oc-muted3)]"> · хөтчийн тохиргооноос зөвшөөрнө үү</span>
+            </>
+          ) : (
+            <>
+              <span className="font-medium text-[var(--oc-ink)]">
+                {status === "error" ? "Мэдэгдэл асааж чадсангүй" : "Энэ төхөөрөмж дээр мэдэгдэл авах"}
+              </span>
+              <span className="hidden text-[var(--oc-muted3)] md:inline"> · {description}</span>
+            </>
+          )}
+        </span>
+        {denied ? null : (
+          <button
+            type="button"
+            disabled={status === "working"}
+            onClick={() => enable(false)}
+            className="shrink-0 rounded-full bg-[var(--oc-accent)] px-3 py-1 text-xs font-semibold text-[var(--oc-on-accent)] transition-colors hover:bg-[var(--oc-accent-hi)] disabled:opacity-60"
+          >
+            {status === "working" ? "Асааж байна…" : status === "error" ? "Дахин оролдох" : "Асаах"}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={dismiss}
+          aria-label="Хаах"
+          title="14 хоног харуулахгүй"
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[var(--oc-muted3)] transition-colors hover:bg-white/[0.08] hover:text-[var(--oc-ink2)] light:hover:bg-black/[0.06]"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
   );
 }

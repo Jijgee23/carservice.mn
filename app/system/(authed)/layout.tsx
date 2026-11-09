@@ -4,7 +4,7 @@ import {
   SystemSidebar,
 } from "@/app/_components/system-sidebar";
 import { ToastProvider } from "@/app/_components/toast";
-import { WebPushToggle } from "@/app/_components/web-push";
+import { WebPushBar } from "@/app/_components/web-push";
 import { requireSuperAdmin } from "@/lib/auth/system";
 
 // Ops Console дизайны фонт — dashboard/account-той ижил механизм, зөвхөн
@@ -46,17 +46,11 @@ export default async function SystemAdminLayout({
         />
         <div className="app-content-offset flex-1 min-w-0 min-h-screen flex flex-col relative isolate">
           <SystemMobileTopbar adminName={adminName} initials={initials} />
-          <div className="px-4 sm:px-6 lg:px-8 pt-3">
-            <section className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-3 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-sm font-medium text-[var(--oc-ink2)]">Мэдэгдэл</div>
-                <div className="text-xs text-[var(--oc-muted3)]">
-                  Шинэ байгууллага бүртгүүлэх зэрэг мэдэгдлийг энэ төхөөрөмж дээр авах.
-                </div>
-              </div>
-              <WebPushToggle target="system-admin" />
-            </section>
-          </div>
+          <WebPushBar
+            target="system-admin"
+            description="шинэ байгууллага бүртгүүлэх зэрэг мэдэгдэл"
+            className="px-4 sm:px-6 lg:px-8 pt-3"
+          />
           <main className="flex-1 min-w-0">{children}</main>
         </div>
       </div>
