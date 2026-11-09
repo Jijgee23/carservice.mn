@@ -11,6 +11,7 @@ import {
 import { DatePicker } from "@/app/_components/date-picker";
 import { Sparkline } from "@/app/_components/sparkline";
 import { IncomeBarChart } from "./income-bar-chart";
+import { CashOverview } from "./cash-overview";
 import { type Trend, loadOverviewData } from "@/lib/overview";
 import { INCOME_QUICK_RANGES, type IncomeRangeKey } from "./income-range";
 import {
@@ -129,6 +130,8 @@ export default async function DashboardPage({
           />
         ) : null}
       </div>
+
+      <CashOverview user={user} />
 
       <section className="mt-6 rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 sm:p-6 lg:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
