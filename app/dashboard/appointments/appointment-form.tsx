@@ -324,6 +324,10 @@ export function AppointmentForm({
             />
           </Field>
 
+          {/* Салбарт сонгож болох мастер ганцхан бол сонгуулахгүй — шууд оноогдоно. */}
+          {assigneeOptions.length === 1 ? (
+            <input type="hidden" name="assignedToId" value={assigneeOptions[0].value} />
+          ) : (
           <Field label="Хариуцах мастер *" htmlFor="assignedToId" error={fe.assignedToId}>
             <Select
               id="assignedToId"
@@ -339,6 +343,7 @@ export function AppointmentForm({
               <p className="mt-1 text-xs text-[var(--oc-warn)]">{emptyAssigneeReason(assigneeOnlyUserId)}</p>
             ) : null}
           </Field>
+          )}
 
           <CreateCustomerModal
             open={showCustomerForm}

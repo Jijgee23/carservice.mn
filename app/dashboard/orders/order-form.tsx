@@ -236,7 +236,7 @@ export function OrderForm({
       if (!customerId) missing.customerId = "Үйлчлүүлэгчээ сонгоно уу.";
       if (!vehicleId) missing.vehicleId = "Машинаа сонгоно уу.";
     }
-    if (!assignedToId) missing.assignedToId = "Хариуцах мастер сонгоно уу.";
+    if (!effectiveAssignedToId) missing.assignedToId = "Хариуцах мастер сонгоно уу.";
     setClientErrors(missing);
     if (Object.keys(missing).length > 0) e.preventDefault();
   }
@@ -398,6 +398,15 @@ export function OrderForm({
     return technicians.filter((t) => isTechAssignableAt(t, branchId));
   }, [technicians, branchId]);
 
+  // Сонгож болох мастер ганцхан бол сонгуулахгүй — шууд түүнд оноогдоно.
+  // Засах үед өөр хүнд (ж: идэвхгүй болсон) оноосон бол дарж бичихгүй.
+  const soleTechnician =
+    filteredTechnicians.length === 1 &&
+    (!assignedToId || assignedToId === filteredTechnicians[0].id)
+      ? filteredTechnicians[0]
+      : null;
+  const effectiveAssignedToId = soleTechnician ? soleTechnician.id : assignedToId;
+
   // Салбар солиход одоо сонгогдсон мастер шинэ салбарт хамаарахгүй бол цэвэрлэнэ.
   function onBranchChange(v: string) {
     setBranchId(v);
@@ -552,6 +561,9 @@ export function OrderForm({
           />
         </Field>
 
+        {soleTechnician ? (
+          <input type="hidden" name="assignedToId" value={soleTechnician.id} />
+        ) : (
         <Field
           label="Хариуцах мастер"
           required
@@ -580,6 +592,7 @@ export function OrderForm({
             }))}
           />
         </Field>
+        )}
 
         {plateMode ? null : (
         <>
