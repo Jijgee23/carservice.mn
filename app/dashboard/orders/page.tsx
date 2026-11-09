@@ -14,6 +14,7 @@ import { Pagination } from "@/app/_components/pagination";
 import { buildMeta, getPageInfo } from "@/lib/pagination";
 import { customerLabel, orgRegnumLabel } from "@/lib/customers";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { canCreate, canEdit, canView, hasPermission, orderAssignableWhere, workingBranchScopeId } from "@/lib/auth/roles";
 import { canAssignOrders, orderReadWhere } from "@/lib/auth/order-access";
 import { redirect } from "next/navigation";
@@ -96,6 +97,8 @@ export default async function OrdersPage({
 
   // Салбараар хязгаарлагдсан ажилтан зөвхөн өөрийн салбарын захиалгыг харна.
   const scopeBranchId = workingBranchScopeId(user);
+  // Энгийн багц (ганц салбар): салбарын шүүлтүүр, баганыг нууна.
+  const { hideBranches } = await getBranchVisibility(user);
 
   const where: Prisma.ServiceOrderWhereInput = {
     tenantId: user.tenantId,
@@ -259,6 +262,10 @@ export default async function OrdersPage({
             <BtnLink href="/dashboard/orders/in-progress" variant="ghost">
               Явц харах
             </BtnLink>
+            {/* Цэсэнд «Засварын хуудас» ганц мөр — дараа төлбөрт рүү эндээс шилжинэ. */}
+            <BtnLink href="/dashboard/orders/postpaid" variant="ghost">
+              Дараа төлбөрт
+            </BtnLink>
             {canAdd ? (
               <AddLinkButton href="/dashboard/orders/new">
                 Засварын хуудас үүсгэх
@@ -299,11 +306,13 @@ export default async function OrdersPage({
             { value: "CANCELLED", label: ORDER_STATUS_LABEL.CANCELLED },
           ]}
         />
-        <FilterSelect
-          paramName="branchId"
-          placeholder="Бүх салбар"
-          options={branches.map((b) => ({ value: b.id, label: b.name }))}
-        />
+        {hideBranches ? null : (
+          <FilterSelect
+            paramName="branchId"
+            placeholder="Бүх салбар"
+            options={branches.map((b) => ({ value: b.id, label: b.name }))}
+          />
+        )}
         <FilterSelect
           paramName="customerId"
           placeholder="Бүх үйлчлүүлэгч"
@@ -384,6 +393,7 @@ export default async function OrdersPage({
             canAssign={canAssign}
             currentUserId={user.id}
             sort={sort}
+            hideBranches={hideBranches}
             rowActions={{
               canRecordPayments: canCreate(user, "payments"),
               canChangeItemStatus: hasPermission(user, "orders.itemStatus"),

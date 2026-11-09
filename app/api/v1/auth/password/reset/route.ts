@@ -55,7 +55,7 @@ export async function POST(req: Request) {
 
   const user = await prisma.user.findUnique({
     where: id,
-    select: { id: true, email: true, tenantId: true },
+    select: { id: true, email: true, phone: true, tenantId: true },
   });
   // Бүртгэлгүй нэвтрэх нэрийг "код буруу"-тай адил харуулна (enumeration-аас сэргийлнэ).
   if (!user) {
@@ -64,6 +64,7 @@ export async function POST(req: Request) {
 
   const otp = await verifyOtp({
     email: user.email,
+    phone: user.phone,
     type: "RESET_PASSWORD",
     code: otpCode,
   });
@@ -98,7 +99,7 @@ export async function POST(req: Request) {
   });
   await Promise.all([
     revokeAllForUser(user.id),
-    revokeAllOtps(user.email, "RESET_PASSWORD"),
+    revokeAllOtps({ email: user.email, phone: user.phone }, "RESET_PASSWORD"),
   ]);
 
   return jsonOk({

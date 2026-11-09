@@ -3,6 +3,8 @@ import { resolveWorkingBranch } from "@/lib/auth/api-branch";
 import { requireActiveSubscriptionApi } from "@/lib/subscription-server";
 import { ItemKind } from "@/app/generated/prisma/client";
 import { addOrderItemCommand, parseOrderItemDecimal } from "@/lib/orders/order-item-commands";
+import { adoptCatalogItemForTenant } from "@/lib/services/catalog-adopt";
+import { CATALOG_OPTION_PREFIX } from "@/lib/catalog/catalog-option";
 import { OrderCommandError } from "@/lib/orders/order-commands";
 
 function commandError(error: unknown): Response {
@@ -33,10 +35,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (b.unitPrice !== undefined && !unitPrice) return jsonError(422, "Хүсэлт буруу.", { fieldErrors: { unitPrice: "Үнэ буруу." } });
   const kind = typeof b.kind === "string" ? b.kind.trim() as ItemKind : "" as ItemKind;
   const description = typeof b.description === "string" ? b.description.trim() : "";
-  const serviceId = typeof b.serviceId === "string" && b.serviceId.trim() ? b.serviceId.trim() : null;
+  let serviceId = typeof b.serviceId === "string" && b.serviceId.trim() ? b.serviceId.trim() : null;
+  let catalogItemId = typeof b.catalogItemId === "string" && b.catalogItemId.trim() ? b.catalogItemId.trim() : null;
+  if (serviceId?.startsWith(CATALOG_OPTION_PREFIX)) {
+    catalogItemId ||= serviceId.slice(CATALOG_OPTION_PREFIX.length);
+    serviceId = null;
+  }
   const diagnosticTemplateId = typeof b.diagnosticTemplateId === "string" && b.diagnosticTemplateId.trim() ? b.diagnosticTemplateId.trim() : null;
   const { id } = await ctx.params;
   try {
+    // Нэгдсэн сангаас сонгосон бол эхлээд тенантын ажил/сэлбэг болгон холбоно.
+    if (!serviceId && catalogItemId && !diagnosticTemplateId) {
+      const adopted = await adoptCatalogItemForTenant(auth.user, catalogItemId);
+      if (!adopted.ok) return jsonError(422, adopted.message, { fieldErrors: { serviceId: adopted.message } });
+      serviceId = adopted.serviceId;
+    }
     const item = await addOrderItemCommand({ actor: auth.user, orderId: id, kind, description, quantity, unitPrice, serviceId, diagnosticTemplateId, scope: scopeResult.branchId });
     return jsonOk({ item }, { status: 201 });
   } catch (error) {

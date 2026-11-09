@@ -59,7 +59,8 @@ function Header({ header, format }: { header: DocHeader; format: PrintFormat }) 
         <div>РД: {header.shopRegnum}</div>
         <div>
           {header.branchName}
-          {header.address ? ` · ${header.address}` : ""}
+          {/* Салбарын нэр хоосон (нуусан) бол зөвхөн хаягийг харуулна. */}
+          {header.address ? `${header.branchName ? " · " : ""}${header.address}` : ""}
         </div>
         {header.phone ? <div>Утас: {header.phone}</div> : null}
       </div>

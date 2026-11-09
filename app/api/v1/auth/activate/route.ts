@@ -71,6 +71,7 @@ export async function POST(req: Request) {
 
   const otp = await verifyOtp({
     email: user.email,
+    phone: user.phone,
     type: "SET_PASSWORD",
     code: otpCode,
   });
@@ -113,7 +114,7 @@ export async function POST(req: Request) {
       deactivatedAt: null,
     },
   });
-  await revokeAllOtps(user.email, "SET_PASSWORD");
+  await revokeAllOtps({ email: user.email, phone: user.phone }, "SET_PASSWORD");
 
   await logAudit({
     tenantId: user.tenantId,
@@ -121,7 +122,7 @@ export async function POST(req: Request) {
     entity: "User",
     entityId: user.id,
     action: "LOGIN",
-    summary: `${user.email} · аккаунт идэвхжүүлэв (mobile)`,
+    summary: `${user.email ?? user.phone} · аккаунт идэвхжүүлэв (mobile)`,
   });
 
   return jsonOk(await buildApiLoginResponse(user, req, parsedDevice.device));

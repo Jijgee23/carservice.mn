@@ -4,6 +4,7 @@ import { EmptyState } from "@/app/_components/page-header";
 import { Pagination } from "@/app/_components/pagination";
 import { buildMeta, getPageInfo } from "@/lib/pagination";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { workingBranchScopeId } from "@/lib/auth/roles";
 import { customerLabel } from "@/lib/customers";
 import {
@@ -33,6 +34,8 @@ export default async function ReportsListPage({
   searchParams: Promise<{ page?: string; severity?: string }>;
 }) {
   const user = await requireUser();
+  // Энгийн багц (ганц салбар): «Салбар» баганыг нууна.
+  const { hideBranches } = await getBranchVisibility(user);
 
   const { page: pageParam, severity: severityParam } = await searchParams;
   const severity = isSeverity(severityParam) ? severityParam : undefined;
@@ -107,7 +110,9 @@ export default async function ReportsListPage({
                     "Салбар",
                     "Бөглөсөн",
                     "Засварын хуудас",
-                  ].map((h) => (
+                  ]
+                    .filter((h) => !(hideBranches && h === "Салбар"))
+                    .map((h) => (
                     <th
                       key={h}
                       className="text-left font-plex-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--oc-muted3)] font-medium px-5 py-3"
@@ -166,9 +171,11 @@ export default async function ReportsListPage({
                           {r.vehicle.plate}
                         </div>
                       </td>
-                      <td className="px-5 py-3 text-sm text-[var(--oc-muted2)]">
-                        {r.branch.name}
-                      </td>
+                      {hideBranches ? null : (
+                        <td className="px-5 py-3 text-sm text-[var(--oc-muted2)]">
+                          {r.branch.name}
+                        </td>
+                      )}
                       <td className="px-5 py-3 text-sm text-[var(--oc-muted2)]">
                         {r.filledBy
                           ? `${r.filledBy.lastName} ${r.filledBy.firstName}`

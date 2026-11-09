@@ -70,11 +70,14 @@ export function BulkAppointmentsTable({
   categories,
   canBulkEdit,
   canRespond,
+  hideBranches = false,
 }: {
   rows: BulkAppointmentRow[];
   categories: AppointmentCategoryOption[];
   canBulkEdit: boolean;
   canRespond: boolean;
+  /** Энгийн багц (ганц салбар): баганыг «Ангилал» болгож, салбарын нэрийг нууна. */
+  hideBranches?: boolean;
 }) {
   const selection = useRowSelection(rows);
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
@@ -103,7 +106,7 @@ export function BulkAppointmentsTable({
               {canBulkEdit ? (
                 <SelectAllCell selection={selection} />
               ) : null}
-              {["Үйлчлүүлэгч", "Салбар", "Мастер", "Хүссэн цаг", "Тэмдэглэл", "Төлөв", "Үйлдэл"].map(
+              {["Үйлчлүүлэгч", hideBranches ? "Ангилал" : "Салбар", "Мастер", "Хүссэн цаг", "Тэмдэглэл", "Төлөв", "Үйлдэл"].map(
                 (h) => (
                   <th
                     key={h}
@@ -135,14 +138,20 @@ export function BulkAppointmentsTable({
                     </div>
                   ) : null}
                 </td>
-                <td className="px-5 py-4 text-sm text-[var(--oc-muted2)]">
-                  {a.branchName}
-                  {a.categoryNames.length ? (
-                    <span className="block text-xs text-[var(--oc-muted3)] mt-0.5">
-                      {a.categoryNames.join(", ")}
-                    </span>
-                  ) : null}
-                </td>
+                {hideBranches ? (
+                  <td className="px-5 py-4 text-sm text-[var(--oc-muted2)]">
+                    {a.categoryNames.length ? a.categoryNames.join(", ") : "—"}
+                  </td>
+                ) : (
+                  <td className="px-5 py-4 text-sm text-[var(--oc-muted2)]">
+                    {a.branchName}
+                    {a.categoryNames.length ? (
+                      <span className="block text-xs text-[var(--oc-muted3)] mt-0.5">
+                        {a.categoryNames.join(", ")}
+                      </span>
+                    ) : null}
+                  </td>
+                )}
                 <td className="px-5 py-4 text-sm text-[var(--oc-muted2)]" data-stop-row-click>
                   {a.assigneeOptions ? (
                     <AppointmentAssigneePicker

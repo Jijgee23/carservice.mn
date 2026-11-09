@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { canAssignOrders } from "@/lib/auth/order-access";
 import { canCreate, workingBranchScopeId } from "@/lib/auth/roles";
 import { buildAssignableUserWhere } from "@/lib/orders/order-assignable-users";
@@ -22,6 +23,8 @@ export default async function NewAppointmentPage({
   const user = await requireUser();
   if (!canCreate(user, "appointments")) redirect("/dashboard/appointments");
   const scopeBranchId = workingBranchScopeId(user);
+  // Энгийн багц (ганц салбар): салбарыг нууна.
+  const { hideBranches } = await getBranchVisibility(user);
   const sp = await searchParams;
   const backTarget = safeNext(sp.next, "/dashboard/appointments");
   const initialScheduledAt = sp.scheduledAt ? new Date(sp.scheduledAt) : null;
@@ -127,6 +130,7 @@ export default async function NewAppointmentPage({
           initialScheduledAt={validInitialScheduledAt?.toISOString()}
           backHref={backTarget}
           next={sp.next ? backTarget : undefined}
+          hideBranches={hideBranches}
         />
       </div>
     </div>

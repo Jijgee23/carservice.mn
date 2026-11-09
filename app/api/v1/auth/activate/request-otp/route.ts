@@ -50,6 +50,7 @@ export async function POST(req: Request) {
     try {
       const { code } = await issueOtp({
         email: user.email,
+        phone: user.phone,
         type: "SET_PASSWORD",
         userId: user.id,
         userAgent: req.headers.get("user-agent"),

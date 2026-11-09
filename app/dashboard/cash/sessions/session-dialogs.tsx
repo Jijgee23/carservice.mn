@@ -19,22 +19,22 @@ function toCents(value: string): number | null {
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) : null;
 }
 
-/** «Касс нээх»: branch, opening cash, note. */
-export function OpenSessionButton({ branchId, branchName }: { branchId: string; branchName: string }) {
+/** «Касс нээх»: branch, opening cash, note. `branchName` null — энгийн багц (ганц салбар): салбарыг нууна. */
+export function OpenSessionButton({ branchId, branchName }: { branchId: string; branchName: string | null }) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <Btn type="button" size="md" onClick={() => setOpen(true)}>
         Касс нээх
       </Btn>
-      <Modal open={open} onClose={() => setOpen(false)} title={`Касс нээх · ${branchName}`}>
+      <Modal open={open} onClose={() => setOpen(false)} title={branchName == null ? "Касс нээх" : `Касс нээх · ${branchName}`}>
         <OpenForm branchId={branchId} branchName={branchName} onDone={() => setOpen(false)} />
       </Modal>
     </>
   );
 }
 
-function OpenForm({ branchId, branchName, onDone }: { branchId: string; branchName: string; onDone: () => void }) {
+function OpenForm({ branchId, branchName, onDone }: { branchId: string; branchName: string | null; onDone: () => void }) {
   const router = useRouter();
   const [opening, setOpening] = useState("0");
   const { state, pending, onSubmit } = useRetainedFormAction<CashActionState>(openCashSessionAction, () => {
@@ -47,9 +47,14 @@ function OpenForm({ branchId, branchName, onDone }: { branchId: string; branchNa
       <input type="hidden" name="openingCash" value={opening.replace(/,/g, "")} />
       <input type="hidden" name="branchId" value={branchId} />
       <FormError message={state && !state.ok && Object.keys(fieldErrors).length === 0 ? state.message : undefined} />
-      <Field label="Салбар" htmlFor="session-open-branch" error={fieldErrors.branchId}>
-        <input id="session-open-branch" type="text" value={branchName} readOnly className="compact-input w-full" />
-      </Field>
+      {branchName == null ? (
+        // Салбарын талбар нуугдсан ч branchId-ийн алдааг харуулна.
+        <FormError message={fieldErrors.branchId} />
+      ) : (
+        <Field label="Салбар" htmlFor="session-open-branch" error={fieldErrors.branchId}>
+          <input id="session-open-branch" type="text" value={branchName} readOnly className="compact-input w-full" />
+        </Field>
+      )}
       <Field label="Эхний үлдэгдэл (₮)" htmlFor="session-open-cash" required error={fieldErrors.openingCash}>
         <input
           id="session-open-cash"

@@ -50,6 +50,7 @@ export function BulkEmployeesTable({
   rows,
   roles,
   branches,
+  hideBranches = false,
   canBulkEdit,
   canModify,
   canRemove,
@@ -57,6 +58,8 @@ export function BulkEmployeesTable({
   rows: BulkEmployeeRow[];
   roles: RoleOption[];
   branches: BranchOption[];
+  /** Энгийн багц (ганц салбар): салбарын багана, сонголтыг нууна. */
+  hideBranches?: boolean;
   canBulkEdit: boolean;
   canModify: boolean;
   canRemove: boolean;
@@ -70,7 +73,12 @@ export function BulkEmployeesTable({
         <SelectionActions
           selection={selection}
           noun="ажилтан"
-          actions={[{ label: "Үүрэг/Салбар солих", onSelect: () => setPickerOpen(true) }]}
+          actions={[
+            {
+              label: hideBranches ? "Үүрэг солих" : "Үүрэг/Салбар солих",
+              onSelect: () => setPickerOpen(true),
+            },
+          ]}
         />
       ) : null}
 
@@ -86,7 +94,7 @@ export function BulkEmployeesTable({
                 "Имэйл",
                 "Утас",
                 "Үүрэг",
-                "Салбар",
+                ...(hideBranches ? [] : ["Салбар"]),
                 "Төлөв",
                 "Хугацаа",
                 "Үйлдэл",
@@ -150,9 +158,11 @@ export function BulkEmployeesTable({
                       <span className="text-xs text-[var(--oc-muted4)]">—</span>
                     )}
                   </td>
-                  <td className="px-5 py-4 text-sm text-[var(--oc-muted2)]">
-                    {u.branchName ?? "—"}
-                  </td>
+                  {hideBranches ? null : (
+                    <td className="px-5 py-4 text-sm text-[var(--oc-muted2)]">
+                      {u.branchName ?? "—"}
+                    </td>
+                  )}
                   <td className="px-5 py-4">
                     <StatusPill
                       isActive={u.isActive}
@@ -182,6 +192,7 @@ export function BulkEmployeesTable({
           employeeIds={[...selection.selected]}
           roles={roles}
           branches={branches}
+          hideBranches={hideBranches}
           onClose={() => setPickerOpen(false)}
           onDone={() => {
             setPickerOpen(false);
@@ -267,12 +278,14 @@ function BulkRoleBranchModal({
   employeeIds,
   roles,
   branches,
+  hideBranches,
   onClose,
   onDone,
 }: {
   employeeIds: string[];
   roles: RoleOption[];
   branches: BranchOption[];
+  hideBranches: boolean;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -300,11 +313,18 @@ function BulkRoleBranchModal({
   }, [state]);
 
   return (
-    <Modal open onClose={onClose} title="Үүрэг/Салбар солих" widthClassName="max-w-md">
+    <Modal
+      open
+      onClose={onClose}
+      title={hideBranches ? "Үүрэг солих" : "Үүрэг/Салбар солих"}
+      widthClassName="max-w-md"
+    >
       <form action={formAction} className="flex flex-col gap-4">
         <input type="hidden" name="employeeIdsJson" value={JSON.stringify(employeeIds)} />
         <p className="text-sm text-[var(--oc-muted2)]">
-          {employeeIds.length} ажилтны үүрэг ба/эсвэл үндсэн салбарыг нэг зэрэг солих гэж байна.
+          {hideBranches
+            ? `${employeeIds.length} ажилтны үүргийг нэг зэрэг солих гэж байна.`
+            : `${employeeIds.length} ажилтны үүрэг ба/эсвэл үндсэн салбарыг нэг зэрэг солих гэж байна.`}{" "}
           Зөвхөн доор сонгосон талбарууд өөрчлөгдөнө (Тенант админ хамрагдахгүй).
         </p>
         <div>
@@ -317,16 +337,18 @@ function BulkRoleBranchModal({
             options={roles.map((r) => ({ value: r.id, label: r.name }))}
           />
         </div>
-        <div>
-          <label className="text-xs text-[var(--oc-muted3)] mb-1 block">Шинэ үндсэн салбар</label>
-          <Select
-            name="branchId"
-            value={branchId}
-            onChange={setBranchId}
-            placeholder="— Өөрчлөхгүй —"
-            options={branches.map((b) => ({ value: b.id, label: b.name }))}
-          />
-        </div>
+        {hideBranches ? null : (
+          <div>
+            <label className="text-xs text-[var(--oc-muted3)] mb-1 block">Шинэ үндсэн салбар</label>
+            <Select
+              name="branchId"
+              value={branchId}
+              onChange={setBranchId}
+              placeholder="— Өөрчлөхгүй —"
+              options={branches.map((b) => ({ value: b.id, label: b.name }))}
+            />
+          </div>
+        )}
         {state && !state.ok && state.errors?.length ? (
           <ul className="text-xs text-red-400 light:text-red-600 flex flex-col gap-0.5 max-h-32 overflow-auto">
             {state.errors.map((e) => (

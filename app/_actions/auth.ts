@@ -50,14 +50,8 @@ import {
 } from "@/lib/rate-limit";
 import { setBypassContext, setTenantContext } from "@/lib/tenant-context";
 import { sendOtpSms } from "@/lib/sms";
-import { saveUpload } from "@/lib/storage";
 import { logAudit } from "@/lib/audit";
-import {
-  ALL_WEEKDAYS,
-  DEFAULT_OPEN_DAYS,
-  isValidTime,
-  isWeekday,
-} from "@/lib/branches";
+import { ALL_WEEKDAYS, DEFAULT_OPEN_DAYS } from "@/lib/branches";
 import { DEFAULT_UNITS } from "@/lib/units";
 import {
   DEFAULT_INTAKE_TEMPLATE_NAME,
@@ -72,6 +66,7 @@ export type SignUpFormValues = {
   phone2: string;
   lastName: string;
   firstName: string;
+  ownerName: string;
   adminPhone: string;
   adminEmail: string;
 };
@@ -116,6 +111,10 @@ function makeSlug(name: string): string {
 
 // ---- SIGN UP --------------------------------------------------------------
 
+// Бүртгэлд ажлын цаг асуухгүй — шинэ салбарын анхдагч цаг.
+const SIGNUP_OPEN_TIME = "09:00";
+const SIGNUP_CLOSE_TIME = "18:00";
+
 export async function signUpAction(
   _prev: ActionState,
   formData: FormData,
@@ -127,28 +126,26 @@ export async function signUpAction(
   const registerNumber = normalizeRegno(getStr(formData, "registerNumber"));
   const orgEmail = getStr(formData, "orgEmail").toLowerCase();
   const phone1 = getStr(formData, "phone1");
-  const phone2 = getStr(formData, "phone2");
-  const logoFile = formData.get("logo");
 
-  // Үндсэн салбар
+  // Үндсэн салбар — байршлыг зөвхөн газрын зураг дээр тэмдэглэнэ (заавал).
+  // Хот/дүүрэг/хороо/хаяг нь тэр цэгийн reverse geocode-оос ирнэ (олдохгүй бол хоосон);
+  // лого, 2-р утас, ажлын цагийг бүртгэлд асуухгүй — дараа нь Тохиргооноос засна.
   const branchCity = getStr(formData, "city");
   const branchDistrict = getStr(formData, "district");
   const branchKhoroo = getStr(formData, "khoroo");
   const branchAddress = getStr(formData, "address");
   const branchLatRaw = getStr(formData, "latitude");
   const branchLngRaw = getStr(formData, "longitude");
-  const branchOpenTimeRaw = getStr(formData, "openTime");
-  const branchCloseTimeRaw = getStr(formData, "closeTime");
-  const branchWorkDays = formData.getAll("workDays").map(String).filter(isWeekday);
 
-  // Admin — хувь хүн бол админ нь тухайн хүн өөрөө: нэр/утас/имэйлийг
-  // 1-р алхмын мэдээллээс авна (дахин бөглүүлэхгүй).
+  // Admin (OWNER) — утас/имэйлийг 1-р алхмаас авна (тусдаа админ алхамгүй).
+  // Нэр: хувь хүн бол регистрийн нэрээс, засвар бол «Эзний овог нэр» талбараас
+  // (нэг талбар — "Батын Болд" → овог Батын, нэр Болд).
   const isPerson = regnoKind(registerNumber) === "person";
-  const personName = isPerson ? splitPersonName(orgName) : null;
-  const lastName = personName ? personName.lastName : getStr(formData, "lastName");
-  const firstName = personName ? personName.firstName : getStr(formData, "firstName");
-  const adminPhone = isPerson ? phone1 : getStr(formData, "adminPhone");
-  const adminEmail = isPerson ? orgEmail : getStr(formData, "adminEmail").toLowerCase();
+  const ownerName = isPerson ? "" : getStr(formData, "ownerName");
+  const { lastName, firstName } = splitPersonName(isPerson ? orgName : ownerName);
+  const adminPhone = phone1;
+  // Имэйл заавал биш — хоосон бол null хадгалж, OTP/нэвтрэлт утсаар явна.
+  const adminEmail = orgEmail || null;
   const password = getStr(formData, "password");
   const passwordConfirm = getStr(formData, "passwordConfirm");
 
@@ -161,60 +158,37 @@ export async function signUpAction(
     registerNumber,
     orgEmail,
     phone1,
-    phone2,
+    phone2: "",
     lastName,
     firstName,
+    ownerName,
     adminPhone,
-    adminEmail,
+    adminEmail: orgEmail,
   };
 
   const fieldErrors: Record<string, string> = {};
 
-  if (!orgName) fieldErrors.orgName = "Байгууллагын нэр (хувь хүн бол овог нэр)-ээ оруулна уу.";
+  if (!orgName) fieldErrors.orgName = "Засварын нэр (хувь хүн бол овог нэр)-ээ оруулна уу.";
   if (!regnoKind(registerNumber))
     fieldErrors.registerNumber = TENANT_REGNO_MESSAGE;
-  if (!isEmail(orgEmail)) fieldErrors.orgEmail = "Байгууллагын Gmail буруу.";
+  if (orgEmail && !isEmail(orgEmail)) fieldErrors.orgEmail = "Имэйл хаяг буруу.";
   if (!phone1) fieldErrors.phone1 = "Утасны дугаар оруулна уу.";
   else if (!isValidPhone(phone1))
     fieldErrors.phone1 = "Утасны дугаар 8 оронтой тоо байх ёстой.";
-  if (phone2 && !isValidPhone(phone2))
-    fieldErrors.phone2 = "Утасны дугаар 8 оронтой тоо байх ёстой.";
 
-  // Үндсэн салбарын хаяг — хэрэглэгчид харагдах, захиалга авахад заавал хэрэгтэй.
-  if (!branchCity) fieldErrors.city = "Хотоо сонгоно уу.";
-  if (!branchDistrict) fieldErrors.district = "Дүүргээ сонгоно уу.";
-  if (!branchAddress) fieldErrors.address = "Дэлгэрэнгүй хаягаа оруулна уу.";
+  // Байршил заавал: үйлчлүүлэгч газрын зургаас олж, захиалга өгөхөд хэрэгтэй.
+  const branchLat = Number.parseFloat(branchLatRaw);
+  const branchLng = Number.parseFloat(branchLngRaw);
+  if (
+    !Number.isFinite(branchLat) ||
+    !Number.isFinite(branchLng) ||
+    Math.abs(branchLat) > 90 ||
+    Math.abs(branchLng) > 180
+  )
+    fieldErrors.latitude = "Газрын зураг дээр байршлаа тэмдэглэнэ үү.";
 
-  let branchLat: number | null = null;
-  if (branchLatRaw) {
-    const n = Number.parseFloat(branchLatRaw);
-    if (!Number.isFinite(n) || n < -90 || n > 90)
-      fieldErrors.latitude = "Latitude -90 ба 90-ийн хооронд байна.";
-    else branchLat = n;
-  }
-  let branchLng: number | null = null;
-  if (branchLngRaw) {
-    const n = Number.parseFloat(branchLngRaw);
-    if (!Number.isFinite(n) || n < -180 || n > 180)
-      fieldErrors.longitude = "Longitude -180 ба 180-ийн хооронд байна.";
-    else branchLng = n;
-  }
-  const branchOpenTime = branchOpenTimeRaw || null;
-  const branchCloseTime = branchCloseTimeRaw || null;
-  if (branchOpenTime && !isValidTime(branchOpenTime))
-    fieldErrors.openTime = "Цагийн форматыг HH:MM (24 цаг) хэлбэрээр оруулна уу.";
-  if (branchCloseTime && !isValidTime(branchCloseTime))
-    fieldErrors.closeTime = "Цагийн форматыг HH:MM (24 цаг) хэлбэрээр оруулна уу.";
-
-  // Хувь хүний утас/имэйл/нэрийг дээр шалгасан тул зөвхөн байгууллагад.
-  if (!isPerson) {
-    if (!lastName) fieldErrors.lastName = "Овгоо оруулна уу.";
-    if (!firstName) fieldErrors.firstName = "Нэрээ оруулна уу.";
-    if (!adminPhone) fieldErrors.adminPhone = "Утасны дугаар оруулна уу.";
-    else if (!isValidPhone(adminPhone))
-      fieldErrors.adminPhone = "Утасны дугаар 8 оронтой тоо байх ёстой.";
-    if (!isEmail(adminEmail)) fieldErrors.adminEmail = "Имэйл хаяг буруу.";
-  }
+  // Хувь хүний нэрийг регистрийн нэрээс авдаг тул зөвхөн байгууллагад.
+  if (!isPerson && !firstName) fieldErrors.ownerName = "Эзний овог нэрийг оруулна уу.";
   if (password.length < 8)
     fieldErrors.password = "Нууц үг хамгийн багадаа 8 тэмдэгт байна.";
   if (password !== passwordConfirm)
@@ -227,7 +201,6 @@ export async function signUpAction(
   // Утаснуудыг канон 8 оронтой хэлбэрт оруулна (хадгалах, OTP, давхцал шалгах).
   const normAdminPhone = normalizePhone(adminPhone) ?? adminPhone;
   const normPhone1 = normalizePhone(phone1) ?? phone1;
-  const normPhone2 = phone2 ? normalizePhone(phone2) : null;
 
   // --- 1-р шат: OTP илгээх ---
   // Дугаар / имэйл аль хэдийн бүртгэгдсэн эсэхийг урьдчилан шалгаж, дараа нь
@@ -239,14 +212,16 @@ export async function signUpAction(
           // Хувь хүмүүс адилхан нэртэй байж болох тул нэрээр зөвхөн байгууллагыг шалгана.
           OR: [
             { registerNumber },
-            { email: orgEmail },
+            ...(orgEmail ? [{ email: orgEmail }] : []),
             ...(isPerson ? [] : [{ name: orgName }]),
           ],
         },
         select: { registerNumber: true, email: true, name: true },
       }),
       prisma.user.findFirst({
-        where: { OR: [{ email: adminEmail }, { phone: normAdminPhone }] },
+        where: {
+          OR: [...(adminEmail ? [{ email: adminEmail }] : []), { phone: normAdminPhone }],
+        },
         select: { email: true, phone: true },
       }),
     ]);
@@ -254,23 +229,20 @@ export async function signUpAction(
       const fe: Record<string, string> = {};
       if (tenantConflict.registerNumber === registerNumber)
         fe.registerNumber = "Энэ регистр аль хэдийн бүртгэгдсэн байна.";
-      if (tenantConflict.email === orgEmail)
+      if (orgEmail && tenantConflict.email === orgEmail)
         fe.orgEmail = "Энэ имэйл аль хэдийн бүртгэгдсэн байна.";
       if (!isPerson && tenantConflict.name === orgName)
-        fe.orgName = "Энэ нэртэй байгууллага аль хэдийн бүртгэгдсэн байна.";
+        fe.orgName = "Энэ нэртэй засвар аль хэдийн бүртгэгдсэн байна.";
       return { ok: false, fieldErrors: fe, values };
     }
     if (userConflict) {
       const fe: Record<string, string> = {};
-      if (userConflict.email === adminEmail)
+      if (adminEmail && userConflict.email === adminEmail)
         fe.adminEmail = "Энэ имэйл хаяг аль хэдийн бүртгэгдсэн байна.";
       if (userConflict.phone === normAdminPhone)
         fe.adminPhone = "Энэ утасны дугаар аль хэдийн бүртгэгдсэн байна.";
-      return {
-        ok: false,
-        fieldErrors: isPerson ? mapPersonAdminErrors(fe) : fe,
-        values,
-      };
+      // Админы утас/имэйл = 1-р алхмын утас/имэйл — алдааг тэнд харуулна.
+      return { ok: false, fieldErrors: mapPersonAdminErrors(fe), values };
     }
 
     const h = await headers();
@@ -282,6 +254,7 @@ export async function signUpAction(
 
     const { code } = await issueOtp({
       email: adminEmail,
+      phone: normAdminPhone,
       type: "SIGNUP",
       userAgent: ua,
       ip,
@@ -315,6 +288,7 @@ export async function signUpAction(
   }
   const otpResult = await verifyOtp({
     email: adminEmail,
+    phone: normAdminPhone,
     type: "SIGNUP",
     code: otpCode,
   });
@@ -333,18 +307,6 @@ export async function signUpAction(
     };
   }
 
-  // Logo upload (заавал биш)
-  let logoUrl: string | null = null;
-  if (logoFile instanceof File && logoFile.size > 0) {
-    try {
-      const saved = await saveUpload(logoFile, "logos");
-      logoUrl = saved.path;
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Лого хадгалахад алдаа гарлаа.";
-      return { ok: false, fieldErrors: { logo: msg }, values };
-    }
-  }
-
   // Transaction: Tenant + OWNER User
   let session;
   try {
@@ -356,10 +318,8 @@ export async function signUpAction(
           slug: makeSlug(orgName),
           name: orgName,
           registerNumber,
-          email: orgEmail,
+          email: orgEmail || null,
           phone1: normPhone1,
-          phone2: normPhone2,
-          logoUrl,
         },
       });
 
@@ -393,30 +353,28 @@ export async function signUpAction(
       // Subscription үүсгэхгүй: шинэ тенант үргэлж үнэгүй FREE багцтай
       // (Tenant.plan @default(FREE)) эхэлнэ — харах: lib/subscription.ts.
 
-      // Үндсэн салбар үүсгэнэ — тенант бүртгэлийн утсыг өвлүүлж, бүртгэлийн
-      // үед хэрэглэгчийн бөглөсөн хаяг/цагийн мэдээллийг хадгална.
+      // Үндсэн салбар үүсгэнэ — тенант бүртгэлийн утсыг өвлүүлж, газрын зураг
+      // дээр тэмдэглэсэн байршил (+ geocode-ийн хаяг)-ийг хадгална. Ажлын цаг нь
+      // анхдагч 09:00–18:00, Даваа–Баасан (Тохиргооноос засна).
       const branch = await tx.branch.create({
         data: {
           tenantId: tenant.id,
           name: "Үндсэн салбар",
           phone: normPhone1,
           isPrimary: true,
-          city: branchCity,
-          district: branchDistrict,
+          city: branchCity || null,
+          district: branchDistrict || null,
           khoroo: branchKhoroo || null,
-          address: branchAddress,
+          address: branchAddress || null,
           latitude: branchLat,
           longitude: branchLng,
-          openTime: branchOpenTime,
-          closeTime: branchCloseTime,
+          openTime: SIGNUP_OPEN_TIME,
+          closeTime: SIGNUP_CLOSE_TIME,
         },
       });
 
-      // Долоо хоногийн 7 өдрийн хуваарь — хэрэглэгч сонгосон өдрүүд, эсвэл
-      // юу ч сонгоогүй бол анхдагч Даваа–Баасан.
-      const openDays = new Set(
-        branchWorkDays.length ? branchWorkDays : DEFAULT_OPEN_DAYS,
-      );
+      // Долоо хоногийн 7 өдрийн хуваарь — анхдагч Даваа–Баасан.
+      const openDays = new Set<string>(DEFAULT_OPEN_DAYS);
       await tx.branchSchedule.createMany({
         data: ALL_WEEKDAYS.map((wd) => ({
           branchId: branch.id,
@@ -450,7 +408,7 @@ export async function signUpAction(
       if (target.includes("phone"))
         fe.adminPhone = "Энэ утасны дугаар аль хэдийн бүртгэгдсэн байна.";
       else if (target.includes("name"))
-        fe.orgName = "Энэ нэртэй байгууллага аль хэдийн бүртгэгдсэн байна.";
+        fe.orgName = "Энэ нэртэй засвар аль хэдийн бүртгэгдсэн байна.";
       else if (target.includes("registerNumber"))
         fe.registerNumber = "Энэ регистр аль хэдийн бүртгэгдсэн байна.";
       else if (target.includes("Tenant_email") || target.includes("email") && target.includes("Tenant"))
@@ -458,11 +416,7 @@ export async function signUpAction(
       else if (target.includes("User_email") || target.includes("email"))
         fe.adminEmail = "Энэ имэйл хаяг аль хэдийн бүртгэгдсэн байна.";
       else fe._ = "Давхардсан утга бүртгэгдсэн байна.";
-      return {
-        ok: false,
-        fieldErrors: isPerson ? mapPersonAdminErrors(fe) : fe,
-        values,
-      };
+      return { ok: false, fieldErrors: mapPersonAdminErrors(fe), values };
     }
     const msg = e instanceof Error ? e.message : "Бүртгэх явцад алдаа гарлаа.";
     return { ok: false, message: msg, values };
@@ -550,6 +504,7 @@ export async function checkLoginEmailAction(
       null;
     const { code } = await issueOtp({
       email: user.email,
+      phone: user.phone,
       type: "SET_PASSWORD",
       userId: user.id,
       userAgent: ua,
@@ -714,7 +669,7 @@ export async function signInAction(
     entity: "User",
     entityId: user.id,
     action: "LOGIN",
-    summary: user.email,
+    summary: user.email ?? user.phone,
   });
 
   redirect("/dashboard");
@@ -807,6 +762,7 @@ export async function requestPasswordResetAction(
       null;
     const { code } = await issueOtp({
       email: user.email,
+      phone: user.phone,
       type: "RESET_PASSWORD",
       userId: user.id,
       userAgent: ua,
@@ -862,7 +818,7 @@ export async function resetPasswordAction(
   setBypassContext();
   const user = await prisma.user.findUnique({
     where: id,
-    select: { id: true, email: true, tenantId: true },
+    select: { id: true, email: true, phone: true, tenantId: true },
   });
   // Бүртгэлгүй нэвтрэх нэрийг "код буруу"-тай адил харуулна (enumeration-аас сэргийлнэ).
   if (!user) {
@@ -875,7 +831,7 @@ export async function resetPasswordAction(
   }
   const email = user.email;
 
-  const otp = await verifyOtp({ email, type: "RESET_PASSWORD", code });
+  const otp = await verifyOtp({ email, phone: user.phone, type: "RESET_PASSWORD", code });
   if (!otp.ok) {
     const message =
       otp.reason === "expired"
@@ -908,7 +864,7 @@ export async function resetPasswordAction(
   // Бүх идэвхтэй refresh token-уудыг хүчингүй болгож, бусад OTP-уудыг ч revoke
   await Promise.all([
     revokeAllForUser(user.id),
-    revokeAllOtps(email, "RESET_PASSWORD"),
+    revokeAllOtps({ email, phone: user.phone }, "RESET_PASSWORD"),
   ]);
 
   return {
@@ -977,6 +933,7 @@ export async function requestActivationAction(
       null;
     const { code } = await issueOtp({
       email: user.email,
+      phone: user.phone,
       type: "SET_PASSWORD",
       userId: user.id,
       userAgent: ua,
@@ -1044,7 +1001,7 @@ export async function activateAccountAction(
   }
   const email = user.email;
 
-  const otp = await verifyOtp({ email, type: "SET_PASSWORD", code });
+  const otp = await verifyOtp({ email, phone: user.phone, type: "SET_PASSWORD", code });
   if (!otp.ok) {
     const message =
       otp.reason === "expired"
@@ -1095,7 +1052,7 @@ export async function activateAccountAction(
       deactivatedAt: null,
     },
   });
-  await revokeAllOtps(email, "SET_PASSWORD");
+  await revokeAllOtps({ email, phone: user.phone }, "SET_PASSWORD");
 
   // Web session-ийг DB-д бүртгэж, шууд нэвтрүүлнэ.
   const h = await headers();
@@ -1122,7 +1079,7 @@ export async function activateAccountAction(
     entity: "User",
     entityId: user.id,
     action: "LOGIN",
-    summary: `${user.email} · аккаунт идэвхжүүлэв`,
+    summary: `${user.email ?? user.phone} · аккаунт идэвхжүүлэв`,
   });
 
   redirect("/dashboard");

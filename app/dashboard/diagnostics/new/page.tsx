@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { workingBranchScopeId } from "@/lib/auth/roles";
 import {
   type DiagnosticType,
@@ -17,6 +18,8 @@ export const metadata = {
 export default async function NewDiagnosticPage() {
   const user = await requireUser();
   const scopeBranchId = workingBranchScopeId(user);
+  // Энгийн багц (ганц салбар): салбар сонгох талбарыг нууж, ганц салбарыг hidden-ээр илгээнэ.
+  const { hideBranches, singleBranchId } = await getBranchVisibility(user);
 
   const [branches, customers, vehicles, templates] = await Promise.all([
     prisma.branch.findMany({
@@ -92,7 +95,8 @@ export default async function NewDiagnosticPage() {
         customers={customers}
         vehicles={vehicles}
         templates={templatesPrepared}
-        defaultBranchId={scopeBranchId}
+        defaultBranchId={hideBranches ? (scopeBranchId ?? singleBranchId) : scopeBranchId}
+        hideBranches={hideBranches}
       />
     </div>
   );

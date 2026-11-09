@@ -32,6 +32,11 @@ function extractParts(result: any): GeocodeParts | null {
     adminLevel3: get("administrative_area_level_3"),
     locality: get("locality"),
     sublocality: get("sublocality") || get("sublocality_level_1"),
+    // Эхэнд ирдэг Plus Code-ийг ("WWGJ+GF7, ...") хасна — хүнд уншигдахгүй.
+    formatted:
+      result.formatted_address
+        ?.replace(/^[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3},?\s*/i, "")
+        .trim() || undefined,
   };
 }
 

@@ -70,15 +70,24 @@ function SectionPanel({
 
 export function RoleForm({
   initial,
-  resources,
+  resources: allResources,
   actions,
   standalonePermissions,
+  hideBranches = false,
 }: {
   initial?: Initial;
   resources: ResourceRow[];
   actions: ActionCol[];
   standalonePermissions: StandaloneItem[];
+  /** Энгийн багц (ганц салбар): «Салбар» нөөцийн мөрийг нууна. */
+  hideBranches?: boolean;
 }) {
+  // Нуусан мөрийн хадгалагдсан эрх (branches.*) `selected`-д хэвээр үлдэж,
+  // hidden input-аар илгээгдэнэ — багана/бүгд сонгох товч түүнд хүрэхгүй.
+  const resources = useMemo(
+    () => (hideBranches ? allResources.filter((r) => r.key !== "branches") : allResources),
+    [allResources, hideBranches],
+  );
   const isEdit = Boolean(initial?.id);
   const action = isEdit
     ? updateRoleAction.bind(null, initial!.id!)
@@ -304,7 +313,7 @@ export function RoleForm({
                     const checked = selectedOrderScope(kind) === scope;
                     return <label key={scope} className={`cursor-pointer rounded-md border px-2.5 py-1.5 text-xs ${checked ? "border-[var(--oc-accent)] bg-[var(--oc-accent)]/[0.08] text-[var(--oc-accent)]" : "border-[var(--oc-line)] text-[var(--oc-muted2)]"}`}>
                       <input type="radio" name={`order-${kind}-scope`} checked={checked} onChange={() => setOrderScope(kind, scope)} className="sr-only" />
-                      {scope === "none" ? "Эрхгүй" : scope === "own" ? "Өөрийн" : "Салбар"}
+                      {scope === "none" ? "Эрхгүй" : scope === "own" ? "Өөрийн" : hideBranches ? "Бүгд" : "Салбар"}
                     </label>;
                   })}
                 </div>

@@ -116,10 +116,6 @@ const navItems: NavItem[] = [
         <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
       </svg>
     ),
-    children: [
-      { href: "/dashboard/orders", label: "Бүх засварын хуудас", exact: true },
-      { href: "/dashboard/orders/postpaid", label: "Дараа төлбөрт" },
-    ],
   },
   {
     href: "/dashboard/appointments",
@@ -324,6 +320,12 @@ function SidebarTenantRow({
   );
 }
 
+/**
+ * Энгийн (FREE) багц, ганц салбартай үед «Салбарууд» цэсний оронд харуулах мөр
+ * (lib/branch-visibility.ts) — ганц салбарын засах хуудас руу шууд заана.
+ */
+export type SingleBranchNav = { href: string; label: string } | null;
+
 // Навигацийн жагсаалт — desktop sidebar болон mobile drawer хоёулаа хуваалцана.
 // Бүлгийн нээлт/хаалтыг localStorage-д хадгална. Server-ийн анхны render-тэй
 // зөрөхгүйн тулд анхны утгыг {} болгож, хадгалсан сонголтыг mount-ийн дараа
@@ -332,12 +334,14 @@ function SidebarNavList({
   isOwner,
   permissions,
   lockedModules = [],
+  singleBranchNav = null,
   onNavigate,
   collapsed = false,
 }: {
   isOwner: boolean;
   permissions: string[];
   lockedModules?: string[];
+  singleBranchNav?: SingleBranchNav;
   onNavigate?: () => void;
   collapsed?: boolean;
 }) {
@@ -373,7 +377,13 @@ function SidebarNavList({
     if (children.length === 0) return inPlan(it.href) && it.children.length === 0 ? it : null;
     return { ...it, children, href: inPlan(it.href) ? it.href : children[0].href };
   };
+  // Салбарын ойлголтыг нуусан үед «Салбарууд» → «Байршил, ажлын цаг».
+  const withBranchNav = (it: NavItem): NavItem =>
+    singleBranchNav && it.href === "/dashboard/branches"
+      ? { ...it, href: singleBranchNav.href, label: singleBranchNav.label }
+      : it;
   const visibleNav = navItems
+    .map(withBranchNav)
     .filter(isVisible)
     .map(filterChildren)
     .map(applyPlan)
@@ -583,6 +593,7 @@ export function AdminSidebar({
   isOwner,
   permissions,
   lockedModules = [],
+  singleBranchNav = null,
   notificationUnread,
   appLinks,
 }: {
@@ -594,6 +605,7 @@ export function AdminSidebar({
   isOwner: boolean;
   permissions: string[];
   lockedModules?: string[];
+  singleBranchNav?: SingleBranchNav;
   notificationUnread: number;
   /** Засварын газрын аппын store холбоос (super admin) — хоосон бол харагдахгүй. */
   appLinks?: StoreLinks;
@@ -638,6 +650,7 @@ export function AdminSidebar({
         isOwner={isOwner}
         permissions={permissions}
         lockedModules={lockedModules}
+        singleBranchNav={singleBranchNav}
         collapsed={collapsed}
       />
 
@@ -835,6 +848,7 @@ export function MobileTopbar({
   isOwner,
   permissions,
   lockedModules = [],
+  singleBranchNav = null,
   notificationUnread,
   appLinks,
 }: {
@@ -846,6 +860,7 @@ export function MobileTopbar({
   isOwner: boolean;
   permissions: string[];
   lockedModules?: string[];
+  singleBranchNav?: SingleBranchNav;
   notificationUnread: number;
   appLinks?: StoreLinks;
 }) {
@@ -970,6 +985,7 @@ export function MobileTopbar({
             isOwner={isOwner}
             permissions={permissions}
         lockedModules={lockedModules}
+            singleBranchNav={singleBranchNav}
             onNavigate={() => setOpen(false)}
           />
 

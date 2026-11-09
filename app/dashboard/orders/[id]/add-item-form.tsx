@@ -9,6 +9,7 @@ import { FormError } from "@/app/_components/auth-shell";
 import { Btn, TabButton } from "@/app/_components/landing-ops-ui";
 import { Select } from "@/app/_components/select";
 import { formatPriceInput, formatTugrik, liveFormatPriceInput } from "@/lib/orders";
+import { CATALOG_OPTION_PREFIX } from "@/lib/catalog/catalog-option";
 import type { ServiceKind } from "@/lib/services";
 
 export type ServiceOption = {
@@ -21,6 +22,8 @@ export type ServiceOption = {
   stock: string | null;
   laborCategoryId: string | null;
   laborCategoryName: string | null;
+  /** Нэгдсэн сангаас (тенант хараахан холбоогүй) — id нь CATALOG_OPTION_PREFIX-тэй. */
+  fromCatalog?: boolean;
 };
 
 export type DiagnosticTemplateOption = {
@@ -41,13 +44,16 @@ const TAB_LABEL: Record<Tab, string> = {
 
 export function AddItemForm({
   orderId,
-  services,
+  services: ownServices,
+  catalogItems = [],
   diagnosticTemplates,
   canChangePrice,
   onAdded,
 }: {
   orderId: string;
   services: ServiceOption[];
+  // Нэгдсэн сангийн ажил/сэлбэг (тенант холбоогүй) — өөрийн жагсаалтын дараа харагдана.
+  catalogItems?: ServiceOption[];
   diagnosticTemplates: DiagnosticTemplateOption[];
   // "orders.itemPrice" эрхгүй хэрэглэгч энд ч мөн нэгж үнийг санаатайгаар
   // өөрчилж чадахгүй — сонгосон үйлчилгээ/загварын каталогийн үнэ л
@@ -60,6 +66,17 @@ export function AddItemForm({
   // бүтэн серверийн хуудсанд revalidatePath өөрөө шинэчилдэг тул шаардлагагүй.
   onAdded?: () => void;
 }) {
+  // Тенант ижил кодтойг өөрөө бүртгэсэн бол сангийн хуулбарыг давхар харуулахгүй
+  // (server ч тэр тохиолдолд өөрийнхийг нь ашигладаг — catalog-adopt.ts).
+  const services = useMemo(() => {
+    const ownCodes = new Set(
+      ownServices.filter((s) => s.code).map((s) => `${s.type}:${s.code}`),
+    );
+    return [
+      ...ownServices,
+      ...catalogItems.filter((c) => !c.code || !ownCodes.has(`${c.type}:${c.code}`)),
+    ];
+  }, [ownServices, catalogItems]);
   const laborServices = useMemo(
     () => services.filter((s) => s.type === "LABOR"),
     [services],
@@ -227,6 +244,8 @@ function FormContent({
     : laborServices;
 
   const fe = dismissed ? {} : (state?.fieldErrors ?? {});
+  const isCatalogPick = serviceId.startsWith(CATALOG_OPTION_PREFIX);
+  const catalogTag = (s: ServiceOption) => (s.fromCatalog ? " · Нэгдсэн сан" : "");
 
   const canSubmit =
     tab === "custom"
@@ -268,7 +287,12 @@ function FormContent({
       </div>
 
       {/* Always-present hidden fields for the server action */}
-      <input type="hidden" name="serviceId" value={serviceId} />
+      <input type="hidden" name="serviceId" value={isCatalogPick ? "" : serviceId} />
+      <input
+        type="hidden"
+        name="catalogItemId"
+        value={isCatalogPick ? serviceId.slice(CATALOG_OPTION_PREFIX.length) : ""}
+      />
       <input
         type="hidden"
         name="diagnosticTemplateId"
@@ -307,7 +331,7 @@ function FormContent({
                 options={filteredLabor.map((s) => ({
                   value: s.id,
                   label: s.name,
-                  hint: `${s.laborCategoryName ?? "Ангилалгүй"} · ${formatTugrik(s.price)}`,
+                  hint: `${s.laborCategoryName ?? "Ангилалгүй"} · ${formatTugrik(s.price)}${catalogTag(s)}`,
                 }))}
               />
               {fe.serviceId ? (
@@ -348,7 +372,7 @@ function FormContent({
               options={partServices.map((s) => ({
                 value: s.id,
                 label: `${s.name}${s.code ? ` · ${s.code}` : ""}`,
-                hint: `${s.stock != null ? (Number(s.stock) > 0 ? `${s.stock} ${s.unit} · ` : "Үлдэгдэлгүй · ") : ""}${formatTugrik(s.price)}`,
+                hint: `${s.stock != null ? (Number(s.stock) > 0 ? `${s.stock} ${s.unit} · ` : "Үлдэгдэлгүй · ") : ""}${formatTugrik(s.price)}${catalogTag(s)}`,
               }))}
             />
             {fe.serviceId ? (

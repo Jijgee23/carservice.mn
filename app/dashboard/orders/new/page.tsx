@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { vehicleOwnerIsOrganization } from "@/lib/vehicles/owner-kind";
 import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { canAssignOrders } from "@/lib/auth/order-access";
 import {
   orderAssignableWhere,
@@ -33,6 +34,8 @@ export default async function NewOrderPage({
   const user = await requireUser();
   if (!canCreate(user, "orders")) redirect("/dashboard/orders");
   const scopeBranchId = workingBranchScopeId(user);
+  // Энгийн багц (ганц салбар): салбарыг нууна.
+  const { hideBranches } = await getBranchVisibility(user);
 
   const sp = await searchParams;
   // Ирээгүй бол одоогийн адил "Захиалга" жагсаалт руу буцна — жишээ нь
@@ -263,6 +266,9 @@ export default async function NewOrderPage({
               : undefined
           }
           defaultAssignedToId={canAssignOrders(user) ? undefined : user.id}
+          // Энгийн (FREE) багц: Өдрийн хуваарь, Ойролцоо хугацаа, Хүлээн авахыг нууна.
+          simplified={user.tenant.plan === "FREE"}
+          hideBranches={hideBranches}
         />
       </div>
     </div>

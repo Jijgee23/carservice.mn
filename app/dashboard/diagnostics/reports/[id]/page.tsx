@@ -5,6 +5,7 @@ import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
 import { ConfirmForm } from "@/app/_components/confirm-form";
 import { AdvancedPDFButton } from "./pdf-generator";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { workingBranchScopeId } from "@/lib/auth/roles";
 import { customerLabel } from "@/lib/customers";
 import {
@@ -31,6 +32,8 @@ export default async function ReportDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const user = await requireUser();
+  // Энгийн багц (ганц салбар): салбарыг дэлгэц, PDF-д харуулахгүй.
+  const { hideBranches } = await getBranchVisibility(user);
   const { id } = await params;
   const scopeBranchId = workingBranchScopeId(user);
 
@@ -103,7 +106,7 @@ export default async function ReportDetailPage({
               vehicleModel: report.vehicle.model,
               vehiclePlate: report.vehicle.plate,
               vehicleYear: report.vehicle.year ?? undefined,
-              branchName: report.branch.name,
+              branchName: hideBranches ? undefined : report.branch.name,
               filledByName: report.filledBy
                 ? `${report.filledBy.lastName} ${report.filledBy.firstName}`
                 : undefined,
@@ -139,7 +142,7 @@ export default async function ReportDetailPage({
             {report.vehicle.year ? ` · ${report.vehicle.year}` : ""}
           </div>
         </Row>
-        <Row label="Салбар">{report.branch.name}</Row>
+        {hideBranches ? null : <Row label="Салбар">{report.branch.name}</Row>}
         <Row label="Бөглөсөн">
           {report.filledBy
             ? `${report.filledBy.lastName} ${report.filledBy.firstName}`

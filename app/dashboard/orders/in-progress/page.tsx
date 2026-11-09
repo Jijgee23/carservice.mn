@@ -5,6 +5,7 @@ import { BtnLink } from "@/app/_components/landing-ops-ui";
 import { PageHeader } from "@/app/_components/page-header";
 import { Pagination } from "@/app/_components/pagination";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { canView, workingBranchScopeId } from "@/lib/auth/roles";
 import { orderReadWhere } from "@/lib/auth/order-access";
 import { ORDER_STATUS_BADGE, ORDER_STATUS_LABEL, type OrderStatus } from "@/lib/orders";
@@ -60,7 +61,9 @@ export default async function InProgressOrdersPage({
   const meta = buildMeta(total, page, pageSize);
   // Owner/tenant-wide харагдацад олон салбарын мөр холилдоно тул салбарыг ч
   // харуулна; ганц салбарт хязгаарлагдсан ажилтанд илүүц тул нуугдана.
-  const showBranch = scopeBranchId == null;
+  // Энгийн багц (ганц салбар): салбарыг огт харуулахгүй.
+  const { hideBranches } = await getBranchVisibility(user);
+  const showBranch = scopeBranchId == null && !hideBranches;
 
   return (
     <div className="p-4 sm:p-6 max-w-full flex-1 flex flex-col min-h-0 w-full">

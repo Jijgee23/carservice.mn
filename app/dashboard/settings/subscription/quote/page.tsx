@@ -25,7 +25,7 @@ export default async function DashboardQuotePage() {
             orgName: user.tenant.name,
             contactName: `${user.lastName} ${user.firstName}`.trim(),
             phone: user.phone,
-            email: user.email,
+            email: user.email ?? undefined,
           }}
         />
       </div>

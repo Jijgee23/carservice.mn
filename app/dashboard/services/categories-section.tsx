@@ -57,11 +57,14 @@ type CategoryTab = "own" | "system";
 export function CategoriesSection({
   categories,
   branches,
+  hideBranches = false,
   serviceKeys,
   systemCategories = [],
 }: {
   categories: CategoryRow[];
   branches: BranchOption[];
+  /** Энгийн багц (ганц салбар): салбарын багана, сонголтыг нууна. */
+  hideBranches?: boolean;
   serviceKeys: ServiceKeyOption[];
   /** Системийн ангиллууд — бүх байгууллагад нийтлэг, зөвхөн харах. */
   systemCategories?: SystemCategoryOption[];
@@ -150,9 +153,11 @@ export function CategoriesSection({
                 <th className="text-left font-plex-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--oc-muted3)] font-medium px-4 py-2.5 w-32">
                   Төрөл
                 </th>
-                <th className="text-left font-plex-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--oc-muted3)] font-medium px-4 py-2.5">
-                  Салбар
-                </th>
+                {hideBranches ? null : (
+                  <th className="text-left font-plex-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--oc-muted3)] font-medium px-4 py-2.5">
+                    Салбар
+                  </th>
+                )}
                 <th className="text-left font-plex-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--oc-muted3)] font-medium px-4 py-2.5 w-20">
                   Үйлчилгээ
                 </th>
@@ -176,6 +181,7 @@ export function CategoriesSection({
                 <CategoryFormRow
                   category={null}
                   branches={branches}
+                  hideBranches={hideBranches}
                   serviceKeys={serviceKeys}
                   onClose={() => setIsCreating(false)}
                 />
@@ -186,6 +192,7 @@ export function CategoriesSection({
                     key={c.id}
                     category={c}
                     branches={branches}
+                    hideBranches={hideBranches}
                     serviceKeys={serviceKeys}
                     onClose={() => setEditingId(null)}
                   />
@@ -194,6 +201,7 @@ export function CategoriesSection({
                     key={c.id}
                     category={c}
                     branchName={branchName}
+                    hideBranches={hideBranches}
                     serviceKeyName={serviceKeyName}
                     selection={selection}
                     onEdit={() => {
@@ -384,12 +392,14 @@ function BranchPicker({
 function ViewRow({
   category,
   branchName,
+  hideBranches,
   serviceKeyName,
   selection,
   onEdit,
 }: {
   category: CategoryRow;
   branchName: (id: string) => string;
+  hideBranches: boolean;
   serviceKeyName: (id: string | null) => string | null;
   selection: RowSelection;
   onEdit: () => void;
@@ -419,17 +429,19 @@ function ViewRow({
       <td className="px-4 py-3 text-xs">
         <Chip tone={category.kind === null ? "neutral" : "accent"}>{categoryKindLabel(category.kind)}</Chip>
       </td>
-      <td className="px-4 py-3 text-xs">
-        {category.branchIds.length === 0 ? (
-          <span className="text-[var(--oc-muted3)]">Бүх салбар</span>
-        ) : (
-          <span className="flex flex-wrap gap-1">
-            {category.branchIds.map((id) => (
-              <TagChip key={id}>{branchName(id)}</TagChip>
-            ))}
-          </span>
-        )}
-      </td>
+      {hideBranches ? null : (
+        <td className="px-4 py-3 text-xs">
+          {category.branchIds.length === 0 ? (
+            <span className="text-[var(--oc-muted3)]">Бүх салбар</span>
+          ) : (
+            <span className="flex flex-wrap gap-1">
+              {category.branchIds.map((id) => (
+                <TagChip key={id}>{branchName(id)}</TagChip>
+              ))}
+            </span>
+          )}
+        </td>
+      )}
       <td className="px-4 py-3 font-plex-mono text-xs text-[var(--oc-muted2)]">
         {category.servicesCount}
       </td>
@@ -491,11 +503,13 @@ function ViewRow({
 function CategoryFormRow({
   category,
   branches,
+  hideBranches,
   serviceKeys,
   onClose,
 }: {
   category: CategoryRow | null;
   branches: BranchOption[];
+  hideBranches: boolean;
   serviceKeys: ServiceKeyOption[];
   onClose: () => void;
 }) {
@@ -527,7 +541,7 @@ function CategoryFormRow({
 
   return (
     <tr className="bg-[var(--oc-panel2)]">
-      <td colSpan={9} className="px-4 py-3">
+      <td colSpan={hideBranches ? 8 : 9} className="px-4 py-3">
         <form action={formAction} className="flex flex-col gap-3" noValidate>
           {state?.message && !state.ok ? (
             <FormError message={state.message} />
@@ -603,7 +617,14 @@ function CategoryFormRow({
             </select>
           </label>
           {fe.kind ? <p className="text-red-400 text-xs light:text-red-600">{fe.kind}</p> : null}
-          <BranchPicker branches={branches} selected={category?.branchIds ?? []} />
+          {hideBranches ? (
+            // Энгийн багц (ганц салбар): сонголтыг нууж, хадгалагдсан салбаруудыг хэвээр илгээнэ.
+            (category?.branchIds ?? []).map((id) => (
+              <input key={id} type="hidden" name="branchIds" value={id} />
+            ))
+          ) : (
+            <BranchPicker branches={branches} selected={category?.branchIds ?? []} />
+          )}
           <ServiceKeyPicker
             serviceKeys={serviceKeys}
             defaultValue={defaultServiceKeyId}

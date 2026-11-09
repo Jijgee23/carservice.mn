@@ -117,7 +117,7 @@ export default async function SystemTenantDetailPage({
     <div className="p-6 sm:p-8 max-w-screen">
       <PageHeader
         title={tenant.name}
-        description={`#${tenant.registerNumber} · ${tenant.email}`}
+        description={`#${tenant.registerNumber} · ${tenant.email ?? tenant.phone1}`}
         actions={
           <div className="flex items-center gap-2">
           {tenant.isTest ? (
@@ -166,7 +166,7 @@ export default async function SystemTenantDetailPage({
               <Row label="Регистр" value={tenant.registerNumber} />
               <Row label="Slug" value={tenant.slug} mono />
               <Row label="Багц" value={tenant.plan} />
-              <Row label="Gmail" value={tenant.email} />
+              <Row label="Gmail" value={tenant.email ?? "—"} />
               <Row label="Утас 1" value={tenant.phone1} />
               {tenant.phone2 ? (
                 <Row label="Утас 2" value={tenant.phone2} />
@@ -358,7 +358,7 @@ export default async function SystemTenantDetailPage({
                           {u.lastName} {u.firstName}
                         </div>
                         <div className="text-xs text-[var(--oc-muted3)]">
-                          {u.email} · {u.phone}
+                          {[u.email, u.phone].filter(Boolean).join(" · ")}
                         </div>
                       </div>
                       <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--oc-accent)]/15 text-[var(--oc-accent)] border border-[var(--oc-accent)]/30">

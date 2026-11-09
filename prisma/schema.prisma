@@ -20,7 +20,7 @@ model Tenant {
   // шалгаж, тодорхой мессеж өгдөг — бизнесийн шийдвэрээр constraint аваагүй.
   name                           String
   registerNumber                 String    @unique // Байгууллага: 7 оронтой тоо, хувь хүн: ҮҮ99993333 (lib/tenant-regno.ts)
-  email                          String    @unique
+  email                          String?   @unique
   phone1                         String
   phone2                         String?
   logoUrl                        String?
@@ -41,6 +41,9 @@ model Tenant {
   creditSuspended                Boolean   @default(false) // credit-ээр suspended болгосон — зөвхөн энэ үед автоматаар сэргээнэ
   creditExempt                   Boolean   @default(false) // админ блокыг цуцалсан → автомат блок хамаарахгүй
   acceptsOnlineBooking           Boolean   @default(false) // Онлайн цаг захиалгын каталогт харагдах эсэх
+  // Төлбөр бүртгэхийн өмнө касс (ээлж) заавал нээх эсэх — эзэн Тохиргооноос сонгоно.
+  // false бол ээлжгүйгээр бүртгэнэ (нээлттэй ээлж байвал түүнд автоматаар холбогдоно).
+  requireCashSession             Boolean   @default(true)
   // Цаг захиалгын сануулга SMS/мэдэгдлийг товлосон цагаас хэдэн минутын
   // өмнө илгээхийг тенант өөрөө тохируулна — 24 цагаас (1440) их байж болно
   // (жиш. 1 хоног 6 цаг = 1800). Минутаар хадгалснаар 24ц-аас хязгаарлагдахгүй
@@ -96,7 +99,7 @@ enum Plan {
 
 model User {
   id           String  @id @default(cuid())
-  email        String  @unique
+  email        String? @unique // Бүртгэлд заавал биш — имэйлгүй бол утсаар нэвтэрч, OTP утсаар түлхүүрлэнэ.
   firstName    String // Нэр
   lastName     String // Овог
   // Канон 8 оронтой формат (lib/phone.ts). Бүх ажилтанд давхцахгүй (глобал).

@@ -37,6 +37,8 @@ type Props = {
   today: string;
   /** Branch ids that currently have an open cash session (any method: settling is disabled for a branch without one). */
   openBranchIds: string[];
+  /** Энгийн багц (ганц салбар): «Салбар» сонголтыг нууна (branchId state-ээр илгээгдсэн хэвээр). */
+  hideBranches?: boolean;
 };
 
 /** Money strings -> integer minor units so the live sum never drifts. */
@@ -64,7 +66,7 @@ export function SettleButton(props: Props) {
   );
 }
 
-function SettleForm({ branches, defaultBranchId, customers, banks, canManageAccounts, today, openBranchIds, onDone }: Props & { onDone: () => void }) {
+function SettleForm({ branches, defaultBranchId, customers, banks, canManageAccounts, today, openBranchIds, hideBranches = false, onDone }: Props & { onDone: () => void }) {
   const [branchId, setBranchId] = useState(defaultBranchId);
   const [customerId, setCustomerId] = useState("");
   const [orders, setOrders] = useState<EligibleOrder[] | null>(null);
@@ -189,15 +191,17 @@ function SettleForm({ branches, defaultBranchId, customers, banks, canManageAcco
       {staleNotice ? <p className="text-sm text-[var(--oc-warn)]">{staleNotice}</p> : null}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Салбар" htmlFor="settle-branch" required error={fieldErrors.branchId}>
-          <select id="settle-branch" value={branchId} onChange={(e) => pickBranch(e.target.value)} className="compact-input w-full">
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </Field>
+        {hideBranches ? null : (
+          <Field label="Салбар" htmlFor="settle-branch" required error={fieldErrors.branchId}>
+            <select id="settle-branch" value={branchId} onChange={(e) => pickBranch(e.target.value)} className="compact-input w-full">
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
         <Field label="Үйлчлүүлэгч (байгууллага / хувь хүн)" htmlFor="settle-customer" required error={fieldErrors.customerId}>
           <select id="settle-customer" value={customerId} onChange={(e) => pickCustomer(e.target.value)} className="compact-input w-full">
             <option value="" disabled>

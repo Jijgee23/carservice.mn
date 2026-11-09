@@ -201,7 +201,8 @@ export interface DiagnosticReportData {
   vehicleModel: string;
   vehiclePlate: string;
   vehicleYear?: number;
-  branchName: string;
+  /** undefined — энгийн багц (ганц салбар): PDF-д салбар хэвлэхгүй. */
+  branchName?: string;
   filledByName?: string;
   mileageAtReport?: number;
   notes?: string;
@@ -281,10 +282,12 @@ function DiagnosticReportPDF({ report }: { report: DiagnosticReportData }) {
               <Text style={styles.rowLabel}>Дугаар:</Text>
               <Text style={styles.rowValue}>{report.vehiclePlate}</Text>
             </View>
-            <View style={styles.infoCell}>
-              <Text style={styles.rowLabel}>Салбар:</Text>
-              <Text style={styles.rowValue}>{report.branchName}</Text>
-            </View>
+            {report.branchName ? (
+              <View style={styles.infoCell}>
+                <Text style={styles.rowLabel}>Салбар:</Text>
+                <Text style={styles.rowValue}>{report.branchName}</Text>
+              </View>
+            ) : null}
             {report.filledByName ? (
               <View style={styles.infoCell}>
                 <Text style={styles.rowLabel}>Бөглөсөн:</Text>

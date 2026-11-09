@@ -15,6 +15,7 @@ type Initial = {
   phone1: string;
   phone2: string | null;
   acceptsOnlineBooking: boolean;
+  requireCashSession: boolean;
 };
 
 const FIELD_MW = "w-full";
@@ -73,12 +74,11 @@ export function TenantForm({
             className={`auth-input h-11 font-plex-mono ${fe.registerNumber ? "border-red-500/50" : ""}`}
           />
         </Field>
-        <Field label="Имэйл" htmlFor="email" error={fe.email} className={FIELD_MW}>
+        <Field label="Имэйл" htmlFor="email" hint="Заавал биш" error={fe.email} className={FIELD_MW}>
           <input
             id="email"
             name="email"
             type="email"
-            required
             defaultValue={initial.email}
             className={`auth-input h-11 ${fe.email ? "border-red-500/50" : ""}`}
           />
@@ -136,11 +136,29 @@ export function TenantForm({
           <span aria-hidden="true" className="text-sm font-medium select-none">
             &nbsp;
           </span>
+          <ToggleChip
+            name="requireCashSession"
+            label="Касс заавал нээх"
+            defaultChecked={initial.requireCashSession}
+            className="rounded-lg "
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <span aria-hidden="true" className="text-sm font-medium select-none">
+            &nbsp;
+          </span>
           <Btn type="submit" disabled={pending} size="md" className="h-11 w-full">
             {pending ? "..." : "Хадгалах"}
           </Btn>
         </div>
       </div>
+
+      <p className="text-xs text-[var(--oc-muted3)] max-w-lg">
+        «Касс заавал нээх» асаалттай бол төлбөр бүртгэх, буцаах, тооцоо хийхийн өмнө
+        кассын ээлжээ нээнэ. Унтраавал ээлжгүйгээр бүртгэнэ — нээлттэй ээлж байвал
+        түүнд автоматаар холбогдож, үгүй бол тайланд «Ээлжээс гадуур» гэж харагдана.
+      </p>
 
       {onlineBookingInPlan ? (
         <p className="text-xs text-[var(--oc-muted3)] max-w-lg">

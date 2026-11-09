@@ -73,6 +73,7 @@ export function BulkOrdersTable({
   currentUserId,
   sort,
   rowActions,
+  hideBranches = false,
 }: {
   rows: BulkOrderRow[];
   employees: AssignableEmployee[];
@@ -82,6 +83,8 @@ export function BulkOrdersTable({
   sort: { key: string; dir: SortDir };
   /** Мөрийн «⋯» үйлдлүүдийн (төлбөр, бүх ажлыг дуусгах, төлөв) эрхүүд. */
   rowActions: OrderRowActionsPerms;
+  /** Энгийн багц (ганц салбар): «Салбар» баганыг нууна. */
+  hideBranches?: boolean;
 }) {
   const selection = useRowSelection(rows);
   const [statusPickerOpen, setStatusPickerOpen] = useState(false);
@@ -119,7 +122,7 @@ export function BulkOrdersTable({
                 "Үйлчлүүлэгч",
                 "Машин",
                 "Үйлчилгээ",
-                "Салбар",
+                ...(hideBranches ? [] : ["Салбар"]),
                 "Хариуцагч",
               ].map((h) => (
                 <th
@@ -196,7 +199,9 @@ export function BulkOrdersTable({
                     </div>
                   )}
                 </td>
-                <td className="px-5 py-4 text-sm text-[var(--oc-muted2)]">{o.branchName}</td>
+                {hideBranches ? null : (
+                  <td className="px-5 py-4 text-sm text-[var(--oc-muted2)]">{o.branchName}</td>
+                )}
                 <td className="px-5 py-4 text-sm text-[var(--oc-muted2)]">
                   {o.assignedToLabel ?? "—"}
                 </td>

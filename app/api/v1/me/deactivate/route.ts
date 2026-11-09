@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     return jsonError(400, "6 оронтой код шаардлагатай.");
   }
 
-  const result = await verifyOtp({ email: auth.user.email, type: "ACCOUNT_CLOSE", code });
+  const result = await verifyOtp({ email: auth.user.email, phone: auth.user.phone, type: "ACCOUNT_CLOSE", code });
   if (!result.ok) {
     return jsonError(422, "Код буруу эсвэл хугацаа дууссан.", { code: "OTP_INVALID" });
   }

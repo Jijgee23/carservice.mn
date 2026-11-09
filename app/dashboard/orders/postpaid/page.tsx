@@ -7,11 +7,13 @@ import {
   FilterSelect,
   ResetFilters,
 } from "@/app/_components/list-filters";
+import { BtnLink } from "@/app/_components/landing-ops-ui";
 import { EmptyState, PageHeader } from "@/app/_components/page-header";
 import { Pagination } from "@/app/_components/pagination";
 import { buildMeta, getPageInfo } from "@/lib/pagination";
 import { customerDisplay, customerLabel, orgRegnumLabel } from "@/lib/customers";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { canView, hasPermission, workingBranchScopeId } from "@/lib/auth/roles";
 import { bookingDateKey } from "@/lib/booking-time";
 import { listPickerAccounts } from "@/lib/payment-account-service";
@@ -59,6 +61,8 @@ export default async function PostpaidOrdersPage({
 
   // Салбараар хязгаарлагдсан ажилтан зөвхөн өөрийн салбарын захиалгыг харна.
   const scopeBranchId = workingBranchScopeId(user);
+  // Энгийн багц (ганц салбар): салбарын багана, сонголтыг нууна.
+  const { hideBranches } = await getBranchVisibility(user);
   const orderScope: Prisma.ServiceOrderWhereInput = {
     tenantId: user.tenantId,
     isPostpaid: true,
@@ -222,7 +226,11 @@ export default async function PostpaidOrdersPage({
         title="Дараа төлбөрт"
         description="Гэрээт (дараа төлбөрт) машинуудын засварын хуудасны түүх, тооцоо"
         actions={
-          settle ? (
+          <>
+            <BtnLink href="/dashboard/orders" variant="ghost">
+              ← Засварын хуудас
+            </BtnLink>
+            {settle ? (
             <SettleButton
               branches={settle.branches}
               defaultBranchId={scopeBranchId ?? settle.branches[0]?.id ?? ""}
@@ -232,8 +240,10 @@ export default async function PostpaidOrdersPage({
               canManageAccounts
               openBranchIds={settle.openBranchIds}
               today={bookingDateKey(new Date())}
+              hideBranches={hideBranches}
             />
-          ) : undefined
+            ) : null}
+          </>
         }
       />
 
@@ -416,7 +426,7 @@ export default async function PostpaidOrdersPage({
                         "#",
                         "Машин",
                         "Үйлчлүүлэгч",
-                        "Салбар",
+                        ...(hideBranches ? [] : ["Салбар"]),
                         "Огноо",
                         "Дүн",
                         "Төлбөр",
@@ -458,9 +468,11 @@ export default async function PostpaidOrdersPage({
                           <td className="px-5 py-3.5 text-sm text-white/70">
                             {customerLabel(o.customer)}
                           </td>
-                          <td className="px-5 py-3.5 text-sm text-white/50">
-                            {o.branch.name}
-                          </td>
+                          {hideBranches ? null : (
+                            <td className="px-5 py-3.5 text-sm text-white/50">
+                              {o.branch.name}
+                            </td>
+                          )}
                           <td className="px-5 py-3.5 text-xs text-white/40 tabular-nums">
                             {when.toLocaleString("mn-MN", {
                               year: "numeric",

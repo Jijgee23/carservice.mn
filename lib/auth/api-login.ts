@@ -35,7 +35,8 @@ async function registerLoginDevice(userId: string, device: LoginDevice): Promise
 
 export type ApiLoginUser = {
   id: string;
-  email: string;
+  /** Бүртгэлд заавал биш — имэйлгүй ажилтан/эзэнд null. */
+  email: string | null;
   firstName: string;
   lastName: string;
   phone: string;

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { canCreate } from "@/lib/auth/roles";
 import { prisma } from "@/lib/prisma";
 import { EmployeeForm, EMPLOYEE_FORM_ID } from "../employee-form";
@@ -13,6 +14,8 @@ export const metadata = {
 export default async function NewEmployeePage() {
   const me = await requireUser();
   if (!canCreate(me, "employees")) redirect("/dashboard/employees");
+  // Энгийн багц (ганц салбар): салбар сонгохгүй, ганц салбарыг онооно.
+  const { hideBranches, singleBranchId } = await getBranchVisibility(me);
 
   const [branches, roles] = await Promise.all([
     prisma.branch.findMany({
@@ -68,7 +71,13 @@ export default async function NewEmployeePage() {
           . Ажилтны үүргийг үүсгэсэн үүргүүдээс сонгох болно.
         </div>
       ) : (
-        <EmployeeForm branches={branches} roles={roles} canGrantOwner={me.isOwner} />
+        <EmployeeForm
+          branches={branches}
+          roles={roles}
+          canGrantOwner={me.isOwner}
+          hideBranches={hideBranches}
+          singleBranchId={singleBranchId}
+        />
       )}
     </div>
   );

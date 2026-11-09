@@ -6,6 +6,7 @@ import { deleteOrderAction } from "@/app/_actions/orders";
 import { ConfirmForm } from "@/app/_components/confirm-form";
 import { Btn } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { getEnabledModules } from "@/lib/plan-modules-server";
 import {
   orderAssignableWhere,
@@ -44,6 +45,7 @@ import { prisma } from "@/lib/prisma";
 import { calculateServiceItemDurationMinutes } from "@/lib/service-duration";
 import type { QPayBankUrl } from "@/lib/qpay-tenant";
 import { AddItemForm } from "./add-item-form";
+import { CATALOG_OPTION_PREFIX } from "@/lib/catalog/catalog-option";
 import { IntakeRecord } from "./intake-record";
 import { OrderItems } from "./order-items";
 import { OrderPaymentsList } from "./order-payments-list";
@@ -77,9 +79,11 @@ export default async function OrderDetailPage({
   const canRecordPayments = canCreate(user, "payments");
   const canReversePayments = canDelete(user, "payments");
   const scopeBranchId = workingBranchScopeId(user);
+  // Энгийн багц (ганц салбар): салбарыг нууна.
+  const { hideBranches } = await getBranchVisibility(user);
   const { id } = await params;
 
-  const [order, branches, customers, vehicles, technicians, services, diagnosticTemplates] = await Promise.all([
+  const [order, branches, customers, vehicles, technicians, services, diagnosticTemplates, catalogItems] = await Promise.all([
     prisma.serviceOrder.findFirst({
       where: {
         id,
@@ -204,6 +208,27 @@ export default async function OrderDetailPage({
         type: true,
         price: true,
         durationMin: true,
+      },
+    }),
+    // Нэгдсэн сангийн ажил/сэлбэг — тенант өөртөө хараахан холбоогүйг нь.
+    // Сонговол addOrderItemAction тенантын Service болгон автоматаар холбоно
+    // (lib/services/catalog-adopt.ts), тиймээс шинэ тенант ч шууд ашиглана.
+    prisma.catalogItem.findMany({
+      where: {
+        isActive: true,
+        type: { in: ["LABOR", "GOODS"] },
+        services: { none: { tenantId: user.tenantId } },
+      },
+      orderBy: [{ type: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        type: true,
+        name: true,
+        code: true,
+        unitName: true,
+        price: true,
+        categoryId: true,
+        category: { select: { name: true } },
       },
     }),
   ]);
@@ -454,6 +479,18 @@ export default async function OrderDetailPage({
                     laborCategoryId: s.categoryId,
                     laborCategoryName: s.category?.name ?? null,
                   }))}
+                  catalogItems={catalogItems.map((c) => ({
+                    id: `${CATALOG_OPTION_PREFIX}${c.id}`,
+                    type: c.type as ServiceKind,
+                    name: c.name,
+                    code: c.code,
+                    unit: c.unitName,
+                    price: c.price.toString(),
+                    stock: null,
+                    laborCategoryId: c.categoryId,
+                    laborCategoryName: c.category?.name ?? null,
+                    fromCatalog: true,
+                  }))}
                   diagnosticTemplates={diagnosticTemplates
                     .filter((t) => !usedDiagnosticTemplateIds.has(t.id))
                     .map((t) => ({
@@ -489,6 +526,7 @@ export default async function OrderDetailPage({
                 technicians={technicians}
                 backHref="/dashboard/orders"
                 hasPaidPayment={hasPaidPayment}
+                hideBranches={hideBranches}
               />
             </section>
           ) : null}
@@ -648,7 +686,7 @@ export default async function OrderDetailPage({
                   {order.vehicle.year ? ` · ${order.vehicle.year}` : ""}
                 </div>
               </Row>
-              <Row label="Салбар">{order.branch.name}</Row>
+              {hideBranches ? null : <Row label="Салбар">{order.branch.name}</Row>}
               {order.categories.length > 0 ? (
                 <Row label="Захиалгаар сонгосон ангилал">
                   <div className="flex flex-wrap gap-1.5">

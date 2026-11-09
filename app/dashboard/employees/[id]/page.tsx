@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Btn, BtnLink, Chip } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { canEdit } from "@/lib/auth/roles";
 import { permissionLabel } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
@@ -33,6 +34,8 @@ export default async function EditEmployeePage({
 }) {
   const me = await requireUser();
   if (!canEdit(me, "employees")) redirect("/dashboard/employees");
+  // Энгийн багц (ганц салбар): салбарын талбарыг нууна.
+  const { hideBranches, singleBranchId } = await getBranchVisibility(me);
 
   const { id } = await params;
 
@@ -201,12 +204,14 @@ export default async function EditEmployeePage({
       <div className="grid gap-6 lg:grid-cols-[1fr_320px] items-start">
         <EmployeeForm
           branches={branches}
+          hideBranches={hideBranches}
+          singleBranchId={singleBranchId}
           roles={roles}
           initial={{
             id: employee.id,
             firstName: employee.firstName,
             lastName: employee.lastName,
-            email: employee.email,
+            email: employee.email ?? "",
             phone: employee.phone,
             roleId: employee.roleId,
             branchId: employee.branchId,

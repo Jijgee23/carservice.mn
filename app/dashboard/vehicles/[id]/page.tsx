@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { canEdit } from "@/lib/auth/roles";
 import {
   APPOINTMENT_STATUS_BADGE,
@@ -43,6 +44,8 @@ export default async function VehicleDetailPage({
 }) {
   const user = await requireUser();
   if (!canEdit(user, "vehicles")) redirect("/dashboard/vehicles");
+  // Энгийн багц (ганц салбар): түүхэнд салбарын нэрийг нууна.
+  const { hideBranches } = await getBranchVisibility(user);
 
   const { id } = await params;
 
@@ -218,7 +221,8 @@ export default async function VehicleDetailPage({
                             </span>
                           </div>
                           <div className="text-xs text-[var(--oc-muted3)] mt-1 tabular-nums">
-                            {fmtDate(when)} · {o.branch.name} · {o.itemCount}{" "}
+                            {fmtDate(when)} · {hideBranches ? null : <>{o.branch.name} · </>}
+                            {o.itemCount}{" "}
                             мөр
                           </div>
                         </div>
@@ -280,9 +284,15 @@ export default async function VehicleDetailPage({
                         </span>
                       </div>
                       <div className="text-xs text-[var(--oc-muted3)] mt-1">
-                        {a.branch.name}
-                        {a.category ? ` · ${a.category.name}` : ""}
-                        {a.note ? ` · ${a.note}` : ""}
+                        {hideBranches ? (
+                          [a.category?.name, a.note].filter(Boolean).join(" · ")
+                        ) : (
+                          <>
+                            {a.branch.name}
+                            {a.category ? ` · ${a.category.name}` : ""}
+                            {a.note ? ` · ${a.note}` : ""}
+                          </>
+                        )}
                       </div>
                     </div>
                   </li>

@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { OrderPrint } from "@/app/_components/print/print-document";
 import { PrintToolbar } from "@/app/_components/print/print-toolbar";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { canViewOrder } from "@/lib/auth/order-access";
 import { canView, workingBranchScopeId } from "@/lib/auth/roles";
 import { BANK_REF_SELECT } from "@/lib/payment-accounts";
@@ -22,6 +23,8 @@ export default async function OrderPrintPage({
   const user = await requireUser();
   if (!canView(user, "orders")) redirect("/dashboard");
   const scopeBranchId = workingBranchScopeId(user);
+  // Энгийн багц (ганц салбар): хэвлэхэд салбарын нэрийг нууна (хаяг үлдэнэ).
+  const { hideBranches } = await getBranchVisibility(user);
   const [{ id }, { format: rawFormat }] = await Promise.all([params, searchParams]);
   const format = parsePrintFormat(rawFormat);
 
@@ -68,7 +71,7 @@ export default async function OrderPrintPage({
 
   const doc = buildOrderDocument({
     tenant: order.tenant,
-    branch: order.branch,
+    branch: hideBranches ? { ...order.branch, name: "" } : order.branch,
     order,
     master: order.assignedTo,
     customer: order.customer,

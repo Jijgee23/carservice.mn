@@ -15,6 +15,7 @@ import {
   resolveCalendar,
 } from "@/lib/appointments-calendar";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { canEdit, canView, workingBranchScopeId } from "@/lib/auth/roles";
 import { customerLabel } from "@/lib/customers";
 import { prisma } from "@/lib/prisma";
@@ -78,6 +79,8 @@ export default async function AppointmentsCalendarPage({
   const sp = await searchParams;
   const cal = resolveCalendar(sp);
   const scopeBranchId = workingBranchScopeId(user);
+  // Энгийн багц (ганц салбар): салбарын нэр, тайлбарыг нууна.
+  const { hideBranches } = await getBranchVisibility(user);
   // QA #28: candidates for the master picker shown when confirming a
   // master-less appointment (same eligibility filter as the list page).
   const branchId = scopeBranchId ?? (sp.branchId || "");
@@ -281,7 +284,9 @@ export default async function AppointmentsCalendarPage({
           <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">Цаг захиалгын календарь</h1>
           <p className="text-sm text-[var(--oc-muted3)] mt-1">
             {cal.interval === "day"
-              ? "Аль салбарт, хэзээ цаг захиалагдсан, аль нь сул болохыг харна."
+              ? hideBranches
+                ? "Хэзээ цаг захиалагдсан, аль нь сул болохыг харна."
+                : "Аль салбарт, хэзээ цаг захиалагдсан, аль нь сул болохыг харна."
               : "Энэ хугацаанд ирсэн цаг захиалгуудыг харна — захиалгагүй (walk-in) ажил болон хойшлуулсан ажлын буцах цаг эндэхгүй тул сул мэт харагдах өдөр бодит дээрээ завгүй байж болно. Бодит сул/завгүй байдлыг өдрийн харагдацаас шалгана уу."}
           </p>
         </div>
@@ -384,7 +389,7 @@ export default async function AppointmentsCalendarPage({
         ) : null}
 
         <div className="ml-auto">
-          {!scopeBranchId && branches.length > 1 ? (
+          {!scopeBranchId && !hideBranches && branches.length > 1 ? (
             <FilterSelect
               paramName="branchId"
               placeholder="Бүх салбар"
@@ -397,7 +402,7 @@ export default async function AppointmentsCalendarPage({
       {isHistory ? (
         <HistoryView
           data={dayHistory}
-          branchName={branches.find((b) => b.id === dayBranchId)?.name ?? null}
+          branchName={hideBranches ? null : branches.find((b) => b.id === dayBranchId)?.name ?? null}
         />
       ) : cal.interval === "day" && isGrid && isMultiBranchDay ? (
         <div className="flex flex-col gap-6">
@@ -422,7 +427,7 @@ export default async function AppointmentsCalendarPage({
           branchHours={dayBranchHours}
           dateKey={cal.days[0].key}
           branchId={dayBranchId}
-          branchName={branches.find((b) => b.id === dayBranchId)?.name ?? null}
+          branchName={hideBranches ? null : branches.find((b) => b.id === dayBranchId)?.name ?? null}
           canRespondAppointments={canRespondAppointments}
           canEditOrders={canEditOrders}
           returnTo={returnTo}
@@ -445,7 +450,7 @@ export default async function AppointmentsCalendarPage({
       ) : cal.interval === "day" ? (
         <DaySchedule
           schedule={daySchedule}
-          branchName={branches.find((b) => b.id === dayBranchId)?.name ?? null}
+          branchName={hideBranches ? null : branches.find((b) => b.id === dayBranchId)?.name ?? null}
           canRespondAppointments={canRespondAppointments}
           canEditOrders={canEditOrders}
           returnTo={returnTo}
@@ -512,7 +517,7 @@ export default async function AppointmentsCalendarPage({
                             : null}
                         </div>
                       ) : null}
-                      {!branchId ? (
+                      {!branchId && !hideBranches ? (
                         <div className="text-[10px] text-[var(--oc-muted4)] truncate">
                           {a.branch.name}
                         </div>

@@ -313,7 +313,7 @@ export async function registerPlateVehicle(
 }
 
 /** Утсаар tenant-ийн үйлчлүүлэгчийг олно, байхгүй бол үүсгэнэ. */
-async function findOrCreateCustomerByPhone(
+export async function findOrCreateCustomerByPhone(
   actor: Actor,
   input: { phone: string; fullName: string },
   canCreateCustomer: boolean,

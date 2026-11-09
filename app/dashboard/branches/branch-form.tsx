@@ -95,12 +95,15 @@ export function BranchForm({
   mapApiKey,
   mapId,
   tagOptions = [],
+  hideBranches = false,
 }: {
   initial?: Initial;
   addressData: AddressData;
   mapApiKey: string;
   mapId: string;
   tagOptions?: BranchTagOption[];
+  /** Энгийн багц (ганц салбар): салбарын нэр, «үндсэн салбар» талбарыг нууна. */
+  hideBranches?: boolean;
 }) {
   const isEdit = Boolean(initial?.id);
   const action = isEdit
@@ -243,18 +246,23 @@ export function BranchForm({
 
       <SectionPanel index={1} total={3} title="Үндсэн мэдээлэл">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Салбарын нэр" htmlFor="name" error={fe.name}>
-            <input
-              id="name"
-              name="name"
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className={`auth-input ${fe.name ? "border-red-500/50" : ""}`}
-              placeholder="Жишээ: Зүүн салбар"
-            />
-          </Field>
+          {/* Энгийн багц (ганц салбар): нэрийг харуулахгүй ч сервер шаарддаг тул hidden-ээр илгээнэ. */}
+          {hideBranches ? (
+            <input type="hidden" name="name" value={name} />
+          ) : (
+            <Field label="Салбарын нэр" htmlFor="name" error={fe.name}>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className={`auth-input ${fe.name ? "border-red-500/50" : ""}`}
+                placeholder="Жишээ: Зүүн салбар"
+              />
+            </Field>
+          )}
 
           <Field label="Утас" htmlFor="phone" error={fe.phone}>
             <input
@@ -272,23 +280,28 @@ export function BranchForm({
           </Field>
         </div>
 
-        <label className="mt-4 flex items-start gap-3 p-3.5 rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel2)] cursor-pointer hover:border-[var(--oc-line2)]">
-          <input
-            type="checkbox"
-            name="isPrimary"
-            checked={isPrimary}
-            onChange={(e) => setIsPrimary(e.target.checked)}
-            className="mt-0.5 accent-[var(--oc-accent)]"
-          />
-          <div className="flex-1">
-            <div className="text-sm font-medium text-[var(--oc-ink2)]">
-              Үндсэн салбар
+        {/* Энгийн багц (ганц салбар): «үндсэн салбар» сонголтыг нууж, одоогийн утгыг хадгална. */}
+        {hideBranches ? (
+          isPrimary ? <input type="hidden" name="isPrimary" value="on" /> : null
+        ) : (
+          <label className="mt-4 flex items-start gap-3 p-3.5 rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel2)] cursor-pointer hover:border-[var(--oc-line2)]">
+            <input
+              type="checkbox"
+              name="isPrimary"
+              checked={isPrimary}
+              onChange={(e) => setIsPrimary(e.target.checked)}
+              className="mt-0.5 accent-[var(--oc-accent)]"
+            />
+            <div className="flex-1">
+              <div className="text-sm font-medium text-[var(--oc-ink2)]">
+                Үндсэн салбар
+              </div>
+              <div className="text-xs text-[var(--oc-muted3)] mt-0.5">
+                Засварын хуудас анхдагчаар энэ салбарт хуваарилагдана.
+              </div>
             </div>
-            <div className="text-xs text-[var(--oc-muted3)] mt-0.5">
-              Засварын хуудас анхдагчаар энэ салбарт хуваарилагдана.
-            </div>
-          </div>
-        </label>
+          </label>
+        )}
 
         {tagOptions.length > 0 ? (
           <div className="mt-4">

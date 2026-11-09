@@ -19,6 +19,7 @@ import { canCreate, canDelete, canEdit, canView } from "@/lib/auth/roles";
 import { redirect } from "next/navigation";
 import { formatAddress, formatWorkDays, formatWorkHoursSummary } from "@/lib/branches";
 import { prisma } from "@/lib/prisma";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { buildBranchWhere, type BranchStatusFilter } from "./data";
 
 export const metadata = {
@@ -45,6 +46,14 @@ export default async function BranchesPage({
   const canModify = canEdit(user, "branches");
 
   const { page: pageParam, q: qParam, status: statusParam, scheduleWarning } = await searchParams;
+  // Энгийн багц (ганц салбар): жагсаалтын оронд «Байршил, ажлын цаг» (засах) хуудас руу шилжүүлнэ.
+  // Засах эрхгүй бол тэр хуудас буцааж энд redirect хийх тул dashboard руу явуулна.
+  const { hideBranches, singleBranchId } = await getBranchVisibility(user);
+  if (hideBranches) {
+    if (!canModify) redirect("/dashboard");
+    const warn = scheduleWarning && Number(scheduleWarning) > 0 ? `?scheduleWarning=${scheduleWarning}` : "";
+    redirect(`/dashboard/branches/${singleBranchId}${warn}`);
+  }
   const q = qParam ?? "";
   const status: BranchStatusFilter =
     statusParam === "active" || statusParam === "inactive" ? statusParam : undefined;

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Btn, BtnLink, Chip } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import {
   ACTIONS,
   RESOURCES,
@@ -22,6 +23,8 @@ export default async function EditRolePage({
 }) {
   const me = await requireUser();
   if (!me.isOwner) redirect("/dashboard/employees");
+  // Энгийн багц (ганц салбар): салбарын эрхийн мөрийг нууна.
+  const { hideBranches } = await getBranchVisibility(me);
 
   const { id } = await params;
   const [role, members] = await Promise.all([
@@ -86,6 +89,7 @@ export default async function EditRolePage({
             isActive: role.isActive,
           }}
           resources={[...RESOURCES]}
+          hideBranches={hideBranches}
           actions={[...ACTIONS]}
           standalonePermissions={STANDALONE_PERMISSIONS.map((p) => ({
             code: p.code,

@@ -338,7 +338,7 @@ export function GridSchedule({
                   role="group"
                   tabIndex={0}
                   aria-label={`${lane + 1}-р ажлын байр. Сум товчоор цаг сонгож, Enter дарж шинэ цаг захиалга үүсгэнэ.${
-                    isOverflowLane ? " Салбарын багтаамжаас хэтэрсэн мөр." : ""
+                    isOverflowLane ? " Багтаамжаас хэтэрсэн мөр." : ""
                   }`}
                   className={`relative rounded-lg border bg-[var(--oc-panel)] overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--oc-accent)]/40 ${
                     isOverflowLane

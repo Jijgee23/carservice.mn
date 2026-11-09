@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Chip } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { getEnabledModules } from "@/lib/plan-modules-server";
 import { hasPermission } from "@/lib/auth/roles";
 import { CashError } from "@/lib/cash/rules";
@@ -101,6 +102,8 @@ export default async function CashSessionDetailPage({ params }: { params: Promis
   const user = await requireUser();
   const financeInPlan = (await getEnabledModules(user.tenant.plan)).has("enable_finance");
   if (!hasPermission(user, "cash.manage")) redirect("/dashboard");
+  // Энгийн багц (ганц салбар): гарчигт салбарын нэрийг харуулахгүй.
+  const { hideBranches } = await getBranchVisibility(user);
   const { id } = await params;
 
   let detail;
@@ -132,7 +135,7 @@ export default async function CashSessionDetailPage({ params }: { params: Promis
         <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold text-[var(--oc-ink)] flex flex-wrap items-center gap-2">
-              Кассын ээлж · {s.branch.name}
+              {hideBranches ? "Кассын ээлж" : `Кассын ээлж · ${s.branch.name}`}
               {closed ? <Chip tone="neutral">Хаагдсан</Chip> : <Chip tone="ok">Нээлттэй</Chip>}
             </h1>
             <p className="text-sm text-[var(--oc-muted3)] mt-1">

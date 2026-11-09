@@ -47,7 +47,7 @@ function s(fd: FormData, key: string): string {
 
 type Target =
   | { kind: "customer"; id: string; phone: string }
-  | { kind: "staff"; id: string; email: string; phone: string; name: string; tenantId: string };
+  | { kind: "staff"; id: string; email: string | null; phone: string; name: string; tenantId: string };
 
 async function findTarget(kind: "customer" | "staff", identifier: string): Promise<Target | null> {
   if (kind === "customer") {
@@ -114,6 +114,7 @@ export async function accountDeletionAction(
         } else {
           const { code } = await issueOtp({
             email: target.email,
+            phone: target.phone,
             type: "ACCOUNT_CLOSE",
             userId: target.id,
             ip,
@@ -159,7 +160,7 @@ export async function accountDeletionAction(
   const verified =
     target.kind === "customer"
       ? await verifyPhoneOtp({ phone: target.phone, type: "ACCOUNT_CLOSE", code: otpCode })
-      : await verifyOtp({ email: target.email, type: "ACCOUNT_CLOSE", code: otpCode });
+      : await verifyOtp({ email: target.email, phone: target.phone, type: "ACCOUNT_CLOSE", code: otpCode });
   if (!verified.ok) return bad;
 
   if (target.kind === "customer") {

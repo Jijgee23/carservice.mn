@@ -52,12 +52,15 @@ export async function updateTenantAction(
   const phone1 = s(formData, "phone1");
   const phone2 = s(formData, "phone2");
   const acceptsOnlineBooking = formData.get("acceptsOnlineBooking") === "on";
+  // Касс (ээлж) заавал нээх эсэх — server-ийн шалгалт lib/cash/session-attach.ts.
+  const requireCashSession = formData.get("requireCashSession") === "on";
 
   const fieldErrors: Record<string, string> = {};
   if (!name) fieldErrors.name = "Нэрээ оруулна уу.";
   if (!regnoKind(registerNumber))
     fieldErrors.registerNumber = TENANT_REGNO_MESSAGE;
-  if (!isEmail(email)) fieldErrors.email = "Имэйл хаяг буруу.";
+  // Имэйл заавал биш (бүртгэлтэй адил) — хоосон бол null.
+  if (email && !isEmail(email)) fieldErrors.email = "Имэйл хаяг буруу.";
   if (!phone1) fieldErrors.phone1 = "Утасны дугаар оруулна уу.";
   else if (!isValidPhone(phone1))
     fieldErrors.phone1 = "Утасны дугаар 8 оронтой тоо байх ёстой.";
@@ -108,10 +111,11 @@ export async function updateTenantAction(
       data: {
         name,
         registerNumber,
-        email,
+        email: email || null,
         phone1: normPhone1,
         phone2: normPhone2,
         acceptsOnlineBooking,
+        requireCashSession,
       },
     });
   } catch (e) {
@@ -141,10 +145,11 @@ export async function updateTenantAction(
     after: {
       name,
       registerNumber,
-      email,
+      email: email || null,
       phone1: normPhone1,
       phone2: normPhone2,
       acceptsOnlineBooking,
+      requireCashSession,
     },
   });
 

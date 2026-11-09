@@ -4,6 +4,7 @@ import { FilterSelect, ResetFilters } from "@/app/_components/list-filters";
 import { EmptyState, PageHeader } from "@/app/_components/page-header";
 import { Pagination } from "@/app/_components/pagination";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { canView, hasPermission, workingBranchScopeId } from "@/lib/auth/roles";
 import { buildMeta, getPageInfo } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
@@ -23,6 +24,8 @@ export default async function ReviewsPage({
   const user = await requireUser();
   if (!canView(user, "customers")) redirect("/dashboard");
   const canReply = hasPermission(user, "customers.edit");
+  // Энгийн багц (ганц салбар): салбарын нэрийг нууна.
+  const { hideBranches } = await getBranchVisibility(user);
   const sp = await searchParams;
   const rating = Number(sp.rating);
   const { page, pageSize, skip, take } = getPageInfo(sp.page);
@@ -73,7 +76,7 @@ export default async function ReviewsPage({
         <div className="mb-4 flex flex-wrap gap-2">
           {branches.map((b) => (
             <div key={b.id} className="rounded-lg border border-[var(--oc-line)] bg-[var(--oc-panel)] px-3 py-2 text-sm">
-              <span className="text-[var(--oc-ink2)]">{b.name}</span>
+              <span className="text-[var(--oc-ink2)]">{hideBranches ? "Дундаж үнэлгээ" : b.name}</span>
               <span className="ml-2 font-plex-mono text-amber-400">★ {Number(b.ratingAvg ?? 0).toFixed(1)}</span>
               <span className="ml-1 text-xs text-[var(--oc-muted3)]">({b.ratingCount})</span>
             </div>
@@ -111,13 +114,22 @@ export default async function ReviewsPage({
                 </span>
                 <span className="text-[var(--oc-ink2)]">{r.account.name?.trim() || "Үйлчлүүлэгч"}</span>
                 <span className="text-xs text-[var(--oc-muted3)]">
-                  {r.branch.name} · {fmt(r.createdAt)} ·{" "}
+                  {hideBranches ? null : <>{r.branch.name} · </>}
+                  {fmt(r.createdAt)} ·{" "}
                   {r.order ? (
                     <Link href={`/dashboard/orders/${r.order.id}`} className="hover:underline">
                       {r.order.number ? `#${r.order.number}` : "засвар"}
                     </Link>
                   ) : (
-                    <span title="Засваргүйгээр салбарт шууд өгсөн үнэлгээ (credit score-д тооцогдохгүй)">засваргүй</span>
+                    <span
+                      title={
+                        hideBranches
+                          ? "Засваргүйгээр шууд өгсөн үнэлгээ (credit score-д тооцогдохгүй)"
+                          : "Засваргүйгээр салбарт шууд өгсөн үнэлгээ (credit score-д тооцогдохгүй)"
+                      }
+                    >
+                      засваргүй
+                    </span>
                   )}
                 </span>
                 {r.hidden ? (

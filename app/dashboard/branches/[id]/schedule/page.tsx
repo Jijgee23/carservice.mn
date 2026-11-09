@@ -4,13 +4,20 @@ import { requireUser } from "@/lib/auth";
 import { canEdit } from "@/lib/auth/roles";
 import { prisma } from "@/lib/prisma";
 import { WEEK_DAYS, type Weekday } from "@/lib/branches";
+import { getBranchVisibility, SINGLE_BRANCH_LABEL } from "@/lib/branch-visibility";
 import { BranchScheduleManager } from "./schedule-manager";
 
-export const metadata = { title: "Салбарын хуваарь" };
+// Энгийн багц (ганц салбар): гарчигт «салбар» гэж бичихгүй.
+export async function generateMetadata() {
+  const user = await requireUser();
+  const { hideBranches } = await getBranchVisibility(user);
+  return { title: hideBranches ? "Ажлын хуваарь" : "Салбарын хуваарь" };
+}
 
 export default async function BranchSchedulePage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
-  if (!canEdit(user, "branches")) redirect("/dashboard/branches");
+  const { hideBranches } = await getBranchVisibility(user);
+  if (!canEdit(user, "branches")) redirect(hideBranches ? "/dashboard" : "/dashboard/branches");
   const { id } = await params;
   const [branch, tenantBranchCount] = await Promise.all([
     prisma.branch.findFirst({
@@ -59,16 +66,25 @@ export default async function BranchSchedulePage({ params }: { params: Promise<{
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl">
-      <nav className="flex items-center gap-1.5 text-[13px] text-[var(--oc-muted3)] mb-3">
-        <Link href="/dashboard/branches" className="hover:text-[var(--oc-accent-hi)]">Салбарууд</Link>
-        <span>/</span>
-        <Link href={`/dashboard/branches/${branch.id}`} className="hover:text-[var(--oc-accent-hi)]">{branch.name}</Link>
-        <span>/</span>
-        <span className="text-[var(--oc-muted)]">Хуваарь</span>
-      </nav>
+      {/* Энгийн багц (ганц салбар): салбарын жагсаалт, нэрийг харуулахгүй. */}
+      {hideBranches ? (
+        <nav className="flex items-center gap-1.5 text-[13px] text-[var(--oc-muted3)] mb-3">
+          <Link href={`/dashboard/branches/${branch.id}`} className="hover:text-[var(--oc-accent-hi)]">{SINGLE_BRANCH_LABEL}</Link>
+          <span>/</span>
+          <span className="text-[var(--oc-muted)]">Хуваарь</span>
+        </nav>
+      ) : (
+        <nav className="flex items-center gap-1.5 text-[13px] text-[var(--oc-muted3)] mb-3">
+          <Link href="/dashboard/branches" className="hover:text-[var(--oc-accent-hi)]">Салбарууд</Link>
+          <span>/</span>
+          <Link href={`/dashboard/branches/${branch.id}`} className="hover:text-[var(--oc-accent-hi)]">{branch.name}</Link>
+          <span>/</span>
+          <span className="text-[var(--oc-muted)]">Хуваарь</span>
+        </nav>
+      )}
       <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">{branch.name} · Хуваарь</h1>
+          <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">{hideBranches ? "Ажлын хуваарь" : `${branch.name} · Хуваарь`}</h1>
           <p className="text-sm text-[var(--oc-muted3)] mt-1">Онлайн захиалга болон ажилтны хуваарьт үйлчлэх тусгай өдрүүд, улирлын тохиргоо.</p>
         </div>
         <Link href={`/dashboard/branches/${branch.id}`} className="text-sm text-[var(--oc-accent)]">← Үндсэн мэдээлэл</Link>
@@ -78,7 +94,8 @@ export default async function BranchSchedulePage({ params }: { params: Promise<{
         exceptions={exceptions}
         seasons={seasons}
         baseDays={baseDays}
-        tenantBranchCount={tenantBranchCount}
+        // Ганц идэвхтэй салбартай үед «бүх салбарт» сонголтыг харуулахгүй.
+        tenantBranchCount={hideBranches ? 1 : tenantBranchCount}
       />
     </div>
   );

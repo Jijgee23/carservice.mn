@@ -51,7 +51,10 @@ export async function assertCashSessionOpen(
   branchId: string,
   makeError: () => Error = () => new CashError(CASH_SESSION_CLOSED_MESSAGE, 409, CASH_SESSION_CLOSED_CODE),
 ): Promise<void> {
-  await lockBranchShared(tx, tenantId, branchId);
+  // Same shared Branch lock as lockBranchShared, plus the tenant's «касс заавал нээх» setting in one round trip.
+  // The lock is still taken when the setting is off, so «Касс хаах» keeps serialising with this write.
+  const rows = await tx.$queryRaw<{ required: boolean }[]>`SELECT t."requireCashSession" AS required FROM "Branch" b JOIN "Tenant" t ON t.id = b."tenantId" WHERE b.id = ${branchId} AND b."tenantId" = ${tenantId} FOR SHARE OF b`;
+  if (rows[0]?.required === false) return;
   const open = await tx.cashSession.findFirst({
     where: { tenantId, branchId, closedAt: null },
     orderBy: { openedAt: "desc" },

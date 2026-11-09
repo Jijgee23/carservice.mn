@@ -83,10 +83,11 @@ export default async function SettingsPage() {
             initial={{
               name: tenant.name,
               registerNumber: tenant.registerNumber,
-              email: tenant.email,
+              email: tenant.email ?? "",
               phone1: tenant.phone1,
               phone2: tenant.phone2,
               acceptsOnlineBooking: tenant.acceptsOnlineBooking,
+              requireCashSession: tenant.requireCashSession,
             }}
             onlineBookingInPlan={modules.has("online_booking")}
           />

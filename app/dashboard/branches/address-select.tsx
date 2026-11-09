@@ -57,6 +57,8 @@ export type GeocodeParts = {
   adminLevel3?: string;
   locality?: string;
   sublocality?: string;
+  /** Google-ийн бүтэн хаяг (formatted_address) — бүртгэлд гараар бичих хаягийн оронд. */
+  formatted?: string;
 };
 
 /**

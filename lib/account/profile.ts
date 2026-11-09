@@ -36,7 +36,8 @@ export type ProfileInput = {
 export type ProfileData = {
   firstName: string;
   lastName: string;
-  email: string;
+  /** Заавал биш — хоосон бол null. */
+  email: string | null;
   phone: string;
 };
 
@@ -55,7 +56,7 @@ export function validateProfileInput(
   const fieldErrors: Record<string, string> = {};
   if (!input.firstName) fieldErrors.firstName = "Нэрээ оруулна уу.";
   if (!input.lastName) fieldErrors.lastName = "Овгоо оруулна уу.";
-  if (!isEmail(input.email)) fieldErrors.email = "Имэйл хаяг буруу.";
+  if (input.email && !isEmail(input.email)) fieldErrors.email = "Имэйл хаяг буруу.";
   if (!input.phone) fieldErrors.phone = "Утасны дугаар оруулна уу.";
   else if (!isValidPhone(input.phone))
     fieldErrors.phone = "Утасны дугаар 8 оронтой тоо байх ёстой.";
@@ -88,7 +89,7 @@ export async function updateProfile(
   try {
     await db.user.update({
       where: { id: actor.id },
-      data: { firstName, lastName, email, phone: normalizedPhone },
+      data: { firstName, lastName, email: email || null, phone: normalizedPhone },
     });
   } catch (e) {
     if (isP2002(e)) {
@@ -112,6 +113,6 @@ export async function updateProfile(
 
   return {
     ok: true,
-    data: { firstName, lastName, email, phone: normalizedPhone },
+    data: { firstName, lastName, email: email || null, phone: normalizedPhone },
   };
 }

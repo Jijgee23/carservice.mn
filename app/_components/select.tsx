@@ -72,6 +72,7 @@ export function Select({
   searchable = false,
   searchPlaceholder = "Бичиж хайх…",
   creatable,
+  wrapSelected = false,
 }: {
   name: string;
   options: SelectOption[];
@@ -98,6 +99,9 @@ export function Select({
     getLabel: (query: string) => { label: string; hint?: string } | null;
     onCreate: (query: string) => void;
   };
+  /** Сонгосон утгыг «…»-ээр таслахгүй, багтахгүй бол дараагийн мөрөнд шилжүүлнэ
+   * (утас, улсын дугаар зэрэг бүтэн харагдах ёстой утгад). */
+  wrapSelected?: boolean;
 }) {
   const isControlled = controlledValue !== undefined;
   const [internalValue, setInternalValue] = useState<string>(
@@ -301,12 +305,13 @@ export function Select({
         }}
       >
         <span
+          title={selected?.label}
           style={{
             flex: 1,
             minWidth: 0,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
+            ...(wrapSelected
+              ? { whiteSpace: "normal" as const, overflowWrap: "anywhere" as const }
+              : { whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis" }),
             // × товчны зай (chevron-ий зүүн талд байрлана).
             ...(showClear ? { paddingRight: "1.75rem" } : {}),
             // Хайлтын input (хагас тунгалаг дэвсгэртэй) дээр давхарлан харагдахгүй.

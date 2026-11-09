@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { prisma } from "@/lib/prisma";
 import { CategoriesSection } from "../categories-section";
 
@@ -12,6 +13,8 @@ export default async function CategoriesPage() {
   const user = await requireUser();
   // Ангиллыг зөвхөн админ удирдана (actions нь isOwner шаарддаг).
   if (!user.isOwner) redirect("/dashboard/services");
+  // Энгийн багц (ганц салбар): салбарын багана, сонголтыг нууна.
+  const { hideBranches } = await getBranchVisibility(user);
 
   const [categories, branches, serviceKeys, systemCategories] = await Promise.all([
     prisma.category.findMany({
@@ -84,7 +87,8 @@ export default async function CategoriesPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">Ангилал</h1>
         <p className="text-sm text-[var(--oc-muted3)] mt-1">
-          Ангилал бүр нэг төрөлд (Ажил үйлчилгээ, Сэлбэг, Оношилгоо) эсвэл бүх төрөлд хамаарна. Онлайн цаг захиалгад зөвхөн ажил үйлчилгээний ангилал харагдана. Салбар оноовол тухайн салбарт, хоосон бол бүх салбарт санал болгоно.
+          Ангилал бүр нэг төрөлд (Ажил үйлчилгээ, Сэлбэг, Оношилгоо) эсвэл бүх төрөлд хамаарна. Онлайн цаг захиалгад зөвхөн ажил үйлчилгээний ангилал харагдана.
+          {hideBranches ? null : " Салбар оноовол тухайн салбарт, хоосон бол бүх салбарт санал болгоно."}
         </p>
       </div>
 
@@ -92,6 +96,7 @@ export default async function CategoriesPage() {
         <CategoriesSection
           categories={rows}
           branches={branches}
+          hideBranches={hideBranches}
           serviceKeys={serviceKeys}
           systemCategories={systemCategories.map((c) => ({ ...c, servicesCount: usageBy.get(c.id) ?? 0 }))}
         />

@@ -3,7 +3,7 @@
  *
  * Аюулгүй байдлын зарчмууд:
  *  - Раw кодыг DB-д хадгалахгүй (sha256 hex).
- *  - issueOtp() үед тухайн (email, type)-ийн өмнөх consumed биш бүх OTP-ийг
+ *  - issueOtp() үед тухайн (email эсвэл утас, type)-ийн өмнөх consumed биш бүх OTP-ийг
  *    revoke хийнэ ("invalidate previous").
  *  - verifyOtp() буруу баталгаажуулалт бүрт `attempts` нэмж, 5 болсон үед
  *    OTP-ийг хүчингүй болгоно (brute force-аас сэргийлнэ).
@@ -48,6 +48,29 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+/**
+ * OTP хүлээн авагч. Ажилтан/тенантын урсгал имэйлээр түлхүүрлэнэ; имэйлгүй
+ * (бүртгэлд имэйл заавал биш) хэрэглэгч бол утсаар. Код өөрөө үргэлж SMS-ээр явна.
+ */
+export type OtpRecipient = { email?: string | null; phone?: string | null };
+
+type RecipientKey = {
+  /** Rate limit / лог-д харуулах түлхүүр. */
+  key: string;
+  where: Prisma.OtpWhereInput;
+  data: { email?: string; phone?: string };
+};
+
+function recipientKey(r: OtpRecipient): RecipientKey | null {
+  const email = r.email ? normalizeEmail(r.email) : "";
+  if (email) return { key: email, where: { email }, data: { email } };
+  const phone = r.phone ? normalizePhone(r.phone) : null;
+  // accountId: null — хэрэглэгчийн (Account) утасны OTP-тэй холилдохгүй.
+  if (phone)
+    return { key: phone, where: { phone, email: null, accountId: null }, data: { phone } };
+  return null;
+}
+
 // --- Dev-only OTP харагдац ------------------------------------------------
 // DB-д зөвхөн codeHash (sha256) хадгалагддаг тул raw кодыг харуулах боломжгүй.
 // Хөгжүүлэлтэд SMS-гүйгээр нэвтрэхэд тусдаа raw кодыг санах ойд (DB БИШ) барьж,
@@ -84,8 +107,7 @@ export function getDevOtps(): DevOtpEntry[] {
   return [...(devOtpHolder.__carcareDevOtps ?? [])].reverse();
 }
 
-export type IssueOtpOptions = {
-  email: string;
+export type IssueOtpOptions = OtpRecipient & {
   type: OtpType;
   userId?: string | null;
   userAgent?: string | null;
@@ -99,11 +121,11 @@ export type IssueOtpOptions = {
 export async function issueOtp(
   opts: IssueOtpOptions,
 ): Promise<{ code: string; expiresAt: Date }> {
-  const email = normalizeEmail(opts.email);
-  if (!email) throw new Error("Имэйл хоосон байж болохгүй.");
+  const recipient = recipientKey(opts);
+  if (!recipient) throw new Error("Имэйл эсвэл утасны дугаар хоосон байж болохгүй.");
 
-  // Хэт олон код хүсэхээс сэргийлнэ (имэйл+төрөл, мөн боломжтой бол IP-аар).
-  const byEmail = consumeRateLimit(`otp:${opts.type}:${email}`, {
+  // Хэт олон код хүсэхээс сэргийлнэ (имэйл/утас+төрөл, мөн боломжтой бол IP-аар).
+  const byEmail = consumeRateLimit(`otp:${opts.type}:${recipient.key}`, {
     limit: OTP_MAX_PER_EMAIL,
     windowMs: OTP_ISSUE_WINDOW_MS,
   });
@@ -131,16 +153,16 @@ export async function issueOtp(
   // /system/otp хуудсанд (superadmin) харуулахын тулд санах ойд бүртгэнэ —
   // prod-д ч хийнэ (support-д зориулав). console.info нь зөвхөн хөгжүүлэлтэд —
   // production сервер логт кодыг бичихгүй.
-  recordDevOtp({ email, type: opts.type, code, createdAt: new Date(), expiresAt });
+  recordDevOtp({ ...recipient.data, type: opts.type, code, createdAt: new Date(), expiresAt });
   if (process.env.NODE_ENV !== "production") {
-    console.info(`\n🔑 [OTP] ${opts.type} · ${email} → ${code}\n`);
+    console.info(`\n🔑 [OTP] ${opts.type} · ${recipient.key} → ${code}\n`);
   }
 
   await prisma.$transaction(async (tx) => {
     // Өмнөх идэвхтэй OTP-уудыг хүчингүй болго (зөвхөн хамгийн сүүлийн нь л зөв)
     await tx.otp.updateMany({
       where: {
-        email,
+        ...recipient.where,
         type: opts.type,
         consumedAt: null,
       },
@@ -149,7 +171,7 @@ export async function issueOtp(
 
     await tx.otp.create({
       data: {
-        email,
+        ...recipient.data,
         codeHash,
         type: opts.type,
         userId: opts.userId ?? null,
@@ -171,21 +193,19 @@ export type VerifyOtpResult =
  * OTP-г баталгаажуулна. Зөв тохиолдолд `consumedAt`-г тогтоож дахин ашиглахгүй.
  * Буруу үед `attempts` нэмнэ. OTP_MAX_ATTEMPTS-аас давсан үед OTP-г хаалт хийнэ.
  */
-export async function verifyOtp(input: {
-  email: string;
-  type: OtpType;
-  code: string;
-}): Promise<VerifyOtpResult> {
-  const email = normalizeEmail(input.email);
+export async function verifyOtp(
+  input: OtpRecipient & { type: OtpType; code: string },
+): Promise<VerifyOtpResult> {
+  const recipient = recipientKey(input);
   const code = (input.code ?? "").trim();
-  if (!email || !/^\d{6}$/.test(code)) {
+  if (!recipient || !/^\d{6}$/.test(code)) {
     return { ok: false, reason: "invalid" };
   }
   const codeHash = hashCode(code);
 
   // Хамгийн сүүлийн consumed биш OTP-ийг авна
   const otp = await prisma.otp.findFirst({
-    where: { email, type: input.type, consumedAt: null },
+    where: { ...recipient.where, type: input.type, consumedAt: null },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -233,13 +253,12 @@ export async function verifyOtp(input: {
  * Хэрэглэгчийн бүх consumed биш OTP-уудыг цуцлана (нууц үг солисны дараа г.м.).
  */
 export async function revokeAllOtps(
-  email: string,
+  recipient: string | OtpRecipient,
   type?: OtpType,
 ): Promise<number> {
-  const where: Prisma.OtpWhereInput = {
-    email: normalizeEmail(email),
-    consumedAt: null,
-  };
+  const key = recipientKey(typeof recipient === "string" ? { email: recipient } : recipient);
+  if (!key) return 0;
+  const where: Prisma.OtpWhereInput = { ...key.where, consumedAt: null };
   if (type) where.type = type;
   const r = await prisma.otp.updateMany({
     where,

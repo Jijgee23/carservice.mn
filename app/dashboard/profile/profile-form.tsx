@@ -57,12 +57,11 @@ export function ProfileForm({ initial }: { initial: Initial }) {
             className={`auth-input ${fe.firstName ? "border-red-500/50" : ""}`}
           />
         </Field>
-        <Field label="Имэйл" htmlFor="email" error={fe.email} className={FIELD_MW}>
+        <Field label="Имэйл" htmlFor="email" hint="Заавал биш" error={fe.email} className={FIELD_MW}>
           <input
             id="email"
             name="email"
             type="email"
-            required
             defaultValue={initial.email}
             className={`auth-input ${fe.email ? "border-red-500/50" : ""}`}
           />

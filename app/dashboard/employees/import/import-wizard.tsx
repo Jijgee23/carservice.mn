@@ -44,7 +44,21 @@ const STEPS: Array<{ key: Step; label: string }> = [
   { key: "review", label: "3. Шалгах, үүрэг оноох" },
 ];
 
-export function EmployeeImportWizard({ roles, branches }: { roles: NamedOption[]; branches: NamedOption[] }) {
+export function EmployeeImportWizard({
+  roles,
+  branches,
+  singleBranchId = null,
+}: {
+  roles: NamedOption[];
+  branches: NamedOption[];
+  /** Энгийн багц (ганц салбар): салбарыг нууж, бүх мөрөнд энэ салбарыг онооно. */
+  singleBranchId?: string | null;
+}) {
+  const hideBranches = singleBranchId !== null;
+  const fields = useMemo(
+    () => (hideBranches ? IMPORT_FIELDS.filter((f) => f.key !== "branch") : IMPORT_FIELDS),
+    [hideBranches],
+  );
   const [step, setStep] = useState<Step>("upload");
   const [sheet, setSheet] = useState<LoadedSheet | null>(null);
   const [mapping, setMapping] = useState<ImportMapping | null>(null);
@@ -59,10 +73,15 @@ export function EmployeeImportWizard({ roles, branches }: { roles: NamedOption[]
         <UploadStep
           parse={parseEmployeeImportAction}
           templateHref="/dashboard/employees/import/template"
-          templateNote="2-р хуудсанд таны үүрэг, салбарын нэрс бий."
+          templateNote={
+            hideBranches
+              ? "2-р хуудсанд таны үүргийн нэрс бий."
+              : "2-р хуудсанд таны үүрэг, салбарын нэрс бий."
+          }
           onLoaded={(loaded) => {
             setSheet(loaded);
-            setMapping(guessMapping(loaded.headers));
+            const guessed = guessMapping(loaded.headers);
+            setMapping(hideBranches ? { ...guessed, branch: null } : guessed);
             setStep("map");
           }}
         />
@@ -71,13 +90,23 @@ export function EmployeeImportWizard({ roles, branches }: { roles: NamedOption[]
       {step === "map" && sheet && mapping ? (
         <MapStep
           sheet={sheet}
-          fields={IMPORT_FIELDS}
+          fields={fields}
           mapping={mapping}
-          note="Үүрэг/салбарын нэр системийнхтэй яг таарвал автоматаар оноогдоно; таараагүйг дараагийн алхамд гараар эсвэл олноор нь оноож болно."
+          note={
+            hideBranches
+              ? "Үүргийн нэр системийнхтэй яг таарвал автоматаар оноогдоно; таараагүйг дараагийн алхамд гараар эсвэл олноор нь оноож болно."
+              : "Үүрэг/салбарын нэр системийнхтэй яг таарвал автоматаар оноогдоно; таараагүйг дараагийн алхамд гараар эсвэл олноор нь оноож болно."
+          }
           onChange={setMapping}
           onBack={() => setStep("upload")}
           onNext={() => {
-            setRows(buildImportRows(sheet, mapping, roles, branches));
+            const built = buildImportRows(sheet, mapping, roles, branches);
+            // Нуусан үед гараар нэмэхтэй адил ганц салбарыг онооно.
+            setRows(
+              singleBranchId !== null
+                ? built.map((r) => ({ ...r, branchId: singleBranchId, branchRaw: "" }))
+                : built,
+            );
             setImportedCount(0);
             setStep("review");
           }}
@@ -90,6 +119,7 @@ export function EmployeeImportWizard({ roles, branches }: { roles: NamedOption[]
           setRows={setRows}
           roles={roles}
           branches={branches}
+          hideBranches={hideBranches}
           importedCount={importedCount}
           onImported={(n) => setImportedCount((c) => c + n)}
           onBack={() => setStep("map")}
@@ -106,6 +136,7 @@ function ReviewStep({
   setRows,
   roles,
   branches,
+  hideBranches,
   importedCount,
   onImported,
   onBack,
@@ -114,6 +145,7 @@ function ReviewStep({
   setRows: (update: (rows: ImportRow[]) => ImportRow[]) => void;
   roles: NamedOption[];
   branches: NamedOption[];
+  hideBranches: boolean;
   importedCount: number;
   onImported: (n: number) => void;
   onBack: () => void;
@@ -250,7 +282,7 @@ function ReviewStep({
         noun="мөр"
         actions={[
           { label: "Үүрэг оноох", onSelect: () => setAssign("role") },
-          { label: "Салбар оноох", onSelect: () => setAssign("branch") },
+          ...(hideBranches ? [] : [{ label: "Салбар оноох", onSelect: () => setAssign("branch") }]),
           { label: "Хасах", variant: "ghost", onSelect: removeSelected },
         ]}
       />
@@ -260,7 +292,17 @@ function ReviewStep({
           <thead>
             <tr className="border-b border-[var(--oc-line)]">
               <SelectAllCell selection={selection} />
-              {["Мөр", "Овог", "Нэр", "Утас", "Имэйл", "Үүрэг", "Салбар", "Идэвхтэй хүртэл", "Төлөв"].map((h) => (
+              {[
+                "Мөр",
+                "Овог",
+                "Нэр",
+                "Утас",
+                "Имэйл",
+                "Үүрэг",
+                ...(hideBranches ? [] : ["Салбар"]),
+                "Идэвхтэй хүртэл",
+                "Төлөв",
+              ].map((h) => (
                 <th
                   key={h}
                   className="text-left font-plex-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--oc-muted3)] font-medium px-2 py-3"
@@ -292,18 +334,20 @@ function ReviewStep({
                       searchable
                     />
                   </td>
-                  <td className="px-2 py-2 min-w-[170px]">
-                    <Select
-                      name={`branch-${row.key}`}
-                      value={row.branchId}
-                      onChange={(v) => update(row.key, { branchId: v, branchRaw: v ? row.branchRaw : "" })}
-                      options={branches.map((b) => ({ value: b.id, label: b.name }))}
-                      placeholder={row.branchRaw ? `«${row.branchRaw}» ?` : "— Салбаргүй —"}
-                      error={errors.branchId}
-                      clearable
-                      searchable={branches.length > 8}
-                    />
-                  </td>
+                  {hideBranches ? null : (
+                    <td className="px-2 py-2 min-w-[170px]">
+                      <Select
+                        name={`branch-${row.key}`}
+                        value={row.branchId}
+                        onChange={(v) => update(row.key, { branchId: v, branchRaw: v ? row.branchRaw : "" })}
+                        options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                        placeholder={row.branchRaw ? `«${row.branchRaw}» ?` : "— Салбаргүй —"}
+                        error={errors.branchId}
+                        clearable
+                        searchable={branches.length > 8}
+                      />
+                    </td>
+                  )}
                   <TextCell
                     value={row.activeUntil}
                     error={errors.activeUntil}

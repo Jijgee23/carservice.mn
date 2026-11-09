@@ -42,6 +42,7 @@ import {
 import { assertCashSessionOpen, assertEntryNotInClosedSession, CASH_SESSION_CLOSED_CODE, CASH_SESSION_CLOSED_MESSAGE, resolveCashSessionId } from "./session-attach";
 import { getSystemTypeId, type CashActor } from "./types";
 import { effectiveBranchScope } from "@/lib/cash/scope";
+import { isCashSessionRequired } from "@/lib/cash/session-required";
 
 /** Branch scope: string = pinned branch, null = all branches. undefined -> derive from the actor's working branch. */
 export type SettlementScope = string | null | undefined;
@@ -619,7 +620,10 @@ export async function createPostpaidSettlement(input: CreateSettlementInput): Pr
   const scope = effectiveBranchScope(actor, input.scope);
   if (scope != null && scope !== input.branchId) throw new CashError("Энэ салбарт бичлэг хийх эрхгүй.", 422, "CASH_BRANCH_INVALID", { branchId: "Энэ салбарт бичлэг хийх эрхгүй." });
   // Early refusal BEFORE any provider-side QPay cancel (the authoritative, locked check is inside runCreateSettlement).
-  if (!(await prisma.cashSession.findFirst({ where: { tenantId: actor.tenantId, branchId: input.branchId, closedAt: null }, select: { id: true } }))) {
+  if (
+    (await isCashSessionRequired(actor.tenantId)) &&
+    !(await prisma.cashSession.findFirst({ where: { tenantId: actor.tenantId, branchId: input.branchId, closedAt: null }, select: { id: true } }))
+  ) {
     throw new CashError(CASH_SESSION_CLOSED_MESSAGE, 409, CASH_SESSION_CLOSED_CODE);
   }
   const providerCancelledPaymentIds = await providerCancelSettlementQPay({ tenantId: actor.tenantId, actorId: actor.id, branchId: input.branchId, customerId: input.customerId, orderIds });

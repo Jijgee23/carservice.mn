@@ -59,10 +59,16 @@ export function EmployeeForm({
   roles,
   accessInfo,
   canGrantOwner,
+  hideBranches = false,
+  singleBranchId = null,
 }: {
   initial?: Initial;
   branches: Branch[];
   roles: Role[];
+  /** Энгийн багц (ганц салбар): салбар сонгох талбарыг нууж, hidden input-аар илгээнэ. */
+  hideBranches?: boolean;
+  /** Нуусан үед шинэ ажилтанд оноох цорын ганц салбар. */
+  singleBranchId?: string | null;
   /** Хандалтын зөвхөн-унших мэдээлэл (сүүлд нэвтэрсэн г.м) — зөвхөн засах үед. */
   accessInfo?: {
     lastSeenAt: string | null;
@@ -176,7 +182,7 @@ export function EmployeeForm({
         </div>
       </SectionPanel>
 
-      <SectionPanel index={2} total={3} title="Үүрэг ба салбар">
+      <SectionPanel index={2} total={3} title={hideBranches ? "Үүрэг" : "Үүрэг ба салбар"}>
         {canShowOwnerToggle ? (
           <label
             className={`mb-4 flex items-start gap-3 p-3.5 rounded-[10px] border cursor-pointer transition-colors ${wantsOwner
@@ -232,22 +238,32 @@ export function EmployeeForm({
               />
             </Field>
           ) : null}
-          <Field
-            label="Үндсэн салбар"
-            htmlFor="branchId"
-            hint="Хоосон орхивол бүх салбарт хандах эрхтэй (жишээ: ерөнхий менежер/админ) болно."
-            error={fe.branchId}
-          >
-            <Select
-              id="branchId"
+          {hideBranches ? (
+            // Энгийн багц (ганц салбар): засахад одоогийн салбарыг хадгална
+            // (хоосон илгээвэл серверт null болж арилна), үүсгэхэд ганц салбарыг онооно.
+            <input
+              type="hidden"
               name="branchId"
-              value={branchId}
-              onChange={(v) => { setDirty(true); setBranchId(v); }}
-              placeholder="— Салбар —"
-              error={fe.branchId}
-              options={branches.map((b) => ({ value: b.id, label: b.name }))}
+              value={isEdit ? (initial?.branchId ?? "") : (singleBranchId ?? "")}
             />
-          </Field>
+          ) : (
+            <Field
+              label="Үндсэн салбар"
+              htmlFor="branchId"
+              hint="Хоосон орхивол бүх салбарт хандах эрхтэй (жишээ: ерөнхий менежер/админ) болно."
+              error={fe.branchId}
+            >
+              <Select
+                id="branchId"
+                name="branchId"
+                value={branchId}
+                onChange={(v) => { setDirty(true); setBranchId(v); }}
+                placeholder="— Салбар —"
+                error={fe.branchId}
+                options={branches.map((b) => ({ value: b.id, label: b.name }))}
+              />
+            </Field>
+          )}
           <Field
             label="Ажиллаж хугацаа дуусах огноо"
             htmlFor="activeUntil"
@@ -264,7 +280,12 @@ export function EmployeeForm({
           </Field>
         </div>
 
-        {branches.length > 1 ? (
+        {hideBranches ? (
+          // Нуусан үед хадгалагдсан нэмэлт салбаруудыг хэвээр нь илгээнэ.
+          assignableBranchIds.map((id) => (
+            <input key={id} type="hidden" name="assignableBranchIds" value={id} />
+          ))
+        ) : branches.length > 1 ? (
           <div className="mt-5">
             <div className="text-sm font-medium text-[var(--oc-ink2)]">
               Нэмэлт ажиллах салбарууд

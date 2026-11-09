@@ -67,6 +67,7 @@ import {
   PlateIntakeError,
   type RegisteredListVehicle,
   attachOwnerToUnownedVehicle,
+  findOrCreateCustomerByPhone,
   linkPlateCustomer,
   registerVehicleFromPlate,
   lookupPlateForOrder,
@@ -75,6 +76,8 @@ import {
 } from "@/lib/orders/plate-intake-server";
 import { normalizePhone } from "@/lib/phone";
 import { internalHasPaymentsViolation, internalPostpaidConflict, resolveUpdatedIsPostpaid } from "@/lib/orders/order-internal";
+import { adoptCatalogItemForTenant } from "@/lib/services/catalog-adopt";
+import { CATALOG_OPTION_PREFIX } from "@/lib/catalog/catalog-option";
 import {
   addOrderItemCommand,
   cancelOrderItemCommand,
@@ -583,6 +586,59 @@ export async function registerVehicleFromPlateAction(input: {
     }
     logUnexpectedOrderActionError("create", e);
     return { ok: false, message: "Машин бүртгэхэд алдаа гарлаа." };
+  }
+}
+
+/**
+ * Үйлчлүүлэгчийн жагсаалтын хайлтаас «+ утас — үйлчлүүлэгч бүртгэх» (машины
+ * адил, үйлчлүүлэгч нэмэх товчийн оронд). Ижил утастай үйлчлүүлэгч байвал
+ * шинээр үүсгэхгүй — түүнийг буцаана. Нэр заавал биш.
+ */
+export async function registerCustomerFromSearchAction(input: {
+  phone: string;
+  fullName: string;
+}): Promise<
+  PlateStepResult<{
+    customer: {
+      id: string;
+      fullName: string;
+      phone: string;
+      isOrganization: boolean;
+      orgName: string | null;
+      orgRegnum: string | null;
+    };
+  }>
+> {
+  let user;
+  try {
+    user = await authorize("create");
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
+  }
+  const phone = normalizePhone(input.phone);
+  if (!phone) {
+    const msg = "Утасны дугаар 8 оронтой тоо байх ёстой.";
+    return { ok: false, message: msg, fieldErrors: { phone: msg } };
+  }
+  try {
+    const id = await findOrCreateCustomerByPhone(
+      user,
+      { phone, fullName: input.fullName.trim() },
+      canCreate(user, "customers"),
+    );
+    const customer = await prisma.customer.findFirst({
+      where: { id, tenantId: user.tenantId },
+      select: { id: true, fullName: true, phone: true, isOrganization: true, orgName: true, orgRegnum: true },
+    });
+    if (!customer) return { ok: false, message: "Үйлчлүүлэгч олдсонгүй." };
+    revalidatePath("/dashboard/customers");
+    return { ok: true, value: { customer } };
+  } catch (e) {
+    if (e instanceof PlateIntakeError) {
+      return { ok: false, message: e.message, fieldErrors: e.fieldErrors };
+    }
+    logUnexpectedOrderActionError("create", e);
+    return { ok: false, message: "Үйлчлүүлэгч бүртгэхэд алдаа гарлаа." };
   }
 }
 
@@ -1195,7 +1251,13 @@ async function resolveOrderIdForItem(user: Awaited<ReturnType<typeof requireUser
 export async function addOrderItemAction(orderId: string, _prev: OrderActionState, formData: FormData): Promise<OrderActionState> {
   let user;
   try { user = await authorize("edit"); } catch (e) { return { ok: false, message: e instanceof Error ? e.message : "Алдаа" }; }
-  const serviceId = s(formData, "serviceId") || null;
+  let serviceId = s(formData, "serviceId") || null;
+  let catalogItemId = s(formData, "catalogItemId") || null;
+  // Хуучин client (угтварыг салгадаггүй) сангийн мөрийг serviceId-гаар илгээж болно.
+  if (serviceId?.startsWith(CATALOG_OPTION_PREFIX)) {
+    catalogItemId ||= serviceId.slice(CATALOG_OPTION_PREFIX.length);
+    serviceId = null;
+  }
   const diagnosticTemplateId = s(formData, "diagnosticTemplateId") || null;
   const quantity = parseDecimal(s(formData, "quantity") || "1");
   const unitPriceRaw = s(formData, "unitPrice");
@@ -1203,6 +1265,12 @@ export async function addOrderItemAction(orderId: string, _prev: OrderActionStat
   if (!quantity || quantity.lte(0)) return { ok: false, fieldErrors: { quantity: "Тоо хэмжээ буруу." } };
   if (unitPriceRaw && !unitPrice) return { ok: false, fieldErrors: { unitPrice: "Үнэ буруу." } };
   try {
+    // Нэгдсэн сангаас сонгосон бол эхлээд тенантын ажил/сэлбэг болгон холбоно.
+    if (!serviceId && catalogItemId && !diagnosticTemplateId) {
+      const adopted = await adoptCatalogItemForTenant(user, catalogItemId);
+      if (!adopted.ok) return { ok: false, fieldErrors: { serviceId: adopted.message } };
+      serviceId = adopted.serviceId;
+    }
     const created = await addOrderItemCommand({ actor: user, orderId, kind: s(formData, "kind") as ItemKind, description: s(formData, "description"), quantity, unitPrice, serviceId, diagnosticTemplateId });
     revalidatePath(`/dashboard/orders/${orderId}`);
     // Stock changes for goods/part lines; labor/diagnostic lines change the

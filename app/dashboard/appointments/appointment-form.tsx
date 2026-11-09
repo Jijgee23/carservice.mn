@@ -65,6 +65,7 @@ export function AppointmentForm({
   initialScheduledAt,
   backHref = "/dashboard/appointments",
   next,
+  hideBranches = false,
 }: {
   branches: Branch[];
   customers: Customer[];
@@ -84,6 +85,8 @@ export function AppointmentForm({
   // Амжилттай бүртгэсний дараа буцах зам (жишээ нь: хуваарийн хуудас) —
   // ирээгүй бол өмнөх адил цаг захиалгын жагсаалт руу орно.
   next?: string;
+  // Энгийн багц (ганц салбар): салбар сонгох талбарыг нууж, hidden input-аар илгээнэ.
+  hideBranches?: boolean;
 }) {
   const [state, formAction, pending] = useActionState<
     AppointmentActionState,
@@ -91,7 +94,9 @@ export function AppointmentForm({
   >(registerAppointmentByStaff, null);
 
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
-  const [branchId, setBranchId] = useState(defaultBranchId ?? "");
+  // Салбарыг нуусан үед (ганц салбар) анхдагчаар тэр салбарыг авна.
+  const initialBranchId = defaultBranchId || (hideBranches ? branches[0]?.id ?? "" : "");
+  const [branchId, setBranchId] = useState(initialBranchId);
   const [customerId, setCustomerIdRaw] = useState("");
   const [vehicleId, setVehicleId] = useState("");
   // The current user is preselected as the master when eligible for the branch.
@@ -102,7 +107,7 @@ export function AppointmentForm({
     )
       ? currentUserId
       : "";
-  const [assignedToId, setAssignedToId] = useState(() => defaultAssigneeFor(defaultBranchId ?? ""));
+  const [assignedToId, setAssignedToId] = useState(() => defaultAssigneeFor(initialBranchId));
   function setCustomerId(id: string) {
     setCustomerIdRaw(id);
     setVehicleId("");
@@ -233,18 +238,22 @@ export function AppointmentForm({
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 items-start">
         {/* Зүүн багана: салбар, үйлчлүүлэгч, тэмдэглэл */}
         <div className="flex flex-col gap-4">
-          <Field label="Салбар" htmlFor="branchId" error={fe.branchId}>
-            <Select
-              id="branchId"
-              name="branchId"
-              required
-              value={branchId}
-              onChange={onBranchChange}
-              error={fe.branchId}
-              options={branches.map((b) => ({ value: b.id, label: b.name }))}
-              disabled={branches.length <= 1}
-            />
-          </Field>
+          {hideBranches ? (
+            <input type="hidden" name="branchId" value={branchId} />
+          ) : (
+            <Field label="Салбар" htmlFor="branchId" error={fe.branchId}>
+              <Select
+                id="branchId"
+                name="branchId"
+                required
+                value={branchId}
+                onChange={onBranchChange}
+                error={fe.branchId}
+                options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                disabled={branches.length <= 1}
+              />
+            </Field>
+          )}
 
           {branchId && branchCategories.length > 0 ? (
             <Field
@@ -336,7 +345,7 @@ export function AppointmentForm({
               onChange={setAssignedToId}
               error={fe.assignedToId}
               disabled={!branchId}
-              placeholder={branchId ? "— Сонгох —" : "— Эхлээд салбар сонгоно уу —"}
+              placeholder={branchId || hideBranches ? "— Сонгох —" : "— Эхлээд салбар сонгоно уу —"}
               options={assigneeOptions}
             />
             {branchId && assigneeOptions.length === 0 ? (

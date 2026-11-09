@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import {
   ACTIONS,
   RESOURCES,
@@ -16,6 +17,8 @@ export const metadata = {
 export default async function NewRolePage() {
   const me = await requireUser();
   if (!me.isOwner) redirect("/dashboard/employees");
+  // Энгийн багц (ганц салбар): салбарын эрхийн мөрийг нууна.
+  const { hideBranches } = await getBranchVisibility(me);
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl">
@@ -50,6 +53,7 @@ export default async function NewRolePage() {
 
       <RoleForm
         resources={[...RESOURCES]}
+        hideBranches={hideBranches}
         actions={[...ACTIONS]}
         standalonePermissions={STANDALONE_PERMISSIONS.map((p) => ({
           code: p.code,

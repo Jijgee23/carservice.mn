@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { BtnLink } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { canCreate } from "@/lib/auth/roles";
 import { prisma } from "@/lib/prisma";
 import { EmployeeImportWizard } from "./import-wizard";
@@ -13,6 +14,8 @@ export const metadata = {
 export default async function EmployeeImportPage() {
   const me = await requireUser();
   if (!canCreate(me, "employees")) redirect("/dashboard/employees");
+  // Энгийн багц (ганц салбар): салбарын багана, оноолтыг нууна.
+  const { singleBranchId } = await getBranchVisibility(me);
 
   const [branches, roles] = await Promise.all([
     prisma.branch.findMany({
@@ -62,7 +65,7 @@ export default async function EmployeeImportPage() {
           )}
         </div>
       ) : (
-        <EmployeeImportWizard roles={roles} branches={branches} />
+        <EmployeeImportWizard roles={roles} branches={branches} singleBranchId={singleBranchId} />
       )}
     </div>
   );

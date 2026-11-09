@@ -16,6 +16,7 @@ import { EmptyState } from "@/app/_components/page-header";
 import { Pagination } from "@/app/_components/pagination";
 import { buildMeta, getPageInfo } from "@/lib/pagination";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { canCreate, canDelete, canEdit, canView } from "@/lib/auth/roles";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -52,6 +53,8 @@ export default async function EmployeesPage({
   const canAdd = canCreate(me, "employees");
   const canRemove = canDelete(me, "employees");
   const canModify = canEdit(me, "employees");
+  // Энгийн багц (ганц салбар): салбарын шүүлтүүр, баганыг нууна.
+  const { hideBranches } = await getBranchVisibility(me);
 
   const {
     q = "",
@@ -191,11 +194,13 @@ export default async function EmployeesPage({
                 ...roles.map((r) => ({ value: r.id, label: r.name })),
               ]}
             />
-            <FilterSelect
-              paramName="branchId"
-              placeholder="Бүх салбар"
-              options={branches.map((b) => ({ value: b.id, label: b.name }))}
-            />
+            {hideBranches ? null : (
+              <FilterSelect
+                paramName="branchId"
+                placeholder="Бүх салбар"
+                options={branches.map((b) => ({ value: b.id, label: b.name }))}
+              />
+            )}
             <div className="flex items-center gap-1.5">
               {STATUS_TABS.map((tab) => {
                 const active = (status ?? "all") === tab.key;
@@ -229,7 +234,7 @@ export default async function EmployeesPage({
                 id: u.id,
                 firstName: u.firstName,
                 lastName: u.lastName,
-                email: u.email,
+                email: u.email ?? "",
                 phone: u.phone,
                 verified: u.verified,
                 isActive: u.isActive,
@@ -242,6 +247,7 @@ export default async function EmployeesPage({
               }))}
               roles={roles}
               branches={branches}
+              hideBranches={hideBranches}
               canBulkEdit={canModify}
               canModify={canModify}
               canRemove={canRemove}

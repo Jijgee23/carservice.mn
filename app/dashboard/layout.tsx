@@ -15,6 +15,7 @@ import { ALL_BRANCHES } from "@/lib/auth/session";
 import { resolveTodayLockedBranch } from "@/lib/employee-branch-lock";
 import { getAppStoreLinks } from "@/lib/platform-settings";
 import { MODULE_LIMIT_CODES } from "@/lib/plan-limits";
+import { getBranchVisibility, SINGLE_BRANCH_LABEL } from "@/lib/branch-visibility";
 import { getEnabledModules } from "@/lib/plan-modules-server";
 import { prisma } from "@/lib/prisma";
 import { getSubscriptionState } from "@/lib/subscription-server";
@@ -58,7 +59,7 @@ export default async function DashboardLayout({
   const eligible = eligibleBranchIds(user);
   const restrictToEligible = !user.isOwner && eligible.length > 0;
 
-  const [subState, unreadNotifications, switchableBranches, lockedBranch, appLinks, enabledModules] = await Promise.all([
+  const [subState, unreadNotifications, switchableBranches, lockedBranch, appLinks, enabledModules, branchVisibility] = await Promise.all([
     getSubscriptionState(user.tenantId),
     prisma.notification.count({
       where: { userId: user.id, readAt: null },
@@ -80,7 +81,15 @@ export default async function DashboardLayout({
     getAppStoreLinks().then((l) => l.business),
     // Багцад ороогүй модулиуд — цэсэнд түгжээ тэмдэгтэй харагдана.
     getEnabledModules(user.tenant.plan),
+    // Энгийн багц + ганц салбар бол «салбар»-ыг UI-аас нууна.
+    getBranchVisibility(user),
   ]);
+  const singleBranchNav = branchVisibility.hideBranches
+    ? {
+        href: `/dashboard/branches/${branchVisibility.singleBranchId}`,
+        label: SINGLE_BRANCH_LABEL,
+      }
+    : null;
   const lockedModules = MODULE_LIMIT_CODES.filter((m) => !enabledModules.has(m));
 
   return (
@@ -90,33 +99,36 @@ export default async function DashboardLayout({
       >
         <AdminSidebar
           userName={userName}
-          userEmail={user.email}
+          userEmail={user.email ?? user.phone}
           initials={initials.toUpperCase()}
           tenantName={user.tenant.name}
           tenantLogoUrl={user.tenant.logoUrl}
           isOwner={user.isOwner}
           permissions={user.role?.permissions ?? []}
           lockedModules={lockedModules}
+          singleBranchNav={singleBranchNav}
           notificationUnread={unreadNotifications}
           appLinks={appLinks}
         />
         <div className="app-content-offset flex-1 min-w-0 min-h-screen flex flex-col relative isolate">
           <MobileTopbar
             userName={userName}
-            userEmail={user.email}
+            userEmail={user.email ?? user.phone}
             tenantName={user.tenant.name}
             tenantLogoUrl={user.tenant.logoUrl}
             initials={initials.toUpperCase()}
             isOwner={user.isOwner}
             permissions={user.role?.permissions ?? []}
           lockedModules={lockedModules}
+          singleBranchNav={singleBranchNav}
             notificationUnread={unreadNotifications}
           appLinks={appLinks}
           />
           <SubscriptionGuard locked={subState.locked} isOwner={user.isOwner} />
           <div className="px-4 sm:px-6 lg:px-8 pt-3">
             <div className="flex flex-col sm:flex-row items-stretch gap-3">
-              {user.workingBranchId === ALL_BRANCHES || user.workingBranch ? (
+              {!branchVisibility.hideBranches &&
+              (user.workingBranchId === ALL_BRANCHES || user.workingBranch) ? (
                 <BranchSwitcher
                   firstName={user.firstName}
                   currentBranch={user.workingBranch}

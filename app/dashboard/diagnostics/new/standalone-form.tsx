@@ -57,12 +57,15 @@ export function StandaloneDiagnosticForm({
   vehicles,
   templates,
   defaultBranchId,
+  hideBranches = false,
 }: {
   branches: BranchLite[];
   customers: CustomerLite[];
   vehicles: VehicleLite[];
   templates: TemplateLite[];
   defaultBranchId: string | null;
+  /** Энгийн багц (ганц салбар): салбар сонгох талбарыг нууна (branchId hidden-ээр явна). */
+  hideBranches?: boolean;
 }) {
   const [state, formAction, pending] = useActionState<
     ReportActionState,
@@ -124,23 +127,25 @@ export function StandaloneDiagnosticForm({
       <section className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-5 sm:p-6 flex flex-col gap-5">
         <h2 className="font-semibold text-[var(--oc-ink)]">Үндсэн мэдээлэл</h2>
 
-        <Field label="Салбар" htmlFor="branch-select">
-          <select
-            id="branch-select"
-            value={branchId}
-            onChange={(e) => setBranchId(e.target.value)}
-            className="auth-input disabled:cursor-not-allowed disabled:opacity-50"
-            required
-            disabled={branches.length <= 1}
-          >
-            <option value="">— Сонгоно уу —</option>
-            {branches.map((b) => (
-              <option key={b.id} value={b.id} className="bg-[var(--surface)]">
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </Field>
+        {hideBranches ? null : (
+          <Field label="Салбар" htmlFor="branch-select">
+            <select
+              id="branch-select"
+              value={branchId}
+              onChange={(e) => setBranchId(e.target.value)}
+              className="auth-input disabled:cursor-not-allowed disabled:opacity-50"
+              required
+              disabled={branches.length <= 1}
+            >
+              <option value="">— Сонгоно уу —</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id} className="bg-[var(--surface)]">
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
 
         <Field label="Үйлчлүүлэгч" htmlFor="customer-select">
           <select

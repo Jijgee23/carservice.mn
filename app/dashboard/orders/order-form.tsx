@@ -13,17 +13,14 @@ import {
 } from "@/app/_actions/schedule-preview";
 import { Field, FormError } from "@/app/_components/auth-shell";
 import { DatePicker, todayStr } from "@/app/_components/date-picker";
-import { Btn, BtnLink, SquareAddButton } from "@/app/_components/landing-ops-ui";
+import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
 import { Select } from "@/app/_components/select";
 import { SchedulePreviewGrid } from "@/app/_components/schedule-preview-grid";
 import { customerDisplay, customerPickerHint } from "@/lib/customers";
 import { isStandardPlate, normalizePlate, plateLabel } from "@/lib/vehicle-plate";
-import { registerVehicleFromPlateAction } from "@/app/_actions/orders";
+import { registerCustomerFromSearchAction, registerVehicleFromPlateAction } from "@/app/_actions/orders";
 import { DurationHmInput } from "@/app/dashboard/services/duration-input";
-import {
-  CreateCustomerModal,
-  type CreatedCustomer,
-} from "@/app/dashboard/customers/create-customer-modal";
+import type { CreatedCustomer } from "@/app/dashboard/customers/create-customer-modal";
 
 import {
   INTERNAL_BLOCKED_BY_PAYMENTS_HINT,
@@ -98,6 +95,8 @@ export function OrderForm({
   defaultAssignedToId,
   assigneeHint,
   hasPaidPayment = false,
+  simplified = false,
+  hideBranches = false,
 }: {
   initial?: Initial;
   branches: Branch[];
@@ -118,6 +117,11 @@ export function OrderForm({
   assigneeHint?: string;
   // Засварт: төлөгдсөн төлбөртэй бол "Дотоод засвар" сонгох боломжгүй.
   hasPaidPayment?: boolean;
+  // Энгийн (FREE) багц: шинэ хуудсанд Өдрийн хуваарь, Ойролцоо хугацаа,
+  // Хүлээн авах хэсгийг нууна (бүгд заавал биш тул хадгалалтад нөлөөгүй).
+  simplified?: boolean;
+  // Энгийн багц (ганц салбар): салбар сонгох талбарыг нууж, hidden input-аар илгээнэ.
+  hideBranches?: boolean;
 }) {
   const isEdit = Boolean(initial?.id);
   const action = isEdit
@@ -132,7 +136,10 @@ export function OrderForm({
   const [customers, setCustomers] = useState<Customer[]>(initialCustomers);
   const [vehicles, setVehicles] = useState<Vehicle[]>(initialVehicles);
 
-  const [branchId, setBranchId] = useState(initial?.branchId ?? "");
+  // Салбарыг нуусан үед (ганц салбар) анхдагчаар тэр салбарыг авна.
+  const [branchId, setBranchId] = useState(
+    initial?.branchId || (hideBranches ? branches[0]?.id ?? "" : ""),
+  );
   const [assignedToId, setAssignedToId] = useState(
     initial?.assignedToId ?? defaultAssignedToId ?? "",
   );
@@ -147,7 +154,9 @@ export function OrderForm({
   const { isPostpaid, isInternal } = flagsFromMode(paymentMode);
   const internalBlocked = isEdit && hasPaidPayment && paymentMode !== "internal";
 
-  const [showCustomerForm, setShowCustomerForm] = useState(false);
+  // Үйлчлүүлэгчийн хайлтаас «+ утас — бүртгэх» (машины адил).
+  const [customerRegistering, setCustomerRegistering] = useState(false);
+  const [customerRegisterError, setCustomerRegisterError] = useState<string | null>(null);
   // Машины хайлтаас «+ дугаар бүртгэх» (машин нэмэх товчийн оронд).
   // Эзэмшигчгүй бүртгэсэн машиныг жагсаалтад харуулж, хуудас үүсгэхэд
   // сонгосон үйлчлүүлэгчид холбоно (createOrderAction).
@@ -240,7 +249,8 @@ export function OrderForm({
     // Засах горимд (захиалгын дэлгэрэнгүй хуудсан дахь маягт) хуваарийн
     // урьдчилсан харагдац огт харагдахгүй тул үүнийг татахгүй — эс бөгөөс
     // салбар/огноо өөрчлөх бүрд ашиггүй сервер дуудлага явна.
-    if (isEdit || !branchId || !scheduledDateKey) return;
+    // Энгийн багцад хуваарь харуулахгүй тул мөн татахгүй.
+    if (isEdit || simplified || !branchId || !scheduledDateKey) return;
     const id = ++previewReqIdRef.current;
     // Захиалгыг цаг захиалгаас үүсгэж байгаа бол тухайн цаг захиалгын мөрийг
     // өөрөөсөө хасна — эс бөгөөс энэ захиалгын цаг яг тэр цаг захиалгаас
@@ -253,7 +263,7 @@ export function OrderForm({
       .catch(() => {
         if (id === previewReqIdRef.current) setPreview(null);
       });
-  }, [isEdit, branchId, scheduledDateKey, appointmentId]);
+  }, [isEdit, simplified, branchId, scheduledDateKey, appointmentId]);
 
   // Одоо бөглөж буй захиалгын "ghost" блок — сонгосон цаг байхгүй бол алга.
   // Цаг захиалгаас үүссэн бол booking-ийн category-уудаар тооцсон immutable
@@ -301,6 +311,47 @@ export function OrderForm({
         ? `Мэдээллийг дугаараар татаж ${customerDisplay(owner).primary}-д бүртгэнэ`
         : "Мэдээллийг дугаараар татаж бүртгэнэ (үйлчлүүлэгчийг дараа нь сонгоно)",
     };
+  }
+
+  // Хайлтын текстээс 8 оронтой утас + (заавал биш) нэр: «99112233 Бат» → утас, нэр.
+  function parseCustomerQuery(query: string): { phone: string; fullName: string } | null {
+    const phone = query.replace(/[\s-]/g, "").match(/(?<!\d)\d{8}(?!\d)/)?.[0];
+    if (!phone) return null;
+    const fullName = query.replace(/\d[\d\s-]*\d/g, " ").replace(/\s+/g, " ").trim();
+    return { phone, fullName };
+  }
+
+  // Хайлтад олдоогүй утас → «+ утас — үйлчлүүлэгч бүртгэх» мөр.
+  function customerCreateRow(query: string) {
+    const parsed = parseCustomerQuery(query);
+    if (!parsed) return null;
+    if (customers.some((c) => c.phone === parsed.phone)) return null;
+    return {
+      label: `+ ${parsed.phone}${parsed.fullName ? ` · ${parsed.fullName}` : ""} — үйлчлүүлэгч бүртгэх`,
+      hint: parsed.fullName
+        ? "Шинэ үйлчлүүлэгчээр бүртгэж сонгоно"
+        : "Нэрийг хамт бичиж болно (жишээ: 99112233 Бат)",
+    };
+  }
+
+  async function registerCustomer(query: string) {
+    const parsed = parseCustomerQuery(query);
+    if (!parsed) return;
+    setCustomerRegistering(true);
+    setCustomerRegisterError(null);
+    clearFieldError("customerId");
+    try {
+      const res = await registerCustomerFromSearchAction(parsed);
+      if (!res.ok) {
+        setCustomerRegisterError(Object.values(res.fieldErrors ?? {})[0] ?? res.message);
+        return;
+      }
+      onCustomerCreated(res.value.customer);
+    } catch {
+      setCustomerRegisterError("Үйлчлүүлэгч бүртгэхэд алдаа гарлаа.");
+    } finally {
+      setCustomerRegistering(false);
+    }
   }
 
   async function registerVehicle(plate: string, details?: { make: string; model: string }) {
@@ -423,15 +474,27 @@ export function OrderForm({
     return v.customerId ? customerById.get(v.customerId)?.isOrganization === true : false;
   }
   const selectedCustomerIsOrg = customerById.get(customerId)?.isOrganization === true;
+  // Сонгосон үйлчлүүлэгчийн утсыг талбарын доор бүтэн харуулна (товч дээр зөвхөн нэр).
+  const customerHint =
+    [selectedCustomerIsOrg ? "Байгууллага" : null, customerById.get(customerId)?.phone]
+      .filter(Boolean)
+      .join(" · ") || undefined;
+  // Засах горим нь засварын хуудасны дэлгэрэнгүйн нарийн (2/3) баганад байрладаг тул
+  // цөөн багана + бүтэн өргөнтэй талбар — утас, машины дугаар таслагдахгүй.
+  const fieldMw = isEdit ? "w-full" : FIELD_MW;
+  const gridClass = isEdit
+    ? "grid gap-3.5 grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3"
+    : "grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 xl:grid-rows-[auto_auto_1fr]";
+  const notesClass = isEdit
+    ? "sm:col-span-2 max-w-2xl self-start"
+    : "sm:col-span-2 lg:col-span-3 xl:col-span-2 xl:col-start-1 max-w-2xl self-start";
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
   const selectedVehicleIsOrg = selectedVehicle ? vehicleIsOrg(selectedVehicle) : false;
 
   function onCustomerCreated(c: CreatedCustomer) {
-    setCustomers((prev) => [c, ...prev]);
-    setCustomerId(c.id);
-    clearFieldError("customerId");
-    setVehicleId("");
-    setShowCustomerForm(false);
+    setCustomers((prev) => [c, ...prev.filter((x) => x.id !== c.id)]);
+    // Машиныг эхэлж сонгосон бол (эзэмшигчгүй/энэ хүнийх) хэвээр үлдэнэ.
+    onCustomerChange(c.id);
   }
 
   return (
@@ -453,7 +516,7 @@ export function OrderForm({
           дэлгэрэнгүй хуудсан дахь засах маягтад харуулахгүй — тэр хуудас
           аль хэдийн товлогдсон нэг захиалгын тухай бөгөөд хуудсыг
           уртасгахаас өөр зүйл нэмэхгүй (хэрэглэгчийн шийдвэр). */}
-      {!isEdit && branchId && scheduledDateKey && preview ? (
+      {!isEdit && !simplified && branchId && scheduledDateKey && preview ? (
         <div className="flex flex-col gap-1.5">
           <span className="text-sm font-medium text-[var(--oc-ink2)]">Өдрийн хуваарь</span>
           <SchedulePreviewGrid
@@ -486,19 +549,23 @@ export function OrderForm({
         </div>
       ) : null}
 
-      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 xl:grid-rows-[auto_auto_1fr]">
-        <Field label="Салбар" required htmlFor="branchId" error={fe.branchId} className={FIELD_MW}>
-          <Select
-            id="branchId"
-            name="branchId"
-            required
-            value={branchId}
-            onChange={onBranchChange}
-            error={fe.branchId}
-            options={branches.map((b) => ({ value: b.id, label: b.name }))}
-            disabled={branches.length <= 1}
-          />
-        </Field>
+      <div className={gridClass}>
+        {hideBranches ? (
+          <input type="hidden" name="branchId" value={branchId} />
+        ) : (
+          <Field label="Салбар" required htmlFor="branchId" error={fe.branchId} className={fieldMw}>
+            <Select
+              id="branchId"
+              name="branchId"
+              required
+              value={branchId}
+              onChange={onBranchChange}
+              error={fe.branchId}
+              options={branches.map((b) => ({ value: b.id, label: b.name }))}
+              disabled={branches.length <= 1}
+            />
+          </Field>
+        )}
 
         {soleTechnician ? (
           <input type="hidden" name="assignedToId" value={soleTechnician.id} />
@@ -509,7 +576,7 @@ export function OrderForm({
           htmlFor="assignedToId"
           hint={assigneeHint}
           error={fe.assignedToId}
-          className={FIELD_MW}
+          className={fieldMw}
         >
           <Select
             id="assignedToId"
@@ -534,49 +601,6 @@ export function OrderForm({
         )}
 
         <Field
-          label="Үйлчлүүлэгч"
-          required
-          htmlFor="customerId"
-          hint={selectedCustomerIsOrg ? "Байгууллага" : undefined}
-          error={fe.customerId}
-          className={FIELD_MW}
-        >
-          <div className="flex gap-2">
-            <div className="flex-1 min-w-0">
-              <Select
-                id="customerId"
-                name="customerId"
-                required
-                value={customerId}
-                onChange={onCustomerChange}
-                error={fe.customerId}
-                clearable
-                clearLabel="Үйлчлүүлэгчийг цэвэрлэх"
-                searchable
-                searchPlaceholder="Нэр, утас, регистрээр хайх…"
-                placeholder={
-                  customers.length === 0 ? "— Бүртгэгдээгүй —" : "— Сонгох —"
-                }
-                options={customers.map((c) => {
-                  const d = customerDisplay(c);
-                  return {
-                    value: c.id,
-                    label: d.primary,
-                    hint: customerPickerHint(c, d.isOrganization ? d.secondary : null),
-                  };
-                })}
-              />
-            </div>
-            <SquareAddButton
-              active={showCustomerForm}
-              onClick={() => setShowCustomerForm((v) => !v)}
-              data-stop-row-click
-              title="Шинэ үйлчлүүлэгч нэмэх"
-            />
-          </div>
-        </Field>
-
-        <Field
           label="Машин"
           required
           htmlFor="vehicleId"
@@ -594,7 +618,7 @@ export function OrderForm({
                       : undefined
           }
           error={vehicleRegisterError ?? fe.vehicleId}
-          className={FIELD_MW}
+          className={fieldMw}
         >
           <div className="flex gap-2">
             <div className="flex-1 min-w-0">
@@ -610,6 +634,7 @@ export function OrderForm({
                 error={vehicleRegisterError ?? fe.vehicleId}
                 clearable
                 clearLabel="Машиныг цэвэрлэх"
+                wrapSelected
                 searchable
                 searchPlaceholder="Дугаар, марк, эзэмшигчээр хайх…"
                 disabled={vehicleRegistering}
@@ -643,6 +668,48 @@ export function OrderForm({
               />
             </div>
           </div>
+        </Field>
+
+        <Field
+          label="Үйлчлүүлэгч"
+          required
+          htmlFor="customerId"
+          hint={customerRegistering ? "Үйлчлүүлэгч бүртгэж байна…" : customerHint}
+          error={customerRegisterError ?? fe.customerId}
+          className={fieldMw}
+        >
+              <Select
+                id="customerId"
+                name="customerId"
+                required
+                value={customerId}
+                onChange={(v) => {
+                  setCustomerRegisterError(null);
+                  onCustomerChange(v);
+                }}
+                error={customerRegisterError ?? fe.customerId}
+                disabled={customerRegistering}
+                creatable={{
+                  getLabel: customerCreateRow,
+                  onCreate: (q) => void registerCustomer(q),
+                }}
+                clearable
+                clearLabel="Үйлчлүүлэгчийг цэвэрлэх"
+                wrapSelected
+                searchable
+                searchPlaceholder="Нэр, утас, регистрээр хайх…"
+                placeholder={
+                  customers.length === 0 ? "— Бүртгэгдээгүй —" : "— Сонгох —"
+                }
+                options={customers.map((c) => {
+                  const d = customerDisplay(c);
+                  return {
+                    value: c.id,
+                    label: d.primary,
+                    hint: customerPickerHint(c, d.isOrganization ? d.secondary : null),
+                  };
+                })}
+              />
         </Field>
         {vehicleDetails ? (
           // Дугаараар мэдээлэл олдоогүй — марк/загвараа оруулаад бүртгэнэ.
@@ -690,7 +757,7 @@ export function OrderForm({
           htmlFor="scheduledAt"
           hint="заавал биш"
           error={fe.scheduledAt}
-          className={FIELD_MW}
+          className={fieldMw}
         >
           <DatePicker
             key={autoScheduledAt ? "seeded" : "empty"}
@@ -704,7 +771,7 @@ export function OrderForm({
           />
         </Field>
 
-        {!isEdit && !appointmentId ? (
+        {!isEdit && !appointmentId && !simplified ? (
           // Цаг захиалгаас үүссэн бол хугацааны тооцоолол автоматаар удамшина
           // (D-041 маягийн зарчим) — энд зөвхөн шууд ирсэн (walk-in) захиалгад
           // л ойролцоо хугацааг гараар оруулна. Хадгалагдсаны дараа энэ утга
@@ -714,7 +781,7 @@ export function OrderForm({
             htmlFor="durationHours"
             hint="заавал биш"
             error={fe.durationMinutes}
-            className={FIELD_MW}
+            className={fieldMw}
           >
             <DurationHmInput
               defaultMinutes={null}
@@ -726,7 +793,7 @@ export function OrderForm({
           </Field>
         ) : null}
 
-        <Field label="Тэмдэглэл" htmlFor="notes" hint="заавал биш" error={fe.notes} className="sm:col-span-2 lg:col-span-3 xl:col-span-2 xl:col-start-1 max-w-2xl self-start">
+        <Field label="Тэмдэглэл" htmlFor="notes" hint="заавал биш" error={fe.notes} className={notesClass}>
           <textarea
             id="notes"
             name="notes"
@@ -740,7 +807,7 @@ export function OrderForm({
 
         {/* Хүлээн авах: xl дээр үйлчлүүлэгч/машины доор 2 мөр эзэлнэ (зүүн талд
             огноо/хугацаа, тэмдэглэл); бусад өргөнд талбаруудын доор бүтэн мөр. */}
-        {!isEdit ? (
+        {!isEdit && !simplified ? (
           <IntakeSection
             error={fe.intake}
             onBusyChange={setIntakeBusy}
@@ -791,17 +858,11 @@ export function OrderForm({
         ) : null}
       </fieldset>
 
-      <CreateCustomerModal
-        open={showCustomerForm}
-        onClose={() => setShowCustomerForm(false)}
-        onCreated={onCustomerCreated}
-      />
-
       <div className="flex gap-2 pt-3 border-t border-[var(--oc-line2)]">
         <BtnLink href={backHref} variant="ghost">
           ← Буцах
         </BtnLink>
-        <Btn type="submit" disabled={pending || intakeBusy || vehicleRegistering}>
+        <Btn type="submit" disabled={pending || intakeBusy || vehicleRegistering || customerRegistering}>
           {pending ? "..." : isEdit ? "Хадгалах" : "Засварын хуудас үүсгэх"}
         </Btn>
       </div>

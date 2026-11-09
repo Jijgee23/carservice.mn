@@ -50,6 +50,7 @@ export async function POST(req: Request) {
   try {
     const { code } = await issueOtp({
       email: auth.user.email,
+      phone: auth.user.phone,
       type: "ACCOUNT_CLOSE",
       userId: auth.user.id,
       userAgent,

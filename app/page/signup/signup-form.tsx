@@ -9,19 +9,16 @@ import {
   FormError,
   SubmitButton,
 } from "@/app/_components/landing-ops-ui";
-import { Select } from "@/app/_components/select";
 import {
   type AddressData,
   type AddressValue,
-  AddressSelect,
   resolveAddressFromGeocode,
 } from "@/app/dashboard/branches/address-select";
-import { DEFAULT_OPEN_DAYS, WEEK_DAYS, type Weekday } from "@/lib/branches";
-import { normalizeRegno, regnoKind, splitPersonName } from "@/lib/tenant-regno";
+import { normalizeRegno, regnoKind } from "@/lib/tenant-regno";
 
 const REGNO_FETCH_DEBOUNCE_MS = 400;
 
-// Leaflet/Google Maps нь window-д шууд хандах учир SSR хийгдэхгүйгээр lazy load
+// Google Maps нь window-д шууд хандах учир SSR хийгдэхгүйгээр lazy load
 const LocationPicker = dynamic(
   () =>
     import("@/app/dashboard/branches/location-picker").then(
@@ -30,18 +27,12 @@ const LocationPicker = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-64 w-full rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] flex items-center justify-center text-sm text-[var(--oc-muted3)]">
+      <div className="h-72 w-full rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] flex items-center justify-center text-sm text-[var(--oc-muted3)]">
         Газрын зураг ачаалж байна...
       </div>
     ),
   },
 );
-
-// Ажиллах цагийн сонголт — 30 минутын алхамтай, 24 цагийн формат.
-const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
-  const v = `${String(Math.floor(i / 2)).padStart(2, "0")}:${i % 2 === 0 ? "00" : "30"}`;
-  return { value: v, label: v };
-});
 
 /* Серверээс ирсэн талбарын алдааг алхамд нь буцаахад ашиглана. */
 const STEP1_FIELDS = [
@@ -49,19 +40,12 @@ const STEP1_FIELDS = [
   "orgName",
   "orgEmail",
   "phone1",
-  "phone2",
-  "logo",
+  "ownerName",
+  "password",
+  "passwordConfirm",
 ];
-const BRANCH_FIELDS = [
-  "city",
-  "district",
-  "khoroo",
-  "address",
-  "latitude",
-  "longitude",
-  "openTime",
-  "closeTime",
-];
+
+const EMPTY_ADDR: AddressValue = { city: "", district: "", khoroo: "" };
 
 export function SignUpForm({
   addressData,
@@ -78,51 +62,35 @@ export function SignUpForm({
   );
 
   const fe = state?.fieldErrors ?? {};
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [logoName, setLogoName] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const awaitingOtp = Boolean(state?.awaitingOtp);
 
-  /* 3 алхамт форм: 1) Байгууллага 2) Үндсэн салбар 3) Админ. Өмнөх алхмуудын
-     талбарууд дараагийн алхамд DOM-д хэвээр (hidden) байдаг тул submit үед
-     бүгд хамт илгээгдэнэ. */
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  /* 2 алхамт форм: 1) Мэдээлэл (байгууллага/хувь хүн + нэвтрэх) 2) Байршил +
+     баталгаажуулалт. 1-р алхмын талбарууд 2-т DOM-д хэвээр (hidden) байдаг тул
+     submit үед бүгд хамт илгээгдэнэ. Лого, 2-р утас, ажлын цагийг бүртгэлд
+     асуухгүй — Тохиргооноос дараа нь засна. */
+  const [step, setStep] = useState<1 | 2>(1);
   const [stepError, setStepError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
-  // --- Алхам 2: Үндсэн салбар ---
-  const [addr, setAddr] = useState<AddressValue>({
-    city: "Улаанбаатар",
-    district: "",
-    khoroo: "",
-  });
-  const [branchAddress, setBranchAddress] = useState("");
-  const [showMap, setShowMap] = useState(false);
+  // --- Алхам 2: Байршил (заавал) — хаягийг цэгийн reverse geocode-оос авна ---
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
-  const [openTime, setOpenTime] = useState("09:00");
-  const [closeTime, setCloseTime] = useState("18:00");
-  const [workDays, setWorkDays] = useState<Set<Weekday>>(
-    new Set(DEFAULT_OPEN_DAYS),
-  );
+  const [addr, setAddr] = useState<AddressValue>(EMPTY_ADDR);
+  const [formattedAddress, setFormattedAddress] = useState("");
 
   function onMapPick(coords: { lat: number; lng: number } | null) {
+    // Шинэ цэгийн хаяг geocode-оор дахин ирнэ — хуучныг үлдээхгүй.
+    setAddr(EMPTY_ADDR);
+    setFormattedAddress("");
     if (!coords) {
       setLat(null);
       setLng(null);
       return;
     }
+    setStepError(null);
     setLat(Number(coords.lat.toFixed(6)));
     setLng(Number(coords.lng.toFixed(6)));
-  }
-
-  function toggleWorkDay(value: Weekday) {
-    setWorkDays((prev) => {
-      const next = new Set(prev);
-      if (next.has(value)) next.delete(value);
-      else next.add(value);
-      return next;
-    });
   }
 
   // Нууц үгийг controlled — render-бүрт state-д хадгалагдана. Server-руу values
@@ -132,7 +100,7 @@ export function SignUpForm({
   const passwordsMatch =
     password.length >= 8 && password === passwordConfirm;
 
-  // Регистр / Байгууллагын нэр — controlled (lookup-аар бөглөж болохын тулд)
+  // Регистр / Засварын нэр — controlled (lookup-аар бөглөж болохын тулд)
   const [registerNumber, setRegisterNumber] = useState(
     state?.values?.registerNumber ?? "",
   );
@@ -143,8 +111,6 @@ export function SignUpForm({
   // Регистрийн хэлбэрээс: 7 оронтой тоо = байгууллага, ҮҮ99993333 = хувь хүн
   const regKind = regnoKind(registerNumber);
   const isPerson = regKind === "person";
-  // Хувь хүний админыг 1-р алхмын утас/имэйлээр үүсгэнэ — алхам 3-т харуулахад.
-  const [personContact, setPersonContact] = useState({ phone: "", email: "" });
   // Хэрэглэгч нэрийг гараар өөрчилсөн бол дахин дарж бичихгүй
   const userEditedNameRef = useRef(false);
   const lastFetchedRegnoRef = useRef<string | null>(null);
@@ -157,22 +123,20 @@ export function SignUpForm({
       lastValuesRef.current = state.values;
       setRegisterNumber(state.values.registerNumber);
       setOrgName(state.values.orgName);
-      // Сэргээгдсэн нэрийг хэрэглэгч засаагүй гэж тооцох уу гэдэг асуудал —
-      // нэр сонгогдсон бол lookup-аар дарагдахгүйн тулд userEdited гэж тэмдэглэе.
+      // Сэргээгдсэн нэрийг lookup-аар дарагдахгүйн тулд userEdited гэж тэмдэглэнэ.
       if (state.values.orgName) {
         userEditedNameRef.current = true;
       }
     }
   }, [state]);
 
-  // Серверийн хариу алхмыг тодорхойлно: алдаатай талбар харгалзах алхамд
-  // буцааж, OTP хүлээж байвал (эсвэл өөр алдаагүй) алхам 3 дээр байлгана.
+  // Серверийн хариу алхмыг тодорхойлно: 1-р алхмын талбарт алдаа байвал тийш
+  // буцааж, бусад үед (байршил, OTP) алхам 2 дээр байлгана.
   useEffect(() => {
     if (!state) return;
     const errKeys = Object.keys(state.fieldErrors ?? {});
     if (errKeys.some((k) => STEP1_FIELDS.includes(k))) setStep(1);
-    else if (errKeys.some((k) => BRANCH_FIELDS.includes(k))) setStep(2);
-    else if (state.awaitingOtp || errKeys.length > 0) setStep(3);
+    else if (state.awaitingOtp || errKeys.length > 0) setStep(2);
   }, [state]);
 
   useEffect(() => {
@@ -226,57 +190,61 @@ export function SignUpForm({
     };
   }, [registerNumber]);
 
-  function onLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) {
-      setLogoPreview(null);
-      setLogoName(null);
-      return;
-    }
-    setLogoPreview(URL.createObjectURL(file));
-    setLogoName(file.name);
-  }
-
-  /* Алхам 1 → 2: гол талбаруудыг client дээр шалгана (форм noValidate тул). */
+  /* Алхам 1 → 2: талбаруудыг client дээр шалгана (форм noValidate тул). */
   function goNext() {
     const f = formRef.current;
     const val = (n: string) =>
       (f?.elements.namedItem(n) as HTMLInputElement | null)?.value.trim() ?? "";
     const missing: string[] = [];
     if (!regKind) missing.push("регистр (7 орон эсвэл ҮҮ99993333)");
-    if (!orgName.trim()) missing.push(isPerson ? "овог нэр" : "байгууллагын нэр");
-    if (!/^\S+@\S+\.\S+$/.test(val("orgEmail"))) missing.push("имэйл");
-    if (!/^\d{8}$/.test(val("phone1"))) missing.push("утас 1");
+    if (!orgName.trim()) missing.push(isPerson ? "овог нэр" : "засварын нэр");
+    const email = val("orgEmail");
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) missing.push("имэйл (буруу хэлбэр)");
+    if (!/^\d{8}$/.test(val("phone1"))) missing.push("утас (8 орон)");
+    if (!isPerson) {
+      if (!val("ownerName")) missing.push("эзний овог нэр");
+    }
+    if (password.length < 8) missing.push("нууц үг (8+ тэмдэгт)");
+    else if (password !== passwordConfirm) missing.push("нууц үг давтан (таарахгүй байна)");
     if (missing.length) {
       setStepError(`Дараах талбарыг зөв бөглөнө үү: ${missing.join(", ")}.`);
       return;
     }
     setStepError(null);
-    setPersonContact({ phone: val("phone1"), email: val("orgEmail") });
     setStep(2);
   }
 
-  /* Алхам 2 → 3: үндсэн салбарын заавал талбарууд бөглөгдсөн эсэхийг шалгана. */
-  function goToAdminStep() {
-    const missing: string[] = [];
-    if (!addr.city) missing.push("хот / аймаг");
-    if (!addr.district) missing.push("дүүрэг / сум");
-    if (!branchAddress.trim()) missing.push("дэлгэрэнгүй хаяг");
-    if (missing.length) {
-      setStepError(`Дараах талбарыг бөглөнө үү: ${missing.join(", ")}.`);
+  /* Enter дарахад: 1-р алхамд дараагийн алхам руу, 2-р алхамд байршилгүй бол
+     илгээхгүй. */
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    if (step === 1) {
+      e.preventDefault();
+      goNext();
       return;
     }
-    setStepError(null);
-    setStep(3);
+    if (lat == null || lng == null) {
+      e.preventDefault();
+      setStepError("Газрын зураг дээр байршлаа тэмдэглэнэ үү.");
+    }
   }
 
+  const locationError = stepError ?? fe.latitude ?? fe.longitude;
+
   return (
-    <form ref={formRef} action={formAction} className="flex flex-col gap-6" noValidate>
+    <form
+      ref={formRef}
+      action={formAction}
+      onSubmit={onSubmit}
+      // Талбар засахад хуучин алхмын алдааг арилгана.
+      onChange={() => stepError && setStepError(null)}
+      className="flex flex-col gap-6"
+      noValidate
+    >
       {/* Алхамын заагч */}
-      <div className="flex items-center gap-2 sm:gap-3" aria-label={`Алхам ${step}/3`}>
+      <div className="flex items-center gap-2 sm:gap-3" aria-label={`Алхам ${step}/2`}>
         <StepLabel
           num={1}
-          label="Байгууллага"
+          label="Мэдээлэл"
           active={step === 1}
           done={step > 1}
           onClick={step > 1 && !awaitingOtp ? () => setStep(1) : undefined}
@@ -284,21 +252,7 @@ export function SignUpForm({
         <div
           className={`h-px flex-1 ${step > 1 ? "bg-[var(--oc-accent)]/50" : "bg-[var(--oc-line)]"}`}
         />
-        <StepLabel
-          num={2}
-          label="Салбар"
-          active={step === 2}
-          done={step > 2}
-          onClick={step > 2 && !awaitingOtp ? () => setStep(2) : undefined}
-        />
-        <div
-          className={`h-px flex-1 ${step > 2 ? "bg-[var(--oc-accent)]/50" : "bg-[var(--oc-line)]"}`}
-        />
-        <StepLabel
-          num={3}
-          label={isPerson ? "Нууц үг" : "Админ хэрэглэгч"}
-          active={step === 3}
-        />
+        <StepLabel num={2} label="Байршил" active={step === 2} />
       </div>
 
       {awaitingOtp && state?.message ? (
@@ -309,12 +263,12 @@ export function SignUpForm({
         <FormError message={state?.message} />
       )}
 
-      {/* --- Алхам 1: Байгууллагын мэдээлэл (алхам 2-т hidden, DOM-д хэвээр) --- */}
+      {/* --- Алхам 1: Мэдээлэл (алхам 2-т hidden, DOM-д хэвээр) --- */}
       <section className={step === 1 ? "flex flex-col gap-5" : "hidden"}>
         <div>
           <h2 className="font-semibold text-[var(--oc-ink)]">{isPerson ? "Хувь хүний мэдээлэл" : "Байгууллагын мэдээлэл"}</h2>
           <p className="mt-1 text-xs text-[var(--oc-muted3)]">
-            carservice-д бүртгүүлэх үндсэн мэдээлэл. Байгууллага болон хувь хүн бүртгүүлж болно.
+            Байгууллага болон хувь хүн бүртгүүлж болно. Утасны дугаараараа (имэйл оруулбал имэйлээр ч) нэвтэрнэ.
           </p>
         </div>
 
@@ -381,7 +335,7 @@ export function SignUpForm({
           </Field>
 
           <Field
-            label={isPerson ? "Овог нэр" : "Байгууллагын нэр"}
+            label={isPerson ? "Овог нэр" : "Засварын нэр"}
             htmlFor="orgName"
             error={fe.orgName}
           >
@@ -400,354 +354,62 @@ export function SignUpForm({
             />
           </Field>
 
-          <Field
-            label={isPerson ? "Имэйл" : "Байгууллагын имэйл"}
-            htmlFor="orgEmail"
-            error={fe.orgEmail}
-          >
+          {!isPerson ? (
+            <Field
+              label="Эзний овог нэр"
+              htmlFor="ownerName"
+              error={fe.ownerName}
+              className="sm:col-span-2"
+            >
+              <input
+                key={`ownerName-${state?.values?.ownerName ?? ""}`}
+                id="ownerName"
+                name="ownerName"
+                type="text"
+                required
+                autoComplete="name"
+                defaultValue={state?.values?.ownerName ?? ""}
+                className={`auth-input ${fe.ownerName ? "border-red-500/50" : ""}`}
+                placeholder="Жишээ: Батын Болд"
+              />
+            </Field>
+          ) : null}
+
+          <Field label="Имэйл" htmlFor="orgEmail" hint="Заавал биш" error={fe.orgEmail}>
             <input
               key={`orgEmail-${state?.values?.orgEmail ?? ""}`}
               id="orgEmail"
               name="orgEmail"
               type="email"
-              required
+              autoComplete="email"
               defaultValue={state?.values?.orgEmail ?? ""}
               className={`auth-input ${fe.orgEmail ? "border-red-500/50" : ""}`}
               placeholder="garage@gmail.com"
             />
           </Field>
 
-          <div className="grid gap-5 grid-cols-2">
-            <Field label="Утас 1" htmlFor="phone1" error={fe.phone1}>
-              <input
-                key={`phone1-${state?.values?.phone1 ?? ""}`}
-                id="phone1"
-                name="phone1"
-                type="tel"
-                inputMode="numeric"
-                maxLength={8}
-                pattern="[0-9]{8}"
-                required
-                defaultValue={state?.values?.phone1 ?? ""}
-                className={`auth-input ${fe.phone1 ? "border-red-500/50" : ""}`}
-                placeholder="99000000"
-              />
-            </Field>
-            <Field
-              label="Утас 2"
-              htmlFor="phone2"
-              hint="заавал биш"
-              error={fe.phone2}
-            >
-              <input
-                key={`phone2-${state?.values?.phone2 ?? ""}`}
-                id="phone2"
-                name="phone2"
-                type="tel"
-                inputMode="numeric"
-                maxLength={8}
-                pattern="[0-9]{8}"
-                defaultValue={state?.values?.phone2 ?? ""}
-                className="auth-input"
-                placeholder="88000000"
-              />
-            </Field>
-          </div>
-        </div>
-
-        <Field
-          label="Лого"
-          htmlFor="logo"
-          hint="PNG, JPG, WEBP · хамгийн ихдээ 2MB · заавал биш"
-          error={fe.logo}
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 shrink-0 rounded-[10px] overflow-hidden flex items-center justify-center border border-[var(--oc-line)] bg-[var(--oc-panel)]">
-              {logoPreview ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={logoPreview}
-                  alt="Лого preview"
-                  className="w-full h-full object-contain"
-                />
-              ) : (
-                <span className="text-[10px] text-[var(--oc-muted3)]">Урьдчилан</span>
-              )}
-            </div>
-            <div className="min-w-0">
-              {/* Native file input-ийг нууж, custom товчоор сонгуулна */}
-              <input
-                id="logo"
-                name="logo"
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={onLogoChange}
-                className="sr-only"
-              />
-              <label
-                htmlFor="logo"
-                className="inline-flex items-center gap-2 cursor-pointer rounded-lg border border-[var(--oc-line)] bg-[var(--oc-panel)] hover:bg-[var(--oc-panel2)] px-4 py-2.5 text-sm font-medium text-[var(--oc-ink2)] transition-colors"
-              >
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="17 8 12 3 7 8" />
-                  <line x1="12" y1="3" x2="12" y2="15" />
-                </svg>
-                Зураг сонгох
-              </label>
-              <div className="mt-1.5 text-xs text-[var(--oc-muted3)] truncate">
-                {logoName ?? "Файл сонгоогүй"}
-              </div>
-            </div>
-          </div>
-        </Field>
-
-        {stepError ? (
-          <p className="text-sm text-red-400 light:text-red-600">{stepError}</p>
-        ) : null}
-
-        <button
-          type="button"
-          onClick={goNext}
-          className="mt-1 w-full bg-[var(--oc-accent)] hover:bg-[var(--oc-accent-hi)] transition-colors py-3 rounded-lg font-semibold text-sm text-[var(--oc-on-accent)]"
-        >
-          Үргэлжлүүлэх →
-        </button>
-      </section>
-
-      {/* --- Алхам 2: Үндсэн салбар (алхам 1/3-т hidden, DOM-д хэвээр) --- */}
-      <section className={step === 2 ? "flex flex-col gap-5" : "hidden"}>
-        <div>
-          <h2 className="font-semibold text-[var(--oc-ink)]">Үндсэн салбарын мэдээлэл</h2>
-          <p className="mt-1 text-xs text-[var(--oc-muted3)]">
-            Үйлчлүүлэгчид харагдах хаяг, ажиллах цаг. Дараа нь Тохиргоо
-            хэсгээс нэмж салбар үүсгэж, засварлаж болно.
-          </p>
-        </div>
-
-        <div className="relative z-30 grid gap-5 sm:grid-cols-3">
-          <AddressSelect
-            data={addressData}
-            value={addr}
-            onChange={setAddr}
-            errors={{ city: fe.city, district: fe.district, khoroo: fe.khoroo }}
-          />
-        </div>
-
-        <Field
-          label="Дэлгэрэнгүй хаяг"
-          htmlFor="address"
-          hint="Гудамж, тоот, байрны нэр"
-          error={fe.address}
-        >
-          <input
-            id="address"
-            name="address"
-            type="text"
-            required
-            value={branchAddress}
-            onChange={(e) => setBranchAddress(e.target.value)}
-            className={`auth-input ${fe.address ? "border-red-500/50" : ""}`}
-            placeholder="Энхтайвны өргөн чөлөө 25, AAA байр"
-          />
-        </Field>
-
-        <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={() => setShowMap((v) => !v)}
-            className="self-start inline-flex items-center gap-1.5 text-xs font-medium text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)] transition-colors"
+          <Field
+            label="Утас"
+            htmlFor="phone1"
+            hint="Баталгаажуулах код энэ дугаарт ирнэ"
+            error={fe.phone1}
           >
-            📍{" "}
-            {showMap
-              ? "Газрын зураг нуух"
-              : "Газрын зураг дээр байршил тэмдэглэх (заавал биш)"}
-          </button>
-          {showMap ? (
-            <LocationPicker
-              latitude={lat}
-              longitude={lng}
-              onChange={onMapPick}
-              onGeocode={(parts) => {
-                const resolved = resolveAddressFromGeocode(addressData, parts);
-                if (resolved.city) setAddr(resolved);
-              }}
-              apiKey={mapApiKey}
-              mapId={mapId}
+            <input
+              key={`phone1-${state?.values?.phone1 ?? ""}`}
+              id="phone1"
+              name="phone1"
+              type="tel"
+              inputMode="numeric"
+              maxLength={8}
+              pattern="[0-9]{8}"
+              required
+              autoComplete="tel"
+              defaultValue={state?.values?.phone1 ?? ""}
+              className={`auth-input ${fe.phone1 ? "border-red-500/50" : ""}`}
+              placeholder="99000000"
             />
-          ) : null}
-          <input type="hidden" name="latitude" value={lat ?? ""} />
-          <input type="hidden" name="longitude" value={lng ?? ""} />
-        </div>
+          </Field>
 
-        <div className="pt-4 border-t border-[var(--oc-line)]">
-          <h3 className="font-plex-mono text-[11px] font-medium text-[var(--oc-muted3)] uppercase tracking-[0.1em] mb-3">
-            Ажиллах цаг
-          </h3>
-          <div className="grid gap-5 grid-cols-2 sm:max-w-xs">
-            <Field label="Эхлэх цаг" htmlFor="openTime" error={fe.openTime}>
-              <Select
-                id="openTime"
-                name="openTime"
-                value={openTime}
-                onChange={setOpenTime}
-                error={fe.openTime}
-                options={TIME_OPTIONS}
-              />
-            </Field>
-            <Field label="Дуусах цаг" htmlFor="closeTime" error={fe.closeTime}>
-              <Select
-                id="closeTime"
-                name="closeTime"
-                value={closeTime}
-                onChange={setCloseTime}
-                error={fe.closeTime}
-                options={TIME_OPTIONS}
-              />
-            </Field>
-          </div>
-
-          <div className="mt-4">
-            <label className="text-sm font-medium text-[var(--oc-ink2)] mb-2 block">
-              Ажиллах өдрүүд
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {WEEK_DAYS.map((d) => {
-                const active = workDays.has(d.value);
-                return (
-                  <label
-                    key={d.value}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-colors text-sm ${
-                      active
-                        ? "bg-[var(--oc-accent)]/15 text-[var(--oc-ink2)] border-[var(--oc-accent)]/40"
-                        : "bg-[var(--oc-panel)] text-[var(--oc-muted)] border-[var(--oc-line)] hover:bg-[var(--oc-panel2)]"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      name="workDays"
-                      value={d.value}
-                      checked={active}
-                      onChange={() => toggleWorkDay(d.value)}
-                      className="sr-only"
-                    />
-                    {d.long}
-                  </label>
-                );
-              })}
-            </div>
-            <p className="text-xs text-[var(--oc-muted3)] mt-2">
-              Юу ч сонгохгүй бол анхдагч Даваа–Баасан ашиглагдана.
-            </p>
-          </div>
-        </div>
-
-        {stepError ? (
-          <p className="text-sm text-red-400 light:text-red-600">{stepError}</p>
-        ) : null}
-
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setStep(1)}
-            className="flex-1 bg-[var(--oc-panel)] hover:bg-[var(--oc-panel2)] border border-[var(--oc-line)] transition-colors py-3 rounded-lg font-medium text-sm text-[var(--oc-ink2)]"
-          >
-            ← Буцах
-          </button>
-          <button
-            type="button"
-            onClick={goToAdminStep}
-            className="flex-[2] bg-[var(--oc-accent)] hover:bg-[var(--oc-accent-hi)] transition-colors py-3 rounded-lg font-semibold text-sm text-[var(--oc-on-accent)]"
-          >
-            Үргэлжлүүлэх →
-          </button>
-        </div>
-      </section>
-
-      {/* --- Алхам 3: Админ хэрэглэгч --- */}
-      <section className={step === 3 ? "flex flex-col gap-5" : "hidden"}>
-        <div>
-          <h2 className="font-semibold text-[var(--oc-ink)]">Админ хэрэглэгч</h2>
-          <p className="mt-1 text-xs text-[var(--oc-muted3)]">
-            {isPerson
-              ? "Таны мэдээллээр админ (OWNER) хэрэглэгч үүснэ — зөвхөн нууц үгээ тохируулна уу."
-              : "Системийн анхны админ (OWNER) хэрэглэгч."}
-          </p>
-        </div>
-
-        {isPerson ? (
-          <PersonAdminSummary
-            name={splitPersonName(orgName)}
-            phone={personContact.phone || state?.values?.phone1 || ""}
-            email={personContact.email || state?.values?.orgEmail || ""}
-          />
-        ) : (
-          <div className="grid gap-5 sm:grid-cols-2">
-            <Field label="Овог" htmlFor="lastName" error={fe.lastName}>
-              <input
-                key={`lastName-${state?.values?.lastName ?? ""}`}
-                id="lastName"
-                name="lastName"
-                type="text"
-                required
-                defaultValue={state?.values?.lastName ?? ""}
-                className={`auth-input ${fe.lastName ? "border-red-500/50" : ""}`}
-                placeholder="Батын"
-              />
-            </Field>
-            <Field label="Нэр" htmlFor="firstName" error={fe.firstName}>
-              <input
-                key={`firstName-${state?.values?.firstName ?? ""}`}
-                id="firstName"
-                name="firstName"
-                type="text"
-                required
-                defaultValue={state?.values?.firstName ?? ""}
-                className={`auth-input ${fe.firstName ? "border-red-500/50" : ""}`}
-                placeholder="Болд"
-              />
-            </Field>
-            <Field label="Утас" htmlFor="adminPhone" error={fe.adminPhone}>
-              <input
-                key={`adminPhone-${state?.values?.adminPhone ?? ""}`}
-                id="adminPhone"
-                name="adminPhone"
-                type="tel"
-                inputMode="numeric"
-                maxLength={8}
-                pattern="[0-9]{8}"
-                required
-                defaultValue={state?.values?.adminPhone ?? ""}
-                className={`auth-input ${fe.adminPhone ? "border-red-500/50" : ""}`}
-                placeholder="99000000"
-              />
-            </Field>
-            <Field label="Имэйл" htmlFor="adminEmail" error={fe.adminEmail}>
-              <input
-                key={`adminEmail-${state?.values?.adminEmail ?? ""}`}
-                id="adminEmail"
-                name="adminEmail"
-                type="email"
-                required
-                defaultValue={state?.values?.adminEmail ?? ""}
-                className={`auth-input ${fe.adminEmail ? "border-red-500/50" : ""}`}
-                placeholder="bold@gmail.com"
-              />
-            </Field>
-          </div>
-        )}
-
-        <div className="grid gap-5 sm:grid-cols-2">
           <Field
             label="Нууц үг"
             htmlFor="password"
@@ -814,6 +476,60 @@ export function SignUpForm({
           </Field>
         </div>
 
+        {step === 1 && stepError ? (
+          <p className="text-sm text-red-400 light:text-red-600">{stepError}</p>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={goNext}
+          className="mt-1 w-full bg-[var(--oc-accent)] hover:bg-[var(--oc-accent-hi)] transition-colors py-3 rounded-lg font-semibold text-sm text-[var(--oc-on-accent)]"
+        >
+          Үргэлжлүүлэх →
+        </button>
+      </section>
+
+      {/* --- Алхам 2: Байршил + баталгаажуулалт --- */}
+      <section className={step === 2 ? "flex flex-col gap-5" : "hidden"}>
+        <div>
+          <h2 className="font-semibold text-[var(--oc-ink)]">Байршил</h2>
+          <p className="mt-1 text-xs text-[var(--oc-muted3)]">
+            {isPerson ? "Үйлчилгээ үзүүлэх байршлаа" : "Засварын газраа"} газрын
+            зураг дээр товшиж тэмдэглэнэ үү. Үйлчлүүлэгчид эндээс таныг олно.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          {step === 2 ? (
+            <LocationPicker
+              latitude={lat}
+              longitude={lng}
+              onChange={onMapPick}
+              onGeocode={(parts) => {
+                setAddr(resolveAddressFromGeocode(addressData, parts));
+                setFormattedAddress(parts.formatted ?? "");
+              }}
+              apiKey={mapApiKey}
+              mapId={mapId}
+            />
+          ) : null}
+          <input type="hidden" name="latitude" value={lat ?? ""} />
+          <input type="hidden" name="longitude" value={lng ?? ""} />
+          <input type="hidden" name="city" value={addr.city} />
+          <input type="hidden" name="district" value={addr.district} />
+          <input type="hidden" name="khoroo" value={addr.khoroo} />
+          <input type="hidden" name="address" value={formattedAddress} />
+          {locationError ? (
+            <p className="text-sm text-red-400 light:text-red-600">{locationError}</p>
+          ) : lat != null && (formattedAddress || addr.city) ? (
+            <p className="text-xs text-[var(--oc-muted3)]">
+              <span className="text-[var(--oc-ok)]">✓</span>{" "}
+              {formattedAddress ||
+                [addr.city, addr.district, addr.khoroo].filter(Boolean).join(", ")}
+            </p>
+          ) : null}
+        </div>
+
         {awaitingOtp ? (
           <div className="flex flex-col gap-3 pt-5 border-t border-[var(--oc-line)]">
             <div>
@@ -851,10 +567,10 @@ export function SignUpForm({
         {!awaitingOtp ? (
           <button
             type="button"
-            onClick={() => setStep(2)}
+            onClick={() => setStep(1)}
             className="text-xs text-[var(--oc-muted3)] hover:text-[var(--oc-accent-hi)] transition-colors"
           >
-            ← Салбарын мэдээлэл рүү буцах
+            ← Мэдээлэл рүү буцах
           </button>
         ) : null}
 
@@ -867,7 +583,8 @@ export function SignUpForm({
           <a className="text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)]" href="/privacy">
             Нууцлалын бодлого
           </a>
-          -г хүлээн зөвшөөрнө.
+          -г хүлээн зөвшөөрнө. Лого, ажлын цаг зэргийг дараа нь Тохиргооноос
+          оруулна.
         </p>
       </section>
     </form>
@@ -915,34 +632,6 @@ function StepLabel({
     );
   }
   return content;
-}
-
-/* Хувь хүн: админ хэрэглэгч 1-р алхмын мэдээллээр үүснэ — зөвхөн харуулна. */
-function PersonAdminSummary({
-  name,
-  phone,
-  email,
-}: {
-  name: { lastName: string; firstName: string };
-  phone: string;
-  email: string;
-}) {
-  const rows: [string, string][] = [
-    ["Овог", name.lastName || "—"],
-    ["Нэр", name.firstName || "—"],
-    ["Утас", phone || "—"],
-    ["Имэйл", email || "—"],
-  ];
-  return (
-    <dl className="grid gap-x-5 gap-y-3 sm:grid-cols-2 rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] px-4 py-3 text-sm">
-      {rows.map(([k, v]) => (
-        <div key={k} className="flex flex-col gap-0.5 min-w-0">
-          <dt className="text-xs text-[var(--oc-muted3)]">{k}</dt>
-          <dd className="text-[var(--oc-ink)] truncate">{v}</dd>
-        </div>
-      ))}
-    </dl>
-  );
 }
 
 function CheckIcon() {

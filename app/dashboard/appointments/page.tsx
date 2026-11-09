@@ -15,6 +15,7 @@ import {
 } from "@/lib/appointments";
 import { appointmentSearchWhere } from "@/lib/appointments/appointment-list-query";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { canAssignOrders } from "@/lib/auth/order-access";
 import { canCreate, canEdit, canView, workingBranchScopeId } from "@/lib/auth/roles";
 import {
@@ -107,6 +108,8 @@ export default async function AppointmentsPage({
   const highlightId = highlight?.trim() || null;
 
   const scopeBranchId = workingBranchScopeId(user);
+  // Энгийн багц (ганц салбар): салбарын баганыг нууна.
+  const { hideBranches } = await getBranchVisibility(user);
 
   const where: Prisma.AppointmentWhereInput = {
     tenantId: user.tenantId,
@@ -281,7 +284,7 @@ export default async function AppointmentsPage({
             placeholder="Бүх төлөв"
             options={STATUS_OPTIONS}
           />
-          {!scopeBranchId && branches.length > 1 ? (
+          {!scopeBranchId && !hideBranches && branches.length > 1 ? (
             <FilterSelect
               paramName="branchId"
               placeholder="Бүх салбар"
@@ -307,6 +310,7 @@ export default async function AppointmentsPage({
           categories={categories}
           canBulkEdit={canRespond}
           canRespond={canRespond}
+          hideBranches={hideBranches}
         />
       )}
 

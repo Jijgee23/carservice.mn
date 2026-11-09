@@ -8,10 +8,14 @@ import { prisma } from "@/lib/prisma";
 import { BranchForm, BRANCH_FORM_ID } from "../branch-form";
 import { getAddressData } from "@/lib/address";
 import type { Weekday } from "@/lib/branches";
+import { getBranchVisibility, SINGLE_BRANCH_LABEL } from "@/lib/branch-visibility";
 
-export const metadata = {
-  title: "Салбар засах",
-};
+// Энгийн багц (ганц салбар): гарчигт «салбар» гэж бичихгүй.
+export async function generateMetadata() {
+  const user = await requireUser();
+  const { hideBranches } = await getBranchVisibility(user);
+  return { title: hideBranches ? SINGLE_BRANCH_LABEL : "Салбар засах" };
+}
 
 function isValidTime(s: string | null): s is string {
   return Boolean(s) && /^([01]\d|2[0-3]):[0-5]\d$/.test(s as string);
@@ -35,12 +39,17 @@ function dailyCapacity(
 
 export default async function EditBranchPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ scheduleWarning?: string }>;
 }) {
   const user = await requireUser();
   const auditInPlan = (await getEnabledModules(user.tenant.plan)).has("enable_audit");
-  if (!canEdit(user, "branches")) redirect("/dashboard/branches");
+  const { hideBranches } = await getBranchVisibility(user);
+  // Энгийн багцад жагсаалт энэ хуудас руу буцаадаг тул эрхгүй үед dashboard руу.
+  if (!canEdit(user, "branches")) redirect(hideBranches ? "/dashboard" : "/dashboard/branches");
+  const { scheduleWarning } = await searchParams;
 
   const { id } = await params;
   const [branch, addressData, tagOptions, lastAudit] = await Promise.all([
@@ -103,24 +112,31 @@ export default async function EditBranchPage({
 
   return (
     <div className="p-4 sm:p-6">
-      <nav className="flex items-center gap-1.5 text-[13px] text-[var(--oc-muted3)] mb-3">
-        <Link href="/dashboard/branches" className="hover:text-[var(--oc-accent-hi)] transition-colors">
-          Салбарууд
-        </Link>
-        <span>/</span>
-        <span className="text-[var(--oc-muted)]">{branch.name}</span>
-      </nav>
+      {/* Энгийн багц (ганц салбар): салбарын жагсаалт руу буцах замыг нууна. */}
+      {hideBranches ? null : (
+        <nav className="flex items-center gap-1.5 text-[13px] text-[var(--oc-muted3)] mb-3">
+          <Link href="/dashboard/branches" className="hover:text-[var(--oc-accent-hi)] transition-colors">
+            Салбарууд
+          </Link>
+          <span>/</span>
+          <span className="text-[var(--oc-muted)]">{branch.name}</span>
+        </nav>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">{branch.name}</h1>
-          <span className="font-plex-mono text-[11px] px-2 py-1 rounded bg-[var(--oc-panel2)] border border-[var(--oc-line)] text-[var(--oc-muted3)]">
-            ID {shortId}
-          </span>
-          <Chip tone={branch.isActive ? "ok" : "neutral"}>
-            {branch.isActive ? "Ажиллаж байна" : "Идэвхгүй"}
-          </Chip>
-        </div>
+        {hideBranches ? (
+          <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">{SINGLE_BRANCH_LABEL}</h1>
+        ) : (
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">{branch.name}</h1>
+            <span className="font-plex-mono text-[11px] px-2 py-1 rounded bg-[var(--oc-panel2)] border border-[var(--oc-line)] text-[var(--oc-muted3)]">
+              ID {shortId}
+            </span>
+            <Chip tone={branch.isActive ? "ok" : "neutral"}>
+              {branch.isActive ? "Ажиллаж байна" : "Идэвхгүй"}
+            </Chip>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           {branch.openTime && branch.closeTime ? (
             <Chip tone="neutral" bordered className="tabular-nums">
@@ -130,14 +146,23 @@ export default async function EditBranchPage({
           <BtnLink href={`/dashboard/branches/${branch.id}/schedule`} variant="ghost">
             Нарийвчилсан хуваарь
           </BtnLink>
-          <BtnLink href="/dashboard/branches" variant="ghost">
-            ← Буцах
-          </BtnLink>
+          {hideBranches ? null : (
+            <BtnLink href="/dashboard/branches" variant="ghost">
+              ← Буцах
+            </BtnLink>
+          )}
           <Btn type="submit" form={BRANCH_FORM_ID}>
             Хадгалах
           </Btn>
         </div>
       </div>
+
+      {/* Энгийн багц: хадгалсны дараах хуваарийн анхааруулга (жагсаалтаас дамжуулсан). */}
+      {hideBranches && scheduleWarning && Number(scheduleWarning) > 0 ? (
+        <div className="mb-5 rounded-[10px] border border-[var(--oc-warn)]/30 bg-[var(--oc-warn)]/10 px-4 py-3 text-sm text-[var(--oc-warn)]">
+          Хуваарь хадгалагдлаа. {scheduleWarning} захиалгын үргэлжлэх хугацааг шинэ хаах цагт тааруулан богиносголоо.
+        </div>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px] items-start">
         <BranchForm
@@ -145,6 +170,7 @@ export default async function EditBranchPage({
           mapApiKey={process.env.GOOGLE_MAP_API_KEY ?? ""}
           mapId={process.env.GOOGLE_MAP_ID ?? ""}
           tagOptions={tagOptions}
+          hideBranches={hideBranches}
           initial={{
             id: branch.id,
             name: branch.name,

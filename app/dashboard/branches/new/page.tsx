@@ -7,6 +7,7 @@ import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
 import { BranchForm, BRANCH_FORM_ID } from "../branch-form";
 import { getAddressData } from "@/lib/address";
 import { prisma } from "@/lib/prisma";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 
 export const metadata = {
   title: "Шинэ салбар",
@@ -14,6 +15,8 @@ export const metadata = {
 
 export default async function NewBranchPage() {
   const user = await requireUser();
+  // Энгийн багц (ганц салбар): салбар нэмэх хуудас байхгүй.
+  if ((await getBranchVisibility(user)).hideBranches) notFound();
   // «Олон салбар» модуль багцад ороогүй бол хоёр дахь салбар нэмэх хуудас байхгүй.
   if (
     !(await getEnabledModules(user.tenant.plan)).has("enable_multi_branch") &&

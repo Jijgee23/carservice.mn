@@ -6,6 +6,7 @@ import { FilterSelect, ResetFilters } from "@/app/_components/list-filters";
 import { EmptyState } from "@/app/_components/page-header";
 import { Pagination } from "@/app/_components/pagination";
 import { requireUser } from "@/lib/auth";
+import { getBranchVisibility } from "@/lib/branch-visibility";
 import { hasPermission } from "@/lib/auth/roles";
 import { effectiveBranchScope } from "@/lib/cash/scope";
 import { bookingDateKey } from "@/lib/booking-time";
@@ -64,6 +65,8 @@ function fmtDiff(difference: string | null): string {
 export default async function CashSessionsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const user = await requireUser();
   if (!hasPermission(user, "cash.manage")) redirect("/dashboard");
+  // Энгийн багц (ганц салбар): салбарын нэр, шүүлтүүр, баганыг нууна.
+  const { hideBranches } = await getBranchVisibility(user);
   const sp = await searchParams;
 
   // Same range contract as the other cash lists: explicit dateFrom/dateTo or range=all; otherwise default to this month.
@@ -116,7 +119,7 @@ export default async function CashSessionsPage({ searchParams }: { searchParams:
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">Кассын ээлж</h1>
         <p className="text-sm text-[var(--oc-muted3)] mt-1">
-          Салбар бүрт нэг удаад нэг ээлж нээлттэй байна. Ээлж нээлттэй үед бүртгэсэн бүх төлбөрийн аргын (бэлэн, карт, данс, QPay) бичлэг тухайн ээлжид хамаарна.
+          {hideBranches ? "Нэг удаад нэг ээлж нээлттэй байна." : "Салбар бүрт нэг удаад нэг ээлж нээлттэй байна."} Ээлж нээлттэй үед бүртгэсэн бүх төлбөрийн аргын (бэлэн, карт, данс, QPay) бичлэг тухайн ээлжид хамаарна.
         </p>
       </div>
 
@@ -128,13 +131,13 @@ export default async function CashSessionsPage({ searchParams }: { searchParams:
             <div key={b.id} className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 flex flex-col gap-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-[var(--oc-ink)]">{b.name}</span>
+                  <span className="font-semibold text-[var(--oc-ink)]">{hideBranches ? "Одоогийн ээлж" : b.name}</span>
                   {s ? <Chip tone="ok">Нээлттэй</Chip> : <Chip tone="neutral">Хаалттай</Chip>}
                 </div>
                 {s ? (
                   <CloseSessionButton sessionId={s.id} />
                 ) : (
-                  <OpenSessionButton branchId={b.id} branchName={b.name} />
+                  <OpenSessionButton branchId={b.id} branchName={hideBranches ? null : b.name} />
                 )}
               </div>
               {s ? (
@@ -219,7 +222,7 @@ export default async function CashSessionsPage({ searchParams }: { searchParams:
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <CashRangeFilter />
-        {scopeBranchId ? null : (
+        {scopeBranchId || hideBranches ? null : (
           <FilterSelect paramName="branchId" placeholder="Бүх салбар" options={branches.map((b) => ({ value: b.id, label: b.name }))} />
         )}
         <FilterSelect
@@ -255,7 +258,9 @@ export default async function CashSessionsPage({ searchParams }: { searchParams:
             <table className="w-full min-w-[1100px]">
               <thead>
                 <tr className="border-b border-[var(--oc-line)]">
-                  {["Нээсэн", "Хаасан", "Салбар", "Нээсэн ажилтан", "Эхний", "Нийт орлого", "Хүлээгдэх", "Бодит", "Зөрүү", "Төлөв", ""].map((h, i) => (
+                  {["Нээсэн", "Хаасан", "Салбар", "Нээсэн ажилтан", "Эхний", "Нийт орлого", "Хүлээгдэх", "Бодит", "Зөрүү", "Төлөв", ""]
+                    .filter((h) => !(hideBranches && h === "Салбар"))
+                    .map((h, i) => (
                     <th
                       key={`${h}-${i}`}
                       className={`font-plex-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--oc-muted3)] font-medium px-4 py-3 ${
@@ -276,7 +281,7 @@ export default async function CashSessionsPage({ searchParams }: { searchParams:
                       <td className="px-4 py-3 font-plex-mono text-xs text-[var(--oc-muted2)] whitespace-nowrap">
                         {r.closedAt ? fmtDateTime(r.closedAt) : "—"}
                       </td>
-                      <td className="px-4 py-3 text-sm text-[var(--oc-ink2)]">{r.branch.name}</td>
+                      {hideBranches ? null : <td className="px-4 py-3 text-sm text-[var(--oc-ink2)]">{r.branch.name}</td>}
                       <td className="px-4 py-3 text-sm text-[var(--oc-ink2)]">{r.openedBy?.name ?? "—"}</td>
                       <td className="px-4 py-3 text-right text-sm tabular-nums text-[var(--oc-ink)] whitespace-nowrap">{formatTugrik(r.openingCash)}</td>
                       <td className="px-4 py-3 text-right text-sm tabular-nums text-[var(--oc-ink)] whitespace-nowrap">{formatTugrik(totalIncome(r))}</td>
