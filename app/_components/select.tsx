@@ -71,6 +71,7 @@ export function Select({
   clearLabel = "Цэвэрлэх",
   searchable = false,
   searchPlaceholder = "Бичиж хайх…",
+  creatable,
 }: {
   name: string;
   options: SelectOption[];
@@ -91,6 +92,12 @@ export function Select({
    * үед товч дээр үсэг бичихэд ч нээгдэж хайлт эхэлнэ. */
   searchable?: boolean;
   searchPlaceholder?: string;
+  /** Хайлтын текстээр шинэ бичлэг үүсгэх мөр (жагсаалтын төгсгөлд). `getLabel`
+   * null буцаавал мөр гарахгүй. Сонгоход жагсаалт хаагдаж `onCreate(query)`. */
+  creatable?: {
+    getLabel: (query: string) => { label: string; hint?: string } | null;
+    onCreate: (query: string) => void;
+  };
 }) {
   const isControlled = controlledValue !== undefined;
   const [internalValue, setInternalValue] = useState<string>(
@@ -118,6 +125,15 @@ export function Select({
     : options;
   const visible = filtered.slice(0, MAX_VISIBLE_OPTIONS);
   const hiddenCount = filtered.length - visible.length;
+  const createRow = searching && creatable && query.trim() ? creatable.getLabel(query) : null;
+  // ↑/↓ навигацийн мөрийн тоо: шүүгдсэн сонголтууд + (байвал) үүсгэх мөр.
+  const rowCount = visible.length + (createRow ? 1 : 0);
+
+  function create() {
+    const q = query;
+    closeList();
+    creatable?.onCreate(q);
+  }
 
   function updatePosition() {
     const el = btnRef.current;
@@ -169,8 +185,8 @@ export function Select({
   }
 
   function moveActive(delta: number) {
-    if (visible.length === 0) return;
-    setActiveIndex((i) => (i + delta + visible.length) % visible.length);
+    if (rowCount === 0) return;
+    setActiveIndex((i) => (i + delta + rowCount) % rowCount);
   }
 
   // Хаалттай товч дээр үсэг бичвэл нээж, тэр үсгээр хайлт эхлүүлнэ.
@@ -197,6 +213,7 @@ export function Select({
       e.preventDefault();
       const option = visible[activeIndex];
       if (option) pick(option.value);
+      else if (createRow && activeIndex === visible.length) create();
     } else if (e.key === "Escape") {
       e.preventDefault();
       closeList();
@@ -427,7 +444,18 @@ export function Select({
                     onClick={() => pick(o.value)}
                   />
                 ))}
-                {searching && filtered.length === 0 ? (
+                {createRow ? (
+                  <SelectOptionRow
+                    index={visible.length}
+                    label={createRow.label}
+                    hint={createRow.hint}
+                    active={false}
+                    accent
+                    highlighted={activeIndex === visible.length}
+                    onClick={create}
+                  />
+                ) : null}
+                {searching && filtered.length === 0 && !createRow ? (
                   <div style={{ padding: "0.6rem 0.75rem", fontSize: "0.8125rem", color: "var(--placeholder)" }}>
                     Олдсонгүй
                   </div>
@@ -452,6 +480,7 @@ function SelectOptionRow({
   active,
   onClick,
   muted = false,
+  accent = false,
   index,
   highlighted = false,
 }: {
@@ -460,6 +489,8 @@ function SelectOptionRow({
   active: boolean;
   onClick: () => void;
   muted?: boolean;
+  /** «+ үүсгэх» мөр — accent өнгөтэй. */
+  accent?: boolean;
   index?: number;
   highlighted?: boolean;
 }) {
@@ -489,7 +520,7 @@ function SelectOptionRow({
           : hover || highlighted
             ? "var(--hover-bg)"
             : "transparent",
-        color: active
+        color: active || accent
           ? "var(--accent-strong)"
           : muted
             ? "var(--placeholder)"

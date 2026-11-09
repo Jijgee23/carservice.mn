@@ -148,11 +148,51 @@ test("STRUCTURAL: registerPlateVehicle reuses an ownerless tenant link before cr
 
 test("STRUCTURAL: linkPlateCustomer never overwrites an existing owner", () => {
   const src = readSource("../lib/orders/plate-intake-server.ts");
-  const fn = src.slice(src.indexOf("export async function linkPlateCustomer("), src.indexOf("export async function resolvePlateIntake("));
-  assert.match(fn, /link\.customerId && link\.customerId !== customerId/);
-  assert.match(fn, /ensureTenantVehicle\(tx,/);
-  assert.match(fn, /ownerId !== customerId/);
-  assert.match(fn, /logAudit\(/);
+  const attach = src.slice(src.indexOf("export async function attachOwnerToUnownedVehicle("), src.indexOf("export async function linkPlateCustomer("));
+  assert.match(attach, /if \(link\.customerId\) return link\.customerId;/);
+  assert.match(attach, /ensureTenantVehicle\(tx,/);
+  assert.match(attach, /logAudit\(/);
+  const link = src.slice(src.indexOf("export async function linkPlateCustomer("), src.indexOf("export async function resolvePlateIntake("));
+  assert.match(link, /attachOwnerToUnownedVehicle\(actor, input\.vehicleId, customerId\)/);
+  assert.match(link, /owner !== customerId/);
+});
+
+// --- List mode: «+ дугаар бүртгэх» in the vehicle search -------------------
+
+test("STRUCTURAL: Select offers a create row from the search query (click + Enter)", () => {
+  const src = readSource("../app/_components/select.tsx");
+  assert.match(src, /creatable\?: \{/);
+  assert.match(src, /creatable\.getLabel\(query\)/);
+  assert.match(src, /else if \(createRow && activeIndex === visible\.length\) create\(\);/);
+  assert.match(src, /filtered\.length === 0 && !createRow/);
+});
+
+test("STRUCTURAL: order form has no vehicle add button/modal; vehicle search registers by plate", () => {
+  const src = readSource("../app/dashboard/orders/order-form.tsx");
+  assert.doesNotMatch(src, /CreateVehicleModal/);
+  assert.doesNotMatch(src, /showVehicleForm/);
+  assert.match(src, /getLabel: vehicleCreateRow/);
+  assert.match(src, /registerVehicleFromPlateAction\(/);
+  // Only standard plates that are not already in the list get the create row.
+  const fn = src.slice(src.indexOf("function vehicleCreateRow("), src.indexOf("async function registerVehicle("));
+  assert.match(fn, /isStandardPlate\(plate\)/);
+  assert.match(fn, /filteredVehicles\.some\(\(v\) => normalizePlate\(v\.plate\) === plate\)/);
+});
+
+test("STRUCTURAL: registerVehicleFromPlate asks for details when nothing is found, owner optional", () => {
+  const src = readSource("../lib/orders/plate-intake-server.ts");
+  const fn = src.slice(src.indexOf("export async function registerVehicleFromPlate("), src.indexOf("export class PlateIntakeError"));
+  assert.match(fn, /needsDetails: true/);
+  assert.match(fn, /fetchPlateVehicleData\(actor, plate\)/);
+  assert.match(fn, /if \(!input\.customerId\) \{\s*\n\s*const unowned = await registerPlateVehicle\(/);
+});
+
+test("STRUCTURAL: createOrderAction attaches the picked customer to an ownerless vehicle before creating", () => {
+  const src = readSource("../app/_actions/orders.ts");
+  const body = src.slice(src.indexOf("export async function createOrderAction("));
+  const attachIdx = body.indexOf("attachOwnerToUnownedVehicle(user, data.vehicleId, data.customerId)");
+  const commandIdx = body.indexOf("createOrderCommand({");
+  assert.ok(attachIdx !== -1 && attachIdx < commandIdx);
 });
 
 test("STRUCTURAL: step actions require order-create and vehicle-create rights", () => {

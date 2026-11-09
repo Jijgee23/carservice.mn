@@ -65,7 +65,10 @@ import {
 } from "@/lib/orders/plate-intake";
 import {
   PlateIntakeError,
+  type RegisteredListVehicle,
+  attachOwnerToUnownedVehicle,
   linkPlateCustomer,
+  registerVehicleFromPlate,
   lookupPlateForOrder,
   registerPlateVehicle,
   resolvePlateIntake,
@@ -441,6 +444,17 @@ export async function createOrderAction(
     revalidatePath("/dashboard/vehicles");
   }
 
+  // Жагсаалтын хайлтаас эзэмшигчгүй бүртгэсэн машиныг сонгосон үйлчлүүлэгчид
+  // холбоно (эзэнтэй машинд хөндөхгүй — тааралгүй бол команд өөрөө татгалзана).
+  if (!plateIntake && !plateLink && data.vehicleId && data.customerId) {
+    try {
+      await attachOwnerToUnownedVehicle(user, data.vehicleId, data.customerId);
+    } catch (e) {
+      logUnexpectedOrderActionError("create", e);
+      return { ok: false, message: "Серверийн алдаа гарлаа. Дахин оролдоно уу." };
+    }
+  }
+
   try {
     const created = await createOrderCommand({
       tenantId: user.tenantId,
@@ -524,6 +538,44 @@ export async function registerPlateVehicleAction(input: {
   try {
     const value = await registerPlateVehicle(user, input);
     revalidatePath("/dashboard/vehicles");
+    return { ok: true, value };
+  } catch (e) {
+    if (e instanceof PlateIntakeError) {
+      return { ok: false, message: e.message, fieldErrors: e.fieldErrors };
+    }
+    logUnexpectedOrderActionError("create", e);
+    return { ok: false, message: "Машин бүртгэхэд алдаа гарлаа." };
+  }
+}
+
+/**
+ * Машины жагсаалтын хайлтаас «+ дугаар бүртгэх» (машин нэмэх товчийн оронд).
+ * `needsDetails` бол марк/загварыг гараар асууж дахин дуудна.
+ */
+export async function registerVehicleFromPlateAction(input: {
+  plate: string;
+  customerId: string | null;
+  make?: string;
+  model?: string;
+}): Promise<PlateStepResult<{ vehicle: RegisteredListVehicle } | { needsDetails: true; reason: string }>> {
+  let user;
+  try {
+    user = await authorize("create");
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
+  }
+  if (!canCreate(user, "vehicles")) {
+    return { ok: false, message: "Танд машин бүртгэх эрх байхгүй." };
+  }
+  if (!input.plate.trim()) return { ok: false, message: "Улсын дугаар шаардлагатай." };
+  try {
+    const value = await registerVehicleFromPlate(user, {
+      plate: input.plate,
+      customerId: input.customerId || null,
+      make: input.make,
+      model: input.model,
+    });
+    if ("vehicle" in value) revalidatePath("/dashboard/vehicles");
     return { ok: true, value };
   } catch (e) {
     if (e instanceof PlateIntakeError) {

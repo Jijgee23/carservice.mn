@@ -127,7 +127,17 @@ export async function lookupPlateForOrder(
     return { kind: "tenant", plate, matches, unowned: unownedRow ? toUnowned(unownedRow) : null };
   }
 
-  // 2) Өөр газар бүртгэлтэй (глобал) — техник шинж ижил тул HUR дуудахгүй.
+  return fetchPlateVehicleData(actor, plate);
+}
+
+/**
+ * Tenant-ээс гадуурх машины техник мэдээлэл: глобал Vehicle (HUR дуудахгүй) →
+ * HUR (/api/hur/lookup-тай ижил "hur:<userId>" bucket/хязгаар).
+ */
+async function fetchPlateVehicleData(
+  actor: Actor,
+  plate: string,
+): Promise<Extract<PlateLookupResult, { kind: "known" | "notFound" }>> {
   const existing = await prisma.vehicle.findFirst({
     where: { plate },
     orderBy: { updatedAt: "desc" },
@@ -136,8 +146,6 @@ export async function lookupPlateForOrder(
   if (existing) {
     return { kind: "known", plate, source: "global", vehicle: toLookupVehicle(existing) };
   }
-
-  // 3) HUR — /api/hur/lookup-тай ижил "hur:<userId>" bucket/хязгаар.
   if (!consumeRateLimit(`hur:${actor.id}`, { limit: 20, windowMs: 60_000 }).ok) {
     return { kind: "notFound", plate, reason: "rate_limited" };
   }
@@ -148,6 +156,91 @@ export async function lookupPlateForOrder(
   } catch (e) {
     console.error("[plate-intake] HUR lookup", e);
     return { kind: "notFound", plate, reason: "hur_error" };
+  }
+}
+
+export type RegisteredListVehicle = {
+  id: string;
+  plate: string;
+  vin: string | null;
+  make: string;
+  model: string;
+  customerId: string | null;
+  isPostpaid: boolean;
+};
+
+/**
+ * Машины жагсаалтын хайлтаас «+ дугаар бүртгэх»: мэдээллийг дугаараар татаж
+ * (эсвэл гараар өгсөн марк/загвараар) бүртгэнэ. Үйлчлүүлэгч сонгосон бол түүний
+ * машин болж, үгүй бол эзэмшигчгүй бүртгэгдэнэ (хуудас үүсгэхэд холбогдоно).
+ * Мэдээлэл олдоогүй, гараар ч өгөөгүй бол `needsDetails`.
+ */
+export async function registerVehicleFromPlate(
+  actor: Actor,
+  input: { plate: string; customerId: string | null; make?: string; model?: string },
+): Promise<{ vehicle: RegisteredListVehicle } | { needsDetails: true; reason: string }> {
+  const plate = normalizePlate(input.plate);
+  const make = input.make?.trim() ?? "";
+  const model = input.model?.trim() ?? "";
+
+  let vehicle: PlateLookupVehicle;
+  let fromLookup = false;
+  if (make && model) {
+    vehicle = { make, model, year: null, vin: null, fuelType: null, wheelPosition: null };
+  } else {
+    const data = await fetchPlateVehicleData(actor, plate);
+    if (data.kind === "notFound" || !data.vehicle.make || !data.vehicle.model) {
+      return {
+        needsDetails: true,
+        reason: data.kind === "notFound" && data.reason === "rate_limited"
+          ? "Хэт олон хайлт хийлээ — маркаа гараар оруулна уу."
+          : "Машины мэдээлэл олдсонгүй — марк, загвараа оруулна уу.",
+      };
+    }
+    vehicle = data.vehicle;
+    fromLookup = true;
+  }
+
+  if (!input.customerId) {
+    const unowned = await registerPlateVehicle(actor, { plate, vehicle, fromLookup });
+    return {
+      vehicle: {
+        id: unowned.vehicleId,
+        plate,
+        vin: unowned.vehicle.vin,
+        make: unowned.vehicle.make,
+        model: unowned.vehicle.model,
+        customerId: null,
+        isPostpaid: unowned.isPostpaid,
+      },
+    };
+  }
+
+  try {
+    const record = await createVehicleCommand({
+      actor,
+      data: { plate, ...vehicle, customerId: input.customerId },
+      rejectDuplicate: false,
+      requireCustomerId: true,
+      resolveOwnerRegnum: fromLookup,
+      auditSummarySuffix: INTAKE_AUDIT_SUFFIX,
+    });
+    return {
+      vehicle: {
+        id: record.id,
+        plate: record.plate,
+        vin: record.vin,
+        make: record.make,
+        model: record.model,
+        customerId: record.customerId,
+        isPostpaid: record.isPostpaid,
+      },
+    };
+  } catch (e) {
+    if (e instanceof VehicleCommandError) {
+      throw new PlateIntakeError(e.message, pickFields(e.fieldErrors, VEHICLE_FIELD_MAP));
+    }
+    throw e;
   }
 }
 
@@ -248,6 +341,50 @@ async function findOrCreateCustomerByPhone(
 }
 
 /**
+ * Энэ tenant-ийн эзэмшигчгүй машинд үйлчлүүлэгчийг эзэмшигч болгон холбоно
+ * (audit-тай). Аль хэдийн эзэнтэй бол хөндөхгүй. Буцаах = link-ийн БОДИТ эзэн
+ * (машин олдохгүй бол null) — дуудагч өөрийн customerId-тай жишнэ.
+ */
+export async function attachOwnerToUnownedVehicle(
+  actor: Actor,
+  vehicleId: string,
+  customerId: string,
+): Promise<string | null> {
+  const link = await prisma.tenantVehicle.findUnique({
+    where: { tenantId_vehicleId: { tenantId: actor.tenantId, vehicleId } },
+    select: { id: true, customerId: true },
+  });
+  if (!link) return null;
+  if (link.customerId) return link.customerId;
+  const customer = await prisma.customer.findFirst({
+    where: { id: customerId, tenantId: actor.tenantId },
+    select: { id: true },
+  });
+  if (!customer) return null;
+
+  return prisma.$transaction(async (tx) => {
+    const res = await ensureTenantVehicle(tx, { tenantId: actor.tenantId, vehicleId, customerId });
+    // Зэрэгцээ хүсэлт өөр эзэн тавьчихсан бол audit бичихгүй.
+    if (res.customerId === customerId) {
+      await logAudit(
+        {
+          tenantId: actor.tenantId,
+          userId: actor.id,
+          entity: "Vehicle",
+          entityId: link.id,
+          action: "UPDATE",
+          summary: `Эзэмшигч холбосон ${INTAKE_AUDIT_SUFFIX}`,
+          before: { customerId: null },
+          after: { customerId },
+        },
+        tx,
+      );
+    }
+    return res.customerId;
+  });
+}
+
+/**
  * Эзэнгүй бүртгэгдсэн машинд утсаар үйлчлүүлэгчийг (олж/үүсгээд) эзэмшигч
  * болгон холбоно. Машин аль хэдийн тэр үйлчлүүлэгчийнх бол юу ч өөрчлөхгүй;
  * өөр хүнийх бол татгалзана (эзэмшигчийг дарж бичихгүй — per-owner загвар).
@@ -264,42 +401,11 @@ export async function linkPlateCustomer(
   if (!link) throw new PlateIntakeError("Машин олдсонгүй.", { plate: "Машин олдсонгүй." });
 
   const customerId = await findOrCreateCustomerByPhone(actor, input, options.canCreateCustomer);
-  if (link.customerId && link.customerId !== customerId) {
+  const owner = await attachOwnerToUnownedVehicle(actor, input.vehicleId, customerId);
+  if (owner !== customerId) {
     throw new PlateIntakeError("Энэ машин өөр үйлчлүүлэгчид бүртгэлтэй байна.", {
       phone: "Энэ машин өөр үйлчлүүлэгчид бүртгэлтэй байна.",
     });
-  }
-
-  if (!link.customerId) {
-    const ownerId = await prisma.$transaction(async (tx) => {
-      const res = await ensureTenantVehicle(tx, {
-        tenantId: actor.tenantId,
-        vehicleId: input.vehicleId,
-        customerId,
-      });
-      if (res.customerId === customerId) {
-        await logAudit(
-          {
-            tenantId: actor.tenantId,
-            userId: actor.id,
-            entity: "Vehicle",
-            entityId: link.id,
-            action: "UPDATE",
-            summary: `Эзэмшигч холбосон ${INTAKE_AUDIT_SUFFIX}`,
-            before: { customerId: null },
-            after: { customerId },
-          },
-          tx,
-        );
-      }
-      return res.customerId;
-    });
-    // Зэрэгцээ хүсэлт өөр эзэн тавьчихсан бол.
-    if (ownerId !== customerId) {
-      throw new PlateIntakeError("Энэ машин өөр үйлчлүүлэгчид бүртгэлтэй байна.", {
-        phone: "Энэ машин өөр үйлчлүүлэгчид бүртгэлтэй байна.",
-      });
-    }
   }
 
   const row: LinkRow | null = await prisma.tenantVehicle.findUnique({

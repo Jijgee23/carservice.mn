@@ -24,16 +24,13 @@ import { Btn, BtnLink, SquareAddButton } from "@/app/_components/landing-ops-ui"
 import { Select } from "@/app/_components/select";
 import { SchedulePreviewGrid } from "@/app/_components/schedule-preview-grid";
 import { customerDisplay, customerPickerHint } from "@/lib/customers";
-import { plateLabel } from "@/lib/vehicle-plate";
+import { isStandardPlate, normalizePlate, plateLabel } from "@/lib/vehicle-plate";
+import { registerVehicleFromPlateAction } from "@/app/_actions/orders";
 import { DurationHmInput } from "@/app/dashboard/services/duration-input";
 import {
   CreateCustomerModal,
   type CreatedCustomer,
 } from "@/app/dashboard/customers/create-customer-modal";
-import {
-  CreateVehicleModal,
-  type CreatedVehicle,
-} from "@/app/dashboard/vehicles/create-vehicle-modal";
 
 import {
   INTERNAL_BLOCKED_BY_PAYMENTS_HINT,
@@ -158,7 +155,15 @@ export function OrderForm({
   const internalBlocked = isEdit && hasPaidPayment && paymentMode !== "internal";
 
   const [showCustomerForm, setShowCustomerForm] = useState(false);
-  const [showVehicleForm, setShowVehicleForm] = useState(false);
+  // Машины хайлтаас «+ дугаар бүртгэх» (машин нэмэх товчийн оронд).
+  // Эзэмшигчгүй бүртгэсэн машиныг жагсаалтад харуулж, хуудас үүсгэхэд
+  // сонгосон үйлчлүүлэгчид холбоно (createOrderAction).
+  const [unownedNewIds, setUnownedNewIds] = useState<string[]>([]);
+  const [vehicleRegistering, setVehicleRegistering] = useState(false);
+  const [vehicleRegisterError, setVehicleRegisterError] = useState<string | null>(null);
+  const [vehicleDetails, setVehicleDetails] = useState<{ plate: string; reason: string } | null>(null);
+  const [detailMake, setDetailMake] = useState("");
+  const [detailModel, setDetailModel] = useState("");
 
   // Шинэ хуудас: анхдагчаар «Улсын дугаар» горим (дугаар бичээд л болно).
   // Засах, цаг захиалгаас эсвэл машин урьдчилан сонгогдож ирсэн бол
@@ -316,13 +321,64 @@ export function OrderForm({
   );
 
   // Үйлчлүүлэгч сонгоогүй бол эзэмшигчтэй бүх машиныг харуулна (машинаа түрүүлж
-  // сонгож болно — эзэмшигч нь автоматаар бичигдэнэ). Эзэмшигчгүй машиныг
-  // харуулахгүй — сервер захиалгыг эзэмшигчтэй нь тааруулахыг шаарддаг.
-  // Үйлчлүүлэгч сонгосон бол зөвхөн түүний машинууд.
+  // сонгож болно — эзэмшигч нь автоматаар бичигдэнэ). Эзэмшигчгүй машинаас
+  // зөвхөн энд дөнгөж бүртгэснийг харуулна — хуудас үүсгэхэд сонгосон
+  // үйлчлүүлэгчид холбогдоно. Үйлчлүүлэгч сонгосон бол зөвхөн түүний машинууд.
   const filteredVehicles = useMemo(() => {
-    if (!customerId) return vehicles.filter((v) => v.customerId);
-    return vehicles.filter((v) => v.customerId === customerId);
-  }, [vehicles, customerId]);
+    const isNewUnowned = (v: Vehicle) => !v.customerId && unownedNewIds.includes(v.id);
+    if (!customerId) return vehicles.filter((v) => v.customerId || isNewUnowned(v));
+    return vehicles.filter((v) => v.customerId === customerId || isNewUnowned(v));
+  }, [vehicles, customerId, unownedNewIds]);
+
+  // Хайлтад зөв хэлбэрийн, жагсаалтад байхгүй дугаар → «+ бүртгэх» мөр.
+  function vehicleCreateRow(query: string) {
+    const plate = normalizePlate(query);
+    if (!isStandardPlate(plate)) return null;
+    // Засах үед эзэмшигчгүй машин холбогдохгүй (updateOrderAction) — үйлчлүүлэгч заавал.
+    if (isEdit && !customerId) return null;
+    if (filteredVehicles.some((v) => normalizePlate(v.plate) === plate)) return null;
+    const owner = customerById.get(customerId);
+    return {
+      label: `+ ${plate} — машин бүртгэх`,
+      hint: owner
+        ? `Мэдээллийг дугаараар татаж ${customerDisplay(owner).primary}-д бүртгэнэ`
+        : "Мэдээллийг дугаараар татаж бүртгэнэ (үйлчлүүлэгчийг дараа нь сонгоно)",
+    };
+  }
+
+  async function registerVehicle(plate: string, details?: { make: string; model: string }) {
+    setVehicleRegistering(true);
+    setVehicleRegisterError(null);
+    clearFieldError("vehicleId");
+    try {
+      const res = await registerVehicleFromPlateAction({
+        plate,
+        customerId: customerId || null,
+        ...details,
+      });
+      if (!res.ok) {
+        setVehicleRegisterError(Object.values(res.fieldErrors ?? {})[0] ?? res.message);
+        return;
+      }
+      if ("needsDetails" in res.value) {
+        setVehicleDetails({ plate, reason: res.value.reason });
+        return;
+      }
+      const v = res.value.vehicle;
+      setVehicles((prev) => [v, ...prev.filter((x) => x.id !== v.id)]);
+      if (!v.customerId) setUnownedNewIds((prev) => (prev.includes(v.id) ? prev : [...prev, v.id]));
+      else if (v.customerId !== customerId) setCustomerId(v.customerId);
+      setVehicleId(v.id);
+      setPaymentMode((cur) => modeAfterVehicleChange(cur, v));
+      setVehicleDetails(null);
+      setDetailMake("");
+      setDetailModel("");
+    } catch {
+      setVehicleRegisterError("Машин бүртгэхэд алдаа гарлаа.");
+    } finally {
+      setVehicleRegistering(false);
+    }
+  }
 
   // Хариуцах мастерыг сонгосон салбараар шүүнэ: тухайн салбарын ажилтан +
   // салбар харьяалалгүй (branchId=null, ж: эзэн/удирдлага бүх салбарыг
@@ -389,7 +445,8 @@ export function OrderForm({
     }
     clearFieldError("customerId");
     const veh = vehicles.find((x) => x.id === vehicleId);
-    if (veh && veh.customerId === v) return;
+    // Эзэмшигчгүй (дөнгөж бүртгэсэн) машин — шинэ үйлчлүүлэгчид холбогдоно.
+    if (veh && (veh.customerId === v || !veh.customerId)) return;
     const owned = vehicles.filter((x) => x.customerId === v);
     pickVehicle(owned.length === 1 ? owned[0].id : "");
   }
@@ -409,14 +466,6 @@ export function OrderForm({
     clearFieldError("customerId");
     setVehicleId("");
     setShowCustomerForm(false);
-  }
-
-  function onVehicleCreated(v: CreatedVehicle) {
-    setVehicles((prev) => [v, ...prev]);
-    setVehicleId(v.id);
-    setPaymentMode((cur) => modeAfterVehicleChange(cur, v));
-    clearFieldError("vehicleId");
-    setShowVehicleForm(false);
   }
 
   return (
@@ -582,15 +631,19 @@ export function OrderForm({
           required
           htmlFor="vehicleId"
           hint={
-            selectedVehicleIsOrg
-              ? "Эзэмшигч: байгууллага"
-              : !customerId
-              ? "Сонгоход эзэмшигч автоматаар бичигдэнэ"
-              : filteredVehicles.length === 0
-                ? "Машин бүртгэгдээгүй"
-                : undefined
+            vehicleRegistering
+              ? "Машин бүртгэж байна…"
+              : selectedVehicle && !selectedVehicle.customerId
+                ? "Эзэмшигчгүй — сонгосон үйлчлүүлэгчид холбогдоно"
+                : selectedVehicleIsOrg
+                  ? "Эзэмшигч: байгууллага"
+                  : !customerId
+                    ? "Сонгоход эзэмшигч автоматаар бичигдэнэ"
+                    : filteredVehicles.length === 0
+                      ? "Машин бүртгэгдээгүй — дугаараа бичиж бүртгэнэ"
+                      : undefined
           }
-          error={fe.vehicleId}
+          error={vehicleRegisterError ?? fe.vehicleId}
           className={FIELD_MW}
         >
           <div className="flex gap-2">
@@ -600,12 +653,20 @@ export function OrderForm({
                 name="vehicleId"
                 required
                 value={vehicleId}
-                onChange={onVehicleChange}
-                error={fe.vehicleId}
+                onChange={(v) => {
+                  setVehicleRegisterError(null);
+                  onVehicleChange(v);
+                }}
+                error={vehicleRegisterError ?? fe.vehicleId}
                 clearable
                 clearLabel="Машиныг цэвэрлэх"
                 searchable
                 searchPlaceholder="Дугаар, марк, эзэмшигчээр хайх…"
+                disabled={vehicleRegistering}
+                creatable={{
+                  getLabel: vehicleCreateRow,
+                  onCreate: (q) => void registerVehicle(normalizePlate(q)),
+                }}
                 options={filteredVehicles.map((v) => {
                   const owner = v.customerId
                     ? customerById.get(v.customerId)
@@ -615,11 +676,13 @@ export function OrderForm({
                       ? `${v.make} ${v.model} · ${customerDisplay(owner).primary}`
                       : `${v.make} ${v.model}`;
                   const org = vehicleIsOrg(v) ? `${base} · Байгууллага` : base;
-                  const hint = v.isAccountVehicle
-                    ? `${org} · Хэрэглэгчийн бүртгэлээс — энэ хуудастай холбоно`
-                    : v.isPostpaid
-                      ? `${org} · Дараа төлбөрт`
-                      : org;
+                  const hint = !v.customerId
+                    ? `${org} · Эзэмшигчгүй — сонгосон үйлчлүүлэгчид холбогдоно`
+                    : v.isAccountVehicle
+                      ? `${org} · Хэрэглэгчийн бүртгэлээс — энэ хуудастай холбоно`
+                      : v.isPostpaid
+                        ? `${org} · Дараа төлбөрт`
+                        : org;
                   return {
                     value: v.id,
                     // Дугааргүй машиныг VIN-ээр нь ялгаж харуулна/хайна.
@@ -629,19 +692,48 @@ export function OrderForm({
                 })}
               />
             </div>
-            <SquareAddButton
-              active={showVehicleForm}
-              disabled={!customerId}
-              onClick={() => setShowVehicleForm((v) => !v)}
-              data-stop-row-click
-              title={
-                customerId
-                  ? "Шинэ машин нэмэх"
-                  : "Эхлээд үйлчлүүлэгчээ сонгоно уу"
-              }
-            />
           </div>
         </Field>
+        {vehicleDetails ? (
+          // Дугаараар мэдээлэл олдоогүй — марк/загвараа оруулаад бүртгэнэ.
+          <div className="sm:col-span-2 flex flex-col gap-2 rounded-lg border border-[var(--oc-line)] bg-[var(--oc-panel2)] p-3 max-w-2xl">
+            <p className="text-xs text-[var(--oc-muted3)]">
+              <span className="font-plex-mono font-semibold text-[var(--oc-ink)]">{vehicleDetails.plate}</span>{" "}
+              · {vehicleDetails.reason}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                aria-label="Марк"
+                value={detailMake}
+                onChange={(e) => setDetailMake(e.target.value)}
+                placeholder="Марк (Toyota)"
+                className="auth-input max-w-[10rem]"
+              />
+              <input
+                aria-label="Загвар"
+                value={detailModel}
+                onChange={(e) => setDetailModel(e.target.value)}
+                placeholder="Загвар (Prius)"
+                className="auth-input max-w-[10rem]"
+              />
+              <Btn
+                type="button"
+                disabled={vehicleRegistering || !detailMake.trim() || !detailModel.trim()}
+                onClick={() =>
+                  void registerVehicle(vehicleDetails.plate, {
+                    make: detailMake.trim(),
+                    model: detailModel.trim(),
+                  })
+                }
+              >
+                {vehicleRegistering ? "…" : "Бүртгэх"}
+              </Btn>
+              <Btn type="button" variant="ghost" onClick={() => setVehicleDetails(null)}>
+                Болих
+              </Btn>
+            </div>
+          </div>
+        ) : null}
         {!isEdit && !appointmentId ? (
           <button
             type="button"
@@ -766,19 +858,11 @@ export function OrderForm({
         onCreated={onCustomerCreated}
       />
 
-      <CreateVehicleModal
-        open={showVehicleForm}
-        onClose={() => setShowVehicleForm(false)}
-        onCreated={onVehicleCreated}
-        customers={customers}
-        defaultCustomerId={customerId}
-      />
-
       <div className="flex gap-2 pt-3 border-t border-[var(--oc-line2)]">
         <BtnLink href={backHref} variant="ghost">
           ← Буцах
         </BtnLink>
-        <Btn type="submit" disabled={pending || intakeBusy || (plateMode && plateBusy)}>
+        <Btn type="submit" disabled={pending || intakeBusy || vehicleRegistering || (plateMode && plateBusy)}>
           {pending ? "..." : isEdit ? "Хадгалах" : "Засварын хуудас үүсгэх"}
         </Btn>
       </div>
