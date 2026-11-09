@@ -100,7 +100,7 @@ export async function CashOverview({ user }: { user: User }) {
               ) : (
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm text-[var(--oc-muted3)]">Касс нээгдээгүй байна.</p>
-                  <OpenSessionButton branchId={b.id} branchName={single ? null : b.name} />
+                  <OpenSessionButton branchId={b.id} branchName={b.name} />
                 </div>
               )}
             </div>
