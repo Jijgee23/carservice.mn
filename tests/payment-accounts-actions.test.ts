@@ -102,7 +102,9 @@ test("«Бэлэн» has no filter tab, is never offered in «Нэмэх», and 
 });
 
 test("signup creates the new tenant's «Бэлэн» in the same transaction", async () => {
-  const auth = (await src("app/_actions/auth.ts")).replace(/\r\n/g, "\n");
+  // Web signUpAction + v1 /auth/signup хоёул lib/auth/tenant-signup.ts-ийг дуудна.
+  assert.match(await src("app/_actions/auth.ts"), /createTenantWithOwner\(/);
+  const auth = (await src("lib/auth/tenant-signup.ts")).replace(/\r\n/g, "\n");
   const tx = auth.slice(auth.indexOf("const tenant = await tx.tenant.create("));
   assert.match(tx.slice(0, 2000), /await ensureCashAccount\(tx, tenant\.id\)/);
 });

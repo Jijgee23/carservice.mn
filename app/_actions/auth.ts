@@ -1,22 +1,20 @@
 "use server";
 
-import { randomBytes } from "node:crypto";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { Prisma } from "@/app/generated/prisma/client";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import {
   canChooseAllBranches,
   eligibleBranchIds,
 } from "@/lib/auth/roles";
 import { safeNext } from "@/lib/safe-redirect";
+import { normalizeRegno, regnoKind, splitPersonName } from "@/lib/tenant-regno";
 import {
-  mapPersonAdminErrors,
-  normalizeRegno,
-  regnoKind,
-  splitPersonName,
-  TENANT_REGNO_MESSAGE,
-} from "@/lib/tenant-regno";
+  createTenantWithOwner,
+  findTenantSignupConflicts,
+  type TenantSignupInput,
+  validateTenantSignup,
+} from "@/lib/auth/tenant-signup";
 import {
   clearSessionCookie,
   setSessionCookie,
@@ -28,7 +26,6 @@ import { resolveInitialWorkingBranchId } from "@/lib/auth/initial-working-branch
 import { ALL_BRANCHES, signSession } from "@/lib/auth/session";
 import { resolveTodayLockedBranch } from "@/lib/employee-branch-lock";
 import { notifySuperAdmins } from "@/lib/notifications";
-import { isValidPhone, normalizePhone } from "@/lib/phone";
 import {
   IDENTIFIER_ERROR,
   type LoginIdentifier,
@@ -41,7 +38,6 @@ import {
   revokeUserSession,
 } from "@/lib/auth/user-session";
 import { prisma } from "@/lib/prisma";
-import { ensureCashAccount } from "@/lib/payment-accounts";
 import {
   consumeRateLimit,
   ipFromHeaders,
@@ -51,12 +47,6 @@ import {
 import { setBypassContext, setTenantContext } from "@/lib/tenant-context";
 import { sendOtpSms } from "@/lib/sms";
 import { logAudit } from "@/lib/audit";
-import { ALL_WEEKDAYS, DEFAULT_OPEN_DAYS } from "@/lib/branches";
-import { DEFAULT_UNITS } from "@/lib/units";
-import {
-  DEFAULT_INTAKE_TEMPLATE_NAME,
-  DEFAULT_INTAKE_TEMPLATE_SCHEMA,
-} from "@/lib/diagnostics";
 
 export type SignUpFormValues = {
   orgName: string;
@@ -87,33 +77,15 @@ function getStr(fd: FormData, key: string): string {
   return typeof v === "string" ? v.trim() : "";
 }
 
-function isEmail(s: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
-}
-
 // Ажилтны нэвтрэх нэр — имэйл ЭСВЭЛ утасны дугаар (харах: lib/auth/login-identifier.ts).
 /** Form-ын `identifier` (хуучин `email`) талбарыг задлана. Хүчингүй бол null. */
 function getIdentifier(fd: FormData): LoginIdentifier | null {
   return parseLoginIdentifier(getStr(fd, "identifier") || getStr(fd, "email"));
 }
 
-function makeSlug(name: string): string {
-  const base = name
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-  const suffix = randomBytes(3).toString("hex");
-  return base ? `${base}-${suffix}` : suffix;
-}
-
 // ---- SIGN UP --------------------------------------------------------------
-
-// Бүртгэлд ажлын цаг асуухгүй — шинэ салбарын анхдагч цаг.
-const SIGNUP_OPEN_TIME = "09:00";
-const SIGNUP_CLOSE_TIME = "18:00";
+// Шалгалт/давхцал/transaction нь lib/auth/tenant-signup.ts-д (мобайл
+// /api/v1/auth/signup-тэй хуваалцана).
 
 export async function signUpAction(
   _prev: ActionState,
@@ -121,129 +93,60 @@ export async function signUpAction(
 ): Promise<ActionState> {
   // Шинэ tenant бүртгэгдэх урсгал — session/tenant хараахан байхгүй.
   setBypassContext();
-  // Organization
-  const orgName = getStr(formData, "orgName");
-  const registerNumber = normalizeRegno(getStr(formData, "registerNumber"));
-  const orgEmail = getStr(formData, "orgEmail").toLowerCase();
-  const phone1 = getStr(formData, "phone1");
 
   // Үндсэн салбар — байршлыг зөвхөн газрын зураг дээр тэмдэглэнэ (заавал).
-  // Хот/дүүрэг/хороо/хаяг нь тэр цэгийн reverse geocode-оос ирнэ (олдохгүй бол хоосон);
-  // лого, 2-р утас, ажлын цагийг бүртгэлд асуухгүй — дараа нь Тохиргооноос засна.
-  const branchCity = getStr(formData, "city");
-  const branchDistrict = getStr(formData, "district");
-  const branchKhoroo = getStr(formData, "khoroo");
-  const branchAddress = getStr(formData, "address");
-  const branchLatRaw = getStr(formData, "latitude");
-  const branchLngRaw = getStr(formData, "longitude");
-
+  // Хот/дүүрэг/хороо/хаяг нь тэр цэгийн reverse geocode-оос ирнэ (олдохгүй бол хоосон).
   // Admin (OWNER) — утас/имэйлийг 1-р алхмаас авна (тусдаа админ алхамгүй).
-  // Нэр: хувь хүн бол регистрийн нэрээс, засвар бол «Эзний овог нэр» талбараас
-  // (нэг талбар — "Батын Болд" → овог Батын, нэр Болд).
-  const isPerson = regnoKind(registerNumber) === "person";
-  const ownerName = isPerson ? "" : getStr(formData, "ownerName");
-  const { lastName, firstName } = splitPersonName(isPerson ? orgName : ownerName);
-  const adminPhone = phone1;
-  // Имэйл заавал биш — хоосон бол null хадгалж, OTP/нэвтрэлт утсаар явна.
-  const adminEmail = orgEmail || null;
-  const password = getStr(formData, "password");
-  const passwordConfirm = getStr(formData, "passwordConfirm");
+  const input: TenantSignupInput = {
+    orgName: getStr(formData, "orgName"),
+    registerNumber: getStr(formData, "registerNumber"),
+    orgEmail: getStr(formData, "orgEmail"),
+    phone1: getStr(formData, "phone1"),
+    ownerName: getStr(formData, "ownerName"),
+    password: getStr(formData, "password"),
+    passwordConfirm: getStr(formData, "passwordConfirm"),
+    city: getStr(formData, "city"),
+    district: getStr(formData, "district"),
+    khoroo: getStr(formData, "khoroo"),
+    address: getStr(formData, "address"),
+    latitude: getStr(formData, "latitude"),
+    longitude: getStr(formData, "longitude"),
+  };
 
   // OTP — хоёр дахь шатанд илгээгдэнэ
   const otpCode = getStr(formData, "otpCode");
 
   // Алдаа гарсан үед form-руу буцаах нэг удаагийн "values" snapshot
+  const registerNumber = normalizeRegno(input.registerNumber);
+  const isPerson = regnoKind(registerNumber) === "person";
+  const ownerName = isPerson ? "" : input.ownerName;
+  const { lastName, firstName } = splitPersonName(isPerson ? input.orgName : ownerName);
+  const orgEmail = input.orgEmail.toLowerCase();
   const values: SignUpFormValues = {
-    orgName,
+    orgName: input.orgName,
     registerNumber,
     orgEmail,
-    phone1,
+    phone1: input.phone1,
     phone2: "",
     lastName,
     firstName,
     ownerName,
-    adminPhone,
+    adminPhone: input.phone1,
     adminEmail: orgEmail,
   };
 
-  const fieldErrors: Record<string, string> = {};
-
-  if (!orgName) fieldErrors.orgName = "Засварын нэр (хувь хүн бол овог нэр)-ээ оруулна уу.";
-  if (!regnoKind(registerNumber))
-    fieldErrors.registerNumber = TENANT_REGNO_MESSAGE;
-  if (orgEmail && !isEmail(orgEmail)) fieldErrors.orgEmail = "Имэйл хаяг буруу.";
-  if (!phone1) fieldErrors.phone1 = "Утасны дугаар оруулна уу.";
-  else if (!isValidPhone(phone1))
-    fieldErrors.phone1 = "Утасны дугаар 8 оронтой тоо байх ёстой.";
-
-  // Байршил заавал: үйлчлүүлэгч газрын зургаас олж, захиалга өгөхөд хэрэгтэй.
-  const branchLat = Number.parseFloat(branchLatRaw);
-  const branchLng = Number.parseFloat(branchLngRaw);
-  if (
-    !Number.isFinite(branchLat) ||
-    !Number.isFinite(branchLng) ||
-    Math.abs(branchLat) > 90 ||
-    Math.abs(branchLng) > 180
-  )
-    fieldErrors.latitude = "Газрын зураг дээр байршлаа тэмдэглэнэ үү.";
-
-  // Хувь хүний нэрийг регистрийн нэрээс авдаг тул зөвхөн байгууллагад.
-  if (!isPerson && !firstName) fieldErrors.ownerName = "Эзний овог нэрийг оруулна уу.";
-  if (password.length < 8)
-    fieldErrors.password = "Нууц үг хамгийн багадаа 8 тэмдэгт байна.";
-  if (password !== passwordConfirm)
-    fieldErrors.passwordConfirm = "Нууц үг таарахгүй байна.";
-
-  if (Object.keys(fieldErrors).length > 0) {
-    return { ok: false, fieldErrors, values };
+  const validated = validateTenantSignup(input);
+  if (!validated.ok) {
+    return { ok: false, fieldErrors: validated.fieldErrors, values };
   }
-
-  // Утаснуудыг канон 8 оронтой хэлбэрт оруулна (хадгалах, OTP, давхцал шалгах).
-  const normAdminPhone = normalizePhone(adminPhone) ?? adminPhone;
-  const normPhone1 = normalizePhone(phone1) ?? phone1;
+  const data = validated.data;
 
   // --- 1-р шат: OTP илгээх ---
   // Дугаар / имэйл аль хэдийн бүртгэгдсэн эсэхийг урьдчилан шалгаж, дараа нь
   // SMS-ээр код илгээнэ.
   if (!otpCode) {
-    const [tenantConflict, userConflict] = await Promise.all([
-      prisma.tenant.findFirst({
-        where: {
-          // Хувь хүмүүс адилхан нэртэй байж болох тул нэрээр зөвхөн байгууллагыг шалгана.
-          OR: [
-            { registerNumber },
-            ...(orgEmail ? [{ email: orgEmail }] : []),
-            ...(isPerson ? [] : [{ name: orgName }]),
-          ],
-        },
-        select: { registerNumber: true, email: true, name: true },
-      }),
-      prisma.user.findFirst({
-        where: {
-          OR: [...(adminEmail ? [{ email: adminEmail }] : []), { phone: normAdminPhone }],
-        },
-        select: { email: true, phone: true },
-      }),
-    ]);
-    if (tenantConflict) {
-      const fe: Record<string, string> = {};
-      if (tenantConflict.registerNumber === registerNumber)
-        fe.registerNumber = "Энэ регистр аль хэдийн бүртгэгдсэн байна.";
-      if (orgEmail && tenantConflict.email === orgEmail)
-        fe.orgEmail = "Энэ имэйл аль хэдийн бүртгэгдсэн байна.";
-      if (!isPerson && tenantConflict.name === orgName)
-        fe.orgName = "Энэ нэртэй засвар аль хэдийн бүртгэгдсэн байна.";
-      return { ok: false, fieldErrors: fe, values };
-    }
-    if (userConflict) {
-      const fe: Record<string, string> = {};
-      if (adminEmail && userConflict.email === adminEmail)
-        fe.adminEmail = "Энэ имэйл хаяг аль хэдийн бүртгэгдсэн байна.";
-      if (userConflict.phone === normAdminPhone)
-        fe.adminPhone = "Энэ утасны дугаар аль хэдийн бүртгэгдсэн байна.";
-      // Админы утас/имэйл = 1-р алхмын утас/имэйл — алдааг тэнд харуулна.
-      return { ok: false, fieldErrors: mapPersonAdminErrors(fe), values };
-    }
+    const conflicts = await findTenantSignupConflicts(data);
+    if (conflicts) return { ok: false, fieldErrors: conflicts, values };
 
     const h = await headers();
     const ua = h.get("user-agent");
@@ -253,13 +156,13 @@ export async function signUpAction(
       null;
 
     const { code } = await issueOtp({
-      email: adminEmail,
-      phone: normAdminPhone,
+      email: data.adminEmail,
+      phone: data.phone,
       type: "SIGNUP",
       userAgent: ua,
       ip,
     });
-    const sent = await sendOtpSms(code, "SIGNUP", normAdminPhone);
+    const sent = await sendOtpSms(code, "SIGNUP", data.phone);
     if (!sent) {
       return {
         ok: false,
@@ -272,7 +175,7 @@ export async function signUpAction(
     return {
       ok: false,
       awaitingOtp: true,
-      message: `Утас ${adminPhone} руу 6 оронтой код илгээлээ. Кодоо оруулна уу.`,
+      message: `Утас ${input.phone1} руу 6 оронтой код илгээлээ. Кодоо оруулна уу.`,
       values,
     };
   }
@@ -287,8 +190,8 @@ export async function signUpAction(
     };
   }
   const otpResult = await verifyOtp({
-    email: adminEmail,
-    phone: normAdminPhone,
+    email: data.adminEmail,
+    phone: data.phone,
     type: "SIGNUP",
     code: otpCode,
   });
@@ -307,120 +210,14 @@ export async function signUpAction(
     };
   }
 
-  // Transaction: Tenant + OWNER User
-  let session;
-  try {
-    const passwordHash = await hashPassword(password);
-
-    session = await prisma.$transaction(async (tx) => {
-      const tenant = await tx.tenant.create({
-        data: {
-          slug: makeSlug(orgName),
-          name: orgName,
-          registerNumber,
-          email: orgEmail || null,
-          phone1: normPhone1,
-        },
-      });
-
-      // Төлбөрийн аргууд: «Бэлэн» автоматаар (тенант өөрөө бүртгэхгүй).
-      await ensureCashAccount(tx, tenant.id);
-
-      // Default нэгжүүд (ширхэг, цаг, мин, литр, кг, м, удаа, багц)
-      await tx.unit.createMany({
-        data: DEFAULT_UNITS.map((u) => ({
-          tenantId: tenant.id,
-          name: u.name,
-          code: u.code,
-        })),
-        skipDuplicates: true,
-      });
-
-      // Системийн үндсэн оношилгооны загвар — шинэ тенант шууд ашиглаж
-      // эхэлнэ (ангилалгүй; ажилтан хүсвэл дараа нь ангилал/үнэ нэмж болно).
-      // isSystemDefault: тенант засах/устгах боломжгүй (харах:
-      // app/_actions/diagnostic-templates.ts).
-      await tx.diagnosticTemplate.create({
-        data: {
-          tenantId: tenant.id,
-          name: DEFAULT_INTAKE_TEMPLATE_NAME,
-          type: "INTAKE",
-          schema: DEFAULT_INTAKE_TEMPLATE_SCHEMA,
-          isSystemDefault: true,
-        },
-      });
-
-      // Subscription үүсгэхгүй: шинэ тенант үргэлж үнэгүй FREE багцтай
-      // (Tenant.plan @default(FREE)) эхэлнэ — харах: lib/subscription.ts.
-
-      // Үндсэн салбар үүсгэнэ — тенант бүртгэлийн утсыг өвлүүлж, газрын зураг
-      // дээр тэмдэглэсэн байршил (+ geocode-ийн хаяг)-ийг хадгална. Ажлын цаг нь
-      // анхдагч 09:00–18:00, Даваа–Баасан (Тохиргооноос засна).
-      const branch = await tx.branch.create({
-        data: {
-          tenantId: tenant.id,
-          name: "Үндсэн салбар",
-          phone: normPhone1,
-          isPrimary: true,
-          city: branchCity || null,
-          district: branchDistrict || null,
-          khoroo: branchKhoroo || null,
-          address: branchAddress || null,
-          latitude: branchLat,
-          longitude: branchLng,
-          openTime: SIGNUP_OPEN_TIME,
-          closeTime: SIGNUP_CLOSE_TIME,
-        },
-      });
-
-      // Долоо хоногийн 7 өдрийн хуваарь — анхдагч Даваа–Баасан.
-      const openDays = new Set<string>(DEFAULT_OPEN_DAYS);
-      await tx.branchSchedule.createMany({
-        data: ALL_WEEKDAYS.map((wd) => ({
-          branchId: branch.id,
-          weekday: wd,
-          isOpen: openDays.has(wd),
-        })),
-      });
-
-      const user = await tx.user.create({
-        data: {
-          email: adminEmail,
-          firstName,
-          lastName,
-          phone: normAdminPhone,
-          passwordHash,
-          // Админ өөрөө нууц үгээ үүсгэж, OTP-ээр баталгаажсан тул шууд verified.
-          verified: true,
-          isOwner: true,
-          tenantId: tenant.id,
-          branchId: branch.id,
-        },
-      });
-
-      // Шинэ байгууллага ганц салбартай — салбар сонгох алхмыг алгасна.
-      return { userId: user.id, tenantId: tenant.id, isOwner: user.isOwner, workingBranchId: branch.id };
-    });
-  } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      const target = (e.meta?.target as string[] | undefined)?.join(",") ?? "";
-      const fe: Record<string, string> = {};
-      if (target.includes("phone"))
-        fe.adminPhone = "Энэ утасны дугаар аль хэдийн бүртгэгдсэн байна.";
-      else if (target.includes("name"))
-        fe.orgName = "Энэ нэртэй засвар аль хэдийн бүртгэгдсэн байна.";
-      else if (target.includes("registerNumber"))
-        fe.registerNumber = "Энэ регистр аль хэдийн бүртгэгдсэн байна.";
-      else if (target.includes("Tenant_email") || target.includes("email") && target.includes("Tenant"))
-        fe.orgEmail = "Энэ Gmail аль хэдийн бүртгэгдсэн байна.";
-      else if (target.includes("User_email") || target.includes("email"))
-        fe.adminEmail = "Энэ имэйл хаяг аль хэдийн бүртгэгдсэн байна.";
-      else fe._ = "Давхардсан утга бүртгэгдсэн байна.";
-      return { ok: false, fieldErrors: mapPersonAdminErrors(fe), values };
-    }
-    const msg = e instanceof Error ? e.message : "Бүртгэх явцад алдаа гарлаа.";
-    return { ok: false, message: msg, values };
+  // Transaction: Tenant + салбар + OWNER User
+  const result = await createTenantWithOwner(data);
+  if (!result.ok) {
+    return "fieldErrors" in result
+      ? { ok: false, fieldErrors: result.fieldErrors, values }
+      : { ok: false, message: result.message, values };
   }
+  const session = result.created;
 
   // Web session-ийг DB-д бүртгэж, JWT-д sid шигтгэнэ (revoke/төхөөрөмжийн жагсаалт).
   const h = await headers();
@@ -435,7 +232,7 @@ export async function signUpAction(
   try {
     await notifySuperAdmins({
       type: "tenant_created",
-      input: { tenantId: session.tenantId, tenantName: orgName },
+      input: { tenantId: session.tenantId, tenantName: data.orgName },
     });
   } catch (err) {
     console.warn("[notify] tenant_created:", err);

@@ -2216,3 +2216,11 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - web-push.tsx: логикийг useWebPush hook болгон гаргаж, WebPushBar нэмэв — асаагаагүй бол нэг мөрт pill («Асаах» товч), блоклогдсон бол саарал «Мэдэгдэл хаалттай», идэвхтэй/дэмжигдээгүй бол юу ч харуулахгүй; × дарвал 14 хоног нууна (localStorage); анхны шалгалт дуустал харуулахгүй (анивчихгүй).
 - Аль хэдийн зөвшөөрсөн төхөөрөмжийн чимээгүй token шинэчлэлт бүтэлгүйтвэл алдааны мөр гаргахгүй (идэвхтэй хэвээр, консолд бичнэ).
 - Dashboard болон system-admin layout-д ашигласан; account хуудасны WebPushToggle хэвээр.
+
+[2026-11-09] Mobile tenant бүртгэл + ажилтны апп-д дутуу байсан v1 API-ууд
+- POST /api/v1/auth/signup/request-otp, POST /api/v1/auth/signup: веб signUpAction-ийн мобайл хувилбар (OTP → Tenant + «Үндсэн салбар» + OWNER, хариу /auth/login-тэй ижил token). Логик lib/auth/tenant-signup.ts-д нэгтгэгдэж, веб action мөн түүнийг дуудна.
+- GET/PATCH /api/v1/tenant, POST/DELETE /api/v1/tenant/logo (lib/tenant-settings.ts; бичих нь зөвхөн эзэн).
+- POST /api/v1/branches, GET/PATCH/DELETE /api/v1/branches/[id], POST .../toggle-active (lib/branches-commands.ts; хуваарийн нөлөө 409 SCHEDULE_IMPACT + confirm).
+- /api/v1/stock-counts (жагсаалт/эхлүүлэх/дэлгэрэнгүй/хадгалах/дуусгах/цуцлах), GET /api/v1/reports/stock — enable_inventory gate (plan-modules.ts).
+- GET /api/v1/reviews, PUT /api/v1/reviews/[id]/reply, POST /api/v1/orders/[id]/items/complete-all.
+- Source-scan тестүүдийг шилжсэн lib файлууд руу чиглүүлэв; бүтэн suite-ийн унадаг тест HEAD-тэй ижил (52, шинэ алдаагүй).

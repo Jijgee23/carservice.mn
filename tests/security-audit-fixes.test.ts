@@ -142,11 +142,13 @@ test("row menu stays open while its portaled confirm dialog is clicked", () => {
 });
 
 test("branch delete is refused while employees are assigned (count + delete in one locked tx)", () => {
-  const src = read("app/_actions/branches.ts");
-  const fn = src.slice(src.indexOf("export async function deleteBranchAction"));
+  // Web action + v1 DELETE хоёул lib/branches-commands.ts deleteBranch-ийг дуудна.
+  const src = read("lib/branches-commands.ts");
+  const fn = src.slice(src.indexOf("export async function deleteBranch("));
+  assert.match(read("app/_actions/branches.ts"), /deleteBranch\(/);
   assert.match(fn, /FOR UPDATE/);
   // Tombstoned (deleted) staff don't pin the branch — they only keep order FKs.
-  assert.match(fn, /tx\.user\.count\(\{ where: \{ branchId: id, tenantId: user\.tenantId, deletedAt: null \} \}\)/);
+  assert.match(fn, /tx\.user\.count\(\{ where: \{ branchId: id, tenantId: actor\.tenantId, deletedAt: null \} \}\)/);
   assert.ok(fn.indexOf("tx.user.count") < fn.indexOf("tx.branch.delete"));
   assert.match(fn, /ажилтан бүртгэлтэй/);
 });
@@ -189,6 +191,8 @@ test("every pre-login auth route sets the bypass context before touching the DB"
     "activate/request-otp",
     "password/request-otp",
     "password/reset",
+    "signup",
+    "signup/request-otp",
   ]) {
     const src = read(`app/api/v1/auth/${route}/route.ts`);
     const body = src.slice(src.indexOf("export async function POST("));

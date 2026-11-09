@@ -1100,16 +1100,18 @@ test("reserveAppointmentInTransaction and moveAppointmentInTransaction respect M
 // serialize against concurrent bookings from lib/appointment-reservations.ts.
 // upsertBranchScheduleSeasonAction previously had no transaction at all.
 test("all 5 branch-schedule mutation actions take the branch row lock inside a transaction", () => {
+  // updateBranchAction + v1 PATCH /branches/[id] хоёул lib/branches-commands.ts
+  // updateBranch-ийг дуудна — lock тэнд.
   const branchesSrc = fs.readFileSync(
-    path.join(__dirname, "..", "app", "_actions", "branches.ts"),
+    path.join(__dirname, "..", "lib", "branches-commands.ts"),
     "utf8",
   );
-  const updateBranchStart = branchesSrc.indexOf("export async function updateBranchAction");
-  assert.ok(updateBranchStart >= 0, "updateBranchAction not found");
+  const updateBranchStart = branchesSrc.indexOf("export async function updateBranch(");
+  assert.ok(updateBranchStart >= 0, "updateBranch not found");
   const updateBranchBody = branchesSrc.slice(updateBranchStart);
   assert.ok(
-    /await tx\.\$queryRaw`SELECT id FROM "Branch" WHERE id = \$\{id\} AND "tenantId" = \$\{user\.tenantId\} FOR UPDATE`/.test(updateBranchBody),
-    "expected updateBranchAction to take the Branch row lock inside its transaction",
+    /await tx\.\$queryRaw`SELECT id FROM "Branch" WHERE id = \$\{id\} AND "tenantId" = \$\{actor\.tenantId\} FOR UPDATE`/.test(updateBranchBody),
+    "expected updateBranch to take the Branch row lock inside its transaction",
   );
 
   const schedulesSrc = fs.readFileSync(
@@ -1206,7 +1208,11 @@ test("applyScheduleClips never writes to originalEstimatedDurationMinutes/origin
 // clipped-only warning (same convention as app/_actions/orders.ts's
 // postpone/reschedule confirmed=true gate).
 test("branch schedule mutation actions require confirmed=true past a clipped-only warning, and hard-block erased regardless of confirmed", () => {
-  const branchesSrc = fs.readFileSync(path.join(__dirname, "..", "app", "_actions", "branches.ts"), "utf8");
+  // branches.ts action нь confirmed-ийг уншиж, impact-ийн шалгалтыг
+  // lib/branches-commands.ts updateBranch хийнэ — хоёуланг нэгтгэж шалгана.
+  const branchesSrc =
+    fs.readFileSync(path.join(__dirname, "..", "app", "_actions", "branches.ts"), "utf8") +
+    fs.readFileSync(path.join(__dirname, "..", "lib", "branches-commands.ts"), "utf8");
   const schedulesSrc = fs.readFileSync(path.join(__dirname, "..", "app", "_actions", "branch-schedules.ts"), "utf8");
 
   for (const [label, src] of [["branches.ts", branchesSrc], ["branch-schedules.ts", schedulesSrc]] as const) {
