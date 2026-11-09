@@ -191,7 +191,7 @@ export async function loadOverviewData(
         number: true,
         status: true,
         updatedAt: true,
-        customer: { select: { fullName: true } },
+        customer: { select: { fullName: true, phone: true } },
         vehicle: { select: { plate: true } },
         items: { select: { status: true, kind: true } },
       },

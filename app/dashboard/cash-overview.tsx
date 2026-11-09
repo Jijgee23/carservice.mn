@@ -30,7 +30,7 @@ function fmtTime(iso: string): string {
  * (бэлэн) үлдэгдэл + ээлжийн орлого, хаалттай бол «Касс нээх». Кассын ээлжийн
  * хуудастай ижил эрх (`cash.manage`) ба салбарын хүрээ.
  */
-export async function CashOverview({ user }: { user: User }) {
+export async function CashOverview({ user, compact = false }: { user: User; compact?: boolean }) {
   if (!hasPermission(user, "cash.manage")) return null;
 
   const scopeBranchId = effectiveBranchScope(user, undefined);
@@ -47,7 +47,9 @@ export async function CashOverview({ user }: { user: User }) {
   const single = branches.length === 1;
 
   return (
-    <section className="mt-6 rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 sm:p-6">
+    <section
+      className={`rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] ${compact ? "p-4 sm:p-5" : "mt-6 p-4 sm:p-6"}`}
+    >
       <div className="flex items-center justify-between gap-3 mb-4">
         <h2 className="font-semibold text-[var(--oc-ink)]">Касс</h2>
         <Link
@@ -57,7 +59,7 @@ export async function CashOverview({ user }: { user: User }) {
           Кассын ээлж →
         </Link>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className={`grid gap-3 ${compact ? "grid-cols-1" : "sm:grid-cols-2 xl:grid-cols-3"}`}>
         {shown.map((b, i) => {
           const s = sessions[i];
           const totals = s ? sessionTotals(s) : null;
