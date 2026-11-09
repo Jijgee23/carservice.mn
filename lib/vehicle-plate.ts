@@ -37,6 +37,17 @@ export function normalizePlate(p: string): string {
 }
 
 /**
+ * Монгол улсын стандарт дугаарын хэлбэр: 4 цифр + 3 үсэг (кирилл эсвэл латин).
+ * Зөвхөн HUR/бүртгэлийн lookup дуудах эсэхийг шийднэ — стандарт бус дугаарыг
+ * (транзит г.м.) гараар бүртгэж болно.
+ */
+export const PLATE_PATTERN = /^\d{4}[А-ЯЁӨҮA-Z]{3}$/;
+
+export function isStandardPlate(plate: string): boolean {
+  return PLATE_PATTERN.test(plate);
+}
+
+/**
  * Захиалга үүсэх үеийн дугаар (`plateSnapshot`) одоогийн дугаараас өөр бол
  * "хуучин" дугаарыг буцаана, үгүй бол null. Хоёуланг normalizePlate-ээр
  * жишнэ (зураас/үсгийн хэлбэр ялгаа тооцохгүй).

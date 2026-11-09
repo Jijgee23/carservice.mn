@@ -16,13 +16,8 @@ import { useRouter } from "next/navigation";
 import { customerLabel, customerPickerHint } from "@/lib/customers";
 import { normalizeWheelPosition } from "@/lib/hur_service";
 import type { LookupVehicle } from "@/lib/hur-lookup";
-import { NO_PLATE } from "@/lib/vehicle-plate";
+import { NO_PLATE, PLATE_PATTERN } from "@/lib/vehicle-plate";
 
-// Монгол улсын дугаарын хэлбэр: 4 цифр + 3 үсэг (Кирилл эсвэл Латин) —
-// vehicle-form.tsx-тэй ижил (харах: тэнд тайлбарласан шалтгаан). Зөвхөн HUR
-// lookup дуудах эсэхийг шийднэ — стандарт бус дугаарыг (транзит г.м.) гараар
-// бүртгэж болно.
-const PLATE_PATTERN = /^\d{4}[А-ЯЁӨҮA-Z]{3}$/;
 const PLATE_FETCH_DEBOUNCE_MS = 400;
 
 type Customer = {

@@ -8,10 +8,8 @@ import {
 import { Btn, Field, FormError } from "@/app/_components/landing-ops-ui";
 import { Select } from "@/app/_components/select";
 import { type PublicHurVehicle, normalizeWheelPosition } from "@/lib/hur_service";
+import { PLATE_PATTERN } from "@/lib/vehicle-plate";
 
-// 4 цифр + 3 үсэг. Кирилл `А-Я` муж нь Монгол тусгай үсэг Ө/Ү/Ё-г агуулдаггүй
-// тул орон нутгийн дугаар (ж: ӨВ…, Ү-тэй) тусад нь нэмнэ.
-const PLATE_PATTERN = /^\d{4}[А-ЯЁӨҮA-Z]{3}$/;
 const PLATE_FETCH_DEBOUNCE_MS = 400;
 
 export function InlineAccountVehicleForm({

@@ -2168,3 +2168,12 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 
 [2026-11-05] Dashboard-аас «Багцын модулиуд» хэсгийг хассан
 - app/dashboard/page.tsx: модулийн жагсаалтын хэсэг + getEnabledModules/MODULE_LIMIT_CODES import устгасан (багцын мэдээлэл /dashboard/settings/subscription-д хэвээр).
+
+[2026-11-09] Засварын хуудас: «Улсын дугаар бичээд л болно» урсгал
+- Шинэ хуудсанд анхдагчаар «Улсын дугаар» талбар (app/dashboard/orders/plate-intake-field.tsx). Дугаараар: tenant бүртгэл → глобал Vehicle → HUR (lookupPlateForOrderAction).
+- Бүртгэлтэй → цомхон карт, үйлчлүүлэгч/машин автоматаар; ижил дугаартай олон эзэн бол сонгоно; «Өөр хүн авчирсан» → утсаар шинэ эзэмшигч.
+- Бүртгэлгүй → зөвхөн үйлчлүүлэгчийн утас (+нэр заавал биш); HUR-д ч олдохгүй бол утас + марк + загвар. HUR эзэмшигчийг автоматаар үйлчлүүлэгч болгохгүй (хэрэглэгчийн шийдвэр — жолооч/гэр бүлийнхэн авчирдаг).
+- createOrderAction: intakeMode=plate бөгөөд машин сонгоогүй бол бүх шалгалтын дараа resolvePlateIntake (lib/orders/plate-intake-server.ts): утсаар үйлчлүүлэгч (байвал дахин ашиглана) → createVehicleCommand (resolveVehicleForOwner + ensureTenantVehicle) → захиалга. Idempotent тул алдааны дараа дахин илгээхэд давхардахгүй. Шинэ багана/migration байхгүй.
+- «Дугааргүй / жагсаалтаас сонгох» → хуучин Select-үүд. Засах, цаг захиалгаас үүсгэх урсгал өөрчлөгдөөгүй.
+- PLATE_PATTERN-ийг lib/vehicle-plate.ts-д нэгтгэсэн (3 хуулбар байсан). tests/plate-intake.test.ts.
+- Дараагийн алхам: mobile API (/api/v1 orders) дээр ижил plate горим.

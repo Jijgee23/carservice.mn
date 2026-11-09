@@ -7,6 +7,8 @@ import {
   updateOrderAction,
 } from "@/app/_actions/orders";
 import { IntakeSection } from "./intake-section";
+import { PlateIntakeField, type PlateMatchSelection } from "./plate-intake-field";
+import { parsePlateIntakeForm } from "@/lib/orders/plate-intake";
 import {
   getBranchDaySchedulePreview,
   type BranchDaySchedulePreview,
@@ -153,6 +155,27 @@ export function OrderForm({
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [showVehicleForm, setShowVehicleForm] = useState(false);
 
+  // Шинэ хуудас: анхдагчаар «Улсын дугаар» горим (дугаар бичээд л болно).
+  // Засах, цаг захиалгаас эсвэл машин урьдчилан сонгогдож ирсэн бол
+  // үйлчлүүлэгч/машины жагсаалтаас сонгох одоогийн горим.
+  const [intakeMode, setIntakeMode] = useState<"plate" | "list">(
+    !isEdit && !appointmentId && !initial?.vehicleId ? "plate" : "list",
+  );
+  const plateMode = intakeMode === "plate";
+  const [plateBusy, setPlateBusy] = useState(false);
+
+  function onPlateSelect(sel: PlateMatchSelection) {
+    if (!sel) {
+      setCustomerId("");
+      setVehicleId("");
+      return;
+    }
+    setCustomerId(sel.customerId);
+    setVehicleId(sel.vehicleId);
+    setPaymentMode((cur) => modeAfterVehicleChange(cur, sel));
+    clearFieldError("customerId", "vehicleId");
+  }
+
   // D-111: the two-step "давхцаж байна → press again" confirmation is gone.
   // createOrderAction/updateOrderAction no longer emit `confirmNeeded`, so the
   // armed state, the hidden `confirmed` input and the "Тийм, үргэлжлүүлэх"
@@ -184,10 +207,19 @@ export function OrderForm({
   }
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    if (plateMode && plateBusy) {
+      e.preventDefault();
+      return;
+    }
     const missing: Record<string, string> = {};
     if (!branchId) missing.branchId = "Салбар сонгоно уу.";
-    if (!customerId) missing.customerId = "Үйлчлүүлэгчээ сонгоно уу.";
-    if (!vehicleId) missing.vehicleId = "Машинаа сонгоно уу.";
+    if (plateMode && !vehicleId) {
+      // Бүртгэлгүй дугаар: серверийн задлагчтай ижил шалгалт (дугаар/утас/марк/загвар).
+      Object.assign(missing, parsePlateIntakeForm(new FormData(e.currentTarget)).errors);
+    } else {
+      if (!customerId) missing.customerId = "Үйлчлүүлэгчээ сонгоно уу.";
+      if (!vehicleId) missing.vehicleId = "Машинаа сонгоно уу.";
+    }
     if (!assignedToId) missing.assignedToId = "Хариуцах мастер сонгоно уу.";
     setClientErrors(missing);
     if (Object.keys(missing).length > 0) e.preventDefault();
@@ -428,6 +460,24 @@ export function OrderForm({
         </div>
       ) : null}
 
+      {plateMode ? (
+        <>
+          <PlateIntakeField
+            customers={customers}
+            errors={fe}
+            onSelect={onPlateSelect}
+            onBusyChange={setPlateBusy}
+            onSwitchToList={() => {
+              setIntakeMode("list");
+              setPlateBusy(false);
+            }}
+            onClearError={clearFieldError}
+          />
+          <input type="hidden" name="customerId" value={customerId} />
+          <input type="hidden" name="vehicleId" value={vehicleId} />
+        </>
+      ) : null}
+
       <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 xl:grid-rows-[auto_auto_1fr]">
         <Field label="Салбар" required htmlFor="branchId" error={fe.branchId} className={FIELD_MW}>
           <Select
@@ -471,6 +521,8 @@ export function OrderForm({
           />
         </Field>
 
+        {plateMode ? null : (
+        <>
         <Field
           label="Үйлчлүүлэгч"
           required
@@ -579,6 +631,17 @@ export function OrderForm({
             />
           </div>
         </Field>
+        {!isEdit && !appointmentId ? (
+          <button
+            type="button"
+            onClick={() => setIntakeMode("plate")}
+            className="self-end justify-self-start mb-2 text-xs text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)]"
+          >
+            ← Улсын дугаараар хайх
+          </button>
+        ) : null}
+        </>
+        )}
 
         <Field
           label="Товлосон огноо"
@@ -704,7 +767,7 @@ export function OrderForm({
         <BtnLink href={backHref} variant="ghost">
           ← Буцах
         </BtnLink>
-        <Btn type="submit" disabled={pending || intakeBusy}>
+        <Btn type="submit" disabled={pending || intakeBusy || (plateMode && plateBusy)}>
           {pending ? "..." : isEdit ? "Хадгалах" : "Засварын хуудас үүсгэх"}
         </Btn>
       </div>

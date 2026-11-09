@@ -13,17 +13,13 @@ import { Select } from "@/app/_components/select";
 import { useToast } from "@/app/_components/toast";
 import { quickCreateCustomerFromPlateAction } from "@/app/_actions/quick-create";
 import { customerLabel, customerPickerHint } from "@/lib/customers";
-import { NO_PLATE, isNoPlate } from "@/lib/vehicle-plate";
+import { NO_PLATE, PLATE_PATTERN, isNoPlate } from "@/lib/vehicle-plate";
 import {
   normalizeWheelPosition,
   ownerKindFromRegnum,
 } from "@/lib/hur_service";
 import type { LookupVehicle } from "@/lib/hur-lookup";
 
-// Монгол улсын дугаарын хэлбэр: 4 цифр + 3 үсэг (Кирилл эсвэл Латин).
-// 4 цифр + 3 үсэг. Кирилл `А-Я` муж нь Монгол тусгай үсэг Ө/Ү/Ё-г агуулдаггүй
-// тул орон нутгийн дугаар (ж: ӨВ…, Ү-тэй) тусад нь нэмнэ.
-const PLATE_PATTERN = /^\d{4}[А-ЯЁӨҮA-Z]{3}$/;
 const PLATE_FETCH_DEBOUNCE_MS = 400;
 
 type Initial = {

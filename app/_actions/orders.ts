@@ -54,6 +54,16 @@ import {
   validateOrderAssignee,
 } from "@/lib/orders/order-commands";
 import { createOrderCommand } from "@/lib/orders/order-create-command";
+import {
+  type PlateIntakeInput,
+  type PlateLookupResult,
+  parsePlateIntakeForm,
+} from "@/lib/orders/plate-intake";
+import {
+  PlateIntakeError,
+  lookupPlateForOrder,
+  resolvePlateIntake,
+} from "@/lib/orders/plate-intake-server";
 import { internalHasPaymentsViolation, internalPostpaidConflict, resolveUpdatedIsPostpaid } from "@/lib/orders/order-internal";
 import {
   addOrderItemCommand,
@@ -334,6 +344,16 @@ export async function createOrderAction(
   }
 
   const { data, errors } = parseOrderInput(formData);
+  // «Улсын дугаар» горим: бүртгэлтэй машин сонгоогүй бол дугаар + утсаар
+  // үйлчлүүлэгч/машиныг доор (бусад шалгалт давсны дараа) бүртгэнэ.
+  let plateIntake: PlateIntakeInput | null = null;
+  if (s(formData, "intakeMode") === "plate" && !data.vehicleId) {
+    delete errors.customerId;
+    delete errors.vehicleId;
+    const parsed = parsePlateIntakeForm(formData);
+    Object.assign(errors, parsed.errors);
+    plateIntake = parsed.input;
+  }
   if (!canAssignOrders(user)) {
     if (data.assignedToId && data.assignedToId !== user.id) {
       return { ok: false, message: "Зөвхөн өөрийгөө хариуцагчаар оноож болно." };
@@ -359,11 +379,36 @@ export async function createOrderAction(
       errors.durationMinutes = durationParse.error;
     }
   }
+  const scope = workingBranchScopeId(user);
+  // Салбарын хүрээг үйлчлүүлэгч/машин бүртгэхээс ӨМНӨ шалгана (createOrderCommand-тай ижил).
+  if (plateIntake && scope && scope !== "ALL" && data.branchId && data.branchId !== scope) {
+    errors.branchId = "Зөвхөн өөрийн салбарт засварын хуудас үүсгэх боломжтой.";
+  }
   if (Object.keys(errors).length > 0) {
     return { ok: false, fieldErrors: errors };
   }
 
-  const scope = workingBranchScopeId(user);
+  if (plateIntake) {
+    if (!canCreate(user, "vehicles")) {
+      return { ok: false, message: "Танд машин бүртгэх эрх байхгүй — жагсаалтаас сонгоно уу." };
+    }
+    try {
+      const resolved = await resolvePlateIntake(user, plateIntake, {
+        canCreateCustomer: canCreate(user, "customers"),
+      });
+      data.customerId = resolved.customerId;
+      data.vehicleId = resolved.vehicleId;
+    } catch (e) {
+      if (e instanceof PlateIntakeError) {
+        return { ok: false, message: e.message, fieldErrors: e.fieldErrors };
+      }
+      logUnexpectedOrderActionError("create", e);
+      return { ok: false, message: "Серверийн алдаа гарлаа. Дахин оролдоно уу." };
+    }
+    revalidatePath("/dashboard/customers");
+    revalidatePath("/dashboard/vehicles");
+  }
+
   try {
     const created = await createOrderCommand({
       tenantId: user.tenantId,
@@ -400,6 +445,28 @@ export async function createOrderAction(
     return { ok: false, message: "Серверийн алдаа гарлаа. Дахин оролдоно уу." };
   }
 }
+/**
+ * Шинэ засварын хуудасны «Улсын дугаар» талбар: tenant бүртгэл → глобал →
+ * HUR дарааллаар хайна. Эзэмшигчийн PII (HUR утас/регистр) буцаахгүй.
+ */
+export async function lookupPlateForOrderAction(
+  plate: string,
+): Promise<{ ok: true; result: PlateLookupResult } | { ok: false; message: string }> {
+  let user;
+  try {
+    user = await authorize("create");
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
+  }
+  if (!plate.trim()) return { ok: false, message: "Улсын дугаар шаардлагатай." };
+  try {
+    return { ok: true, result: await lookupPlateForOrder(user, plate) };
+  } catch (e) {
+    logUnexpectedOrderActionError("create", e);
+    return { ok: false, message: "Дугаараар хайхад алдаа гарлаа." };
+  }
+}
+
 // --- UPDATE (info only — status өөр action-аар солино) -------------------
 
 export async function updateOrderAction(
