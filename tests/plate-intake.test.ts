@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parsePlateIntakeForm } from "../lib/orders/plate-intake";
+import { parsePlateCustomerForm, parsePlateIntakeForm } from "../lib/orders/plate-intake";
 import { NO_PLATE, PLATE_PATTERN, isStandardPlate, normalizePlate } from "../lib/vehicle-plate";
 
 // «Улсын дугаар бичээд л» засварын хуудас. Сервер тал (plate-intake-server.ts,
@@ -87,14 +87,14 @@ test("STRUCTURAL: lookup result never carries HUR owner PII", () => {
   assert.doesNotMatch(server, /hur\.owner/);
 });
 
-test("STRUCTURAL: intake reuses customer by phone before creating, and links via createVehicleCommand", () => {
+test("STRUCTURAL: customer is reused by phone before one is created", () => {
   const src = readSource("../lib/orders/plate-intake-server.ts");
-  const findIdx = src.indexOf("findTenantCustomerIdByPhone(");
-  const createCustomerIdx = src.indexOf("createCustomerCommand({");
-  const createVehicleIdx = src.indexOf("createVehicleCommand({");
-  assert.ok(findIdx !== -1 && findIdx < createCustomerIdx && createCustomerIdx < createVehicleIdx);
-  assert.match(src, /rejectDuplicate: false/);
-  assert.match(src, /requireCustomerId: true/);
+  const fn = src.slice(src.indexOf("async function findOrCreateCustomerByPhone("), src.indexOf("export async function linkPlateCustomer("));
+  const findIdx = fn.indexOf("findTenantCustomerIdByPhone(");
+  const createCustomerIdx = fn.indexOf("createCustomerCommand({");
+  assert.ok(findIdx !== -1 && findIdx < createCustomerIdx);
+  const fallback = src.slice(src.indexOf("export async function resolvePlateIntake("));
+  assert.match(fallback, /requireCustomerId: true/);
 });
 
 // --- STRUCTURAL: createOrderAction wiring ----------------------------------
@@ -116,7 +116,51 @@ test("STRUCTURAL: createOrderAction validates everything (incl. branch scope) be
   assert.match(body, /canCreateCustomer: canCreate\(user, "customers"\)/);
 });
 
-test("STRUCTURAL: plate mode only applies when no registered vehicle was picked", () => {
+test("STRUCTURAL: plate mode links an owner to a registered vehicle, else falls back to full intake", () => {
   const src = readSource("../app/_actions/orders.ts");
-  assert.match(src, /s\(formData, "intakeMode"\) === "plate" && !data\.vehicleId/);
+  assert.match(src, /plateMode && data\.vehicleId && !data\.customerId/);
+  assert.match(src, /plateMode && !data\.vehicleId/);
+  const body = src.slice(src.indexOf("export async function createOrderAction("));
+  const linkIdx = body.indexOf("linkPlateCustomer(user, plateLink");
+  const commandIdx = body.indexOf("createOrderCommand({");
+  assert.ok(linkIdx !== -1 && linkIdx < commandIdx, "owner must be linked before the order is created");
+});
+
+// --- Step 1: vehicle without owner; Step 2: owner by phone -----------------
+
+test("BEHAVIORAL: parsePlateCustomerForm requires a valid phone, name optional", () => {
+  assert.ok(parsePlateCustomerForm(fd({})).errors.phone);
+  assert.match(parsePlateCustomerForm(fd({ phone: "12" })).errors.phone, /8 оронтой/);
+  const ok = parsePlateCustomerForm(fd({ phone: "9911 2233", fullName: " Бат " }));
+  assert.deepEqual(ok.errors, {});
+  assert.equal(ok.phone, "99112233");
+  assert.equal(ok.fullName, "Бат");
+});
+
+test("STRUCTURAL: registerPlateVehicle reuses an ownerless tenant link before creating a vehicle without owner", () => {
+  const src = readSource("../lib/orders/plate-intake-server.ts");
+  const fn = src.slice(src.indexOf("export async function registerPlateVehicle("), src.indexOf("async function findOrCreateCustomerByPhone("));
+  const reuseIdx = fn.indexOf("customerId: null, vehicle: { plate }");
+  const createIdx = fn.indexOf("createVehicleCommand({");
+  assert.ok(reuseIdx !== -1 && reuseIdx < createIdx, "must look for an ownerless link first");
+  assert.match(fn, /customerId: null,\s*\n\s*\},\s*\n\s*rejectDuplicate: false,\s*\n\s*requireCustomerId: false/);
+});
+
+test("STRUCTURAL: linkPlateCustomer never overwrites an existing owner", () => {
+  const src = readSource("../lib/orders/plate-intake-server.ts");
+  const fn = src.slice(src.indexOf("export async function linkPlateCustomer("), src.indexOf("export async function resolvePlateIntake("));
+  assert.match(fn, /link\.customerId && link\.customerId !== customerId/);
+  assert.match(fn, /ensureTenantVehicle\(tx,/);
+  assert.match(fn, /ownerId !== customerId/);
+  assert.match(fn, /logAudit\(/);
+});
+
+test("STRUCTURAL: step actions require order-create and vehicle-create rights", () => {
+  const src = readSource("../app/_actions/orders.ts");
+  const reg = src.slice(src.indexOf("export async function registerPlateVehicleAction("), src.indexOf("export async function linkPlateCustomerAction("));
+  assert.match(reg, /authorize\("create"\)/);
+  assert.match(reg, /canCreate\(user, "vehicles"\)/);
+  const link = src.slice(src.indexOf("export async function linkPlateCustomerAction("));
+  assert.match(link, /authorize\("create"\)/);
+  assert.match(link, /canCreateCustomer: canCreate\(user, "customers"\)/);
 });

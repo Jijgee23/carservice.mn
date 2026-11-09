@@ -57,13 +57,20 @@ import { createOrderCommand } from "@/lib/orders/order-create-command";
 import {
   type PlateIntakeInput,
   type PlateLookupResult,
+  type PlateLookupVehicle,
+  type TenantPlateMatch,
+  type UnownedPlateVehicle,
+  parsePlateCustomerForm,
   parsePlateIntakeForm,
 } from "@/lib/orders/plate-intake";
 import {
   PlateIntakeError,
+  linkPlateCustomer,
   lookupPlateForOrder,
+  registerPlateVehicle,
   resolvePlateIntake,
 } from "@/lib/orders/plate-intake-server";
+import { normalizePhone } from "@/lib/phone";
 import { internalHasPaymentsViolation, internalPostpaidConflict, resolveUpdatedIsPostpaid } from "@/lib/orders/order-internal";
 import {
   addOrderItemCommand,
@@ -344,10 +351,18 @@ export async function createOrderAction(
   }
 
   const { data, errors } = parseOrderInput(formData);
-  // «Улсын дугаар» горим: бүртгэлтэй машин сонгоогүй бол дугаар + утсаар
-  // үйлчлүүлэгч/машиныг доор (бусад шалгалт давсны дараа) бүртгэнэ.
+  // «Улсын дугаар» горим (бусад шалгалт давсны дараа доор бүртгэнэ):
+  //  - машин эзэмшигчгүй бүртгэгдсэн (vehicleId) ч үйлчлүүлэгч холбоогүй → утсаар холбоно;
+  //  - машин огт бүртгээгүй → дугаар + утсаар үйлчлүүлэгч/машиныг хамт бүртгэнэ.
+  const plateMode = s(formData, "intakeMode") === "plate";
   let plateIntake: PlateIntakeInput | null = null;
-  if (s(formData, "intakeMode") === "plate" && !data.vehicleId) {
+  let plateLink: { vehicleId: string; phone: string; fullName: string } | null = null;
+  if (plateMode && data.vehicleId && !data.customerId) {
+    delete errors.customerId;
+    const parsed = parsePlateCustomerForm(formData);
+    Object.assign(errors, parsed.errors);
+    plateLink = { vehicleId: data.vehicleId, phone: parsed.phone, fullName: parsed.fullName };
+  } else if (plateMode && !data.vehicleId) {
     delete errors.customerId;
     delete errors.vehicleId;
     const parsed = parsePlateIntakeForm(formData);
@@ -381,11 +396,28 @@ export async function createOrderAction(
   }
   const scope = workingBranchScopeId(user);
   // Салбарын хүрээг үйлчлүүлэгч/машин бүртгэхээс ӨМНӨ шалгана (createOrderCommand-тай ижил).
-  if (plateIntake && scope && scope !== "ALL" && data.branchId && data.branchId !== scope) {
+  if ((plateIntake || plateLink) && scope && scope !== "ALL" && data.branchId && data.branchId !== scope) {
     errors.branchId = "Зөвхөн өөрийн салбарт засварын хуудас үүсгэх боломжтой.";
   }
   if (Object.keys(errors).length > 0) {
     return { ok: false, fieldErrors: errors };
+  }
+
+  if (plateLink) {
+    try {
+      const match = await linkPlateCustomer(user, plateLink, {
+        canCreateCustomer: canCreate(user, "customers"),
+      });
+      data.customerId = match.customerId;
+    } catch (e) {
+      if (e instanceof PlateIntakeError) {
+        return { ok: false, message: e.message, fieldErrors: e.fieldErrors };
+      }
+      logUnexpectedOrderActionError("create", e);
+      return { ok: false, message: "Серверийн алдаа гарлаа. Дахин оролдоно уу." };
+    }
+    revalidatePath("/dashboard/customers");
+    revalidatePath("/dashboard/vehicles");
   }
 
   if (plateIntake) {
@@ -464,6 +496,79 @@ export async function lookupPlateForOrderAction(
   } catch (e) {
     logUnexpectedOrderActionError("create", e);
     return { ok: false, message: "Дугаараар хайхад алдаа гарлаа." };
+  }
+}
+
+type PlateStepResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; message: string; fieldErrors?: Record<string, string> };
+
+/**
+ * «Улсын дугаар» 1-р алхам: бүртгэлгүй дугаарыг эзэмшигчгүйгээр шууд tenant-д
+ * бүртгэнэ (эзэнгүй бүртгэл байвал түүнийг буцаана).
+ */
+export async function registerPlateVehicleAction(input: {
+  plate: string;
+  vehicle: PlateLookupVehicle;
+  fromLookup: boolean;
+}): Promise<PlateStepResult<UnownedPlateVehicle>> {
+  let user;
+  try {
+    user = await authorize("create");
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
+  }
+  if (!canCreate(user, "vehicles")) {
+    return { ok: false, message: "Танд машин бүртгэх эрх байхгүй — жагсаалтаас сонгоно уу." };
+  }
+  try {
+    const value = await registerPlateVehicle(user, input);
+    revalidatePath("/dashboard/vehicles");
+    return { ok: true, value };
+  } catch (e) {
+    if (e instanceof PlateIntakeError) {
+      return { ok: false, message: e.message, fieldErrors: e.fieldErrors };
+    }
+    logUnexpectedOrderActionError("create", e);
+    return { ok: false, message: "Машин бүртгэхэд алдаа гарлаа." };
+  }
+}
+
+/**
+ * «Улсын дугаар» 2-р алхам: утсаар үйлчлүүлэгчийг олж/үүсгээд эзэнгүй
+ * бүртгэгдсэн машинд эзэмшигч болгон холбоно.
+ */
+export async function linkPlateCustomerAction(input: {
+  vehicleId: string;
+  phone: string;
+  fullName: string;
+}): Promise<PlateStepResult<TenantPlateMatch>> {
+  let user;
+  try {
+    user = await authorize("create");
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
+  }
+  const phone = normalizePhone(input.phone);
+  if (!phone) {
+    const msg = "Утасны дугаар 8 оронтой тоо байх ёстой.";
+    return { ok: false, message: msg, fieldErrors: { phone: msg } };
+  }
+  try {
+    const value = await linkPlateCustomer(
+      user,
+      { vehicleId: input.vehicleId, phone, fullName: input.fullName.trim() },
+      { canCreateCustomer: canCreate(user, "customers") },
+    );
+    revalidatePath("/dashboard/customers");
+    revalidatePath("/dashboard/vehicles");
+    return { ok: true, value };
+  } catch (e) {
+    if (e instanceof PlateIntakeError) {
+      return { ok: false, message: e.message, fieldErrors: e.fieldErrors };
+    }
+    logUnexpectedOrderActionError("create", e);
+    return { ok: false, message: "Үйлчлүүлэгч холбоход алдаа гарлаа." };
   }
 }
 

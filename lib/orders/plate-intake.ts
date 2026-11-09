@@ -27,8 +27,21 @@ export type TenantPlateMatch = {
   vehicle: PlateLookupVehicle;
 };
 
+/** Энэ tenant-д эзэмшигчгүй бүртгэгдсэн машин — утас бичээд эзэмшигч холбоно. */
+export type UnownedPlateVehicle = {
+  vehicleId: string;
+  isPostpaid: boolean;
+  vehicle: PlateLookupVehicle;
+};
+
 export type PlateLookupResult =
-  | { kind: "tenant"; plate: string; matches: TenantPlateMatch[] }
+  | {
+      kind: "tenant";
+      plate: string;
+      matches: TenantPlateMatch[];
+      /** Эзэмшигчгүй бүртгэл (байвал) — шинэ эзэмшигчийг үүнд холбоно. */
+      unowned: UnownedPlateVehicle | null;
+    }
   | { kind: "known"; plate: string; source: "global" | "hur"; vehicle: PlateLookupVehicle }
   | { kind: "notFound"; plate: string; reason: "not_found" | "hur_error" | "rate_limited" };
 
@@ -48,6 +61,23 @@ function str(fd: FormData, key: string): string {
 }
 
 /**
+ * Машин бүртгэгдсэн (vehicleId байгаа) ч эзэмшигчгүй үед үйлчлүүлэгчийн
+ * утас/нэрийг задлана.
+ */
+export function parsePlateCustomerForm(fd: FormData): {
+  phone: string;
+  fullName: string;
+  errors: Record<string, string>;
+} {
+  const raw = str(fd, "phone");
+  const phone = normalizePhone(raw) ?? "";
+  const errors: Record<string, string> = {};
+  if (!raw) errors.phone = "Үйлчлүүлэгчийн утсыг оруулна уу.";
+  else if (!phone) errors.phone = "Утасны дугаар 8 оронтой тоо байх ёстой.";
+  return { phone, fullName: str(fd, "fullName"), errors };
+}
+
+/**
  * `intakeMode=plate` бөгөөд бүртгэлтэй машин сонгоогүй үеийн талбаруудыг
  * задлана. Алдааны түлхүүр нь маягтын талбарын нэртэй ижил
  * (plate / phone / make / model).
@@ -57,7 +87,8 @@ export function parsePlateIntakeForm(fd: FormData): {
   errors: Record<string, string>;
 } {
   const plate = normalizePlate(str(fd, "plate"));
-  const phone = normalizePhone(str(fd, "phone")) ?? "";
+  const customer = parsePlateCustomerForm(fd);
+  const phone = customer.phone;
   const yearNum = Number.parseInt(str(fd, "year"), 10);
   const input: PlateIntakeInput = {
     plate,
@@ -74,10 +105,8 @@ export function parsePlateIntakeForm(fd: FormData): {
     fromLookup: str(fd, "fromLookup") === "1",
   };
 
-  const errors: Record<string, string> = {};
+  const errors: Record<string, string> = { ...customer.errors };
   if (!plate || isNoPlate(plate)) errors.plate = "Улсын дугаараа оруулна уу.";
-  if (!str(fd, "phone")) errors.phone = "Үйлчлүүлэгчийн утсыг оруулна уу.";
-  else if (!phone) errors.phone = "Утасны дугаар 8 оронтой тоо байх ёстой.";
   if (!input.vehicle.make) errors.make = "Маркаа оруулна уу.";
   if (!input.vehicle.model) errors.model = "Загвараа оруулна уу.";
   return { input, errors };

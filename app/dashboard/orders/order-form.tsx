@@ -8,7 +8,12 @@ import {
 } from "@/app/_actions/orders";
 import { IntakeSection } from "./intake-section";
 import { PlateIntakeField, type PlateMatchSelection } from "./plate-intake-field";
-import { parsePlateIntakeForm } from "@/lib/orders/plate-intake";
+import { parsePlateCustomerForm } from "@/lib/orders/plate-intake";
+
+function plateHasValue(form: HTMLFormElement): boolean {
+  const v = new FormData(form).get("plate");
+  return typeof v === "string" && v.trim().length > 0;
+}
 import {
   getBranchDaySchedulePreview,
   type BranchDaySchedulePreview,
@@ -170,10 +175,11 @@ export function OrderForm({
       setVehicleId("");
       return;
     }
+    // customerId хоосон байж болно: машин бүртгэгдсэн, эзэмшигч хараахан холбогдоогүй.
     setCustomerId(sel.customerId);
     setVehicleId(sel.vehicleId);
     setPaymentMode((cur) => modeAfterVehicleChange(cur, sel));
-    clearFieldError("customerId", "vehicleId");
+    clearFieldError("customerId", "vehicleId", "plate");
   }
 
   // D-111: the two-step "давхцаж байна → press again" confirmation is gone.
@@ -214,8 +220,13 @@ export function OrderForm({
     const missing: Record<string, string> = {};
     if (!branchId) missing.branchId = "Салбар сонгоно уу.";
     if (plateMode && !vehicleId) {
-      // Бүртгэлгүй дугаар: серверийн задлагчтай ижил шалгалт (дугаар/утас/марк/загвар).
-      Object.assign(missing, parsePlateIntakeForm(new FormData(e.currentTarget)).errors);
+      // 1-р алхам дуусаагүй: машин бүртгэгдээгүй байна.
+      missing.plate = plateHasValue(e.currentTarget)
+        ? "Эхлээд машинаа бүртгэнэ үү."
+        : "Улсын дугаараа оруулна уу.";
+    } else if (plateMode && !customerId) {
+      // 2-р алхам: эзэмшигч холбоогүй бол утсаар серверт холбуулна.
+      Object.assign(missing, parsePlateCustomerForm(new FormData(e.currentTarget)).errors);
     } else {
       if (!customerId) missing.customerId = "Үйлчлүүлэгчээ сонгоно уу.";
       if (!vehicleId) missing.vehicleId = "Машинаа сонгоно уу.";
