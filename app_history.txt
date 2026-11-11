@@ -2217,6 +2217,12 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - Аль хэдийн зөвшөөрсөн төхөөрөмжийн чимээгүй token шинэчлэлт бүтэлгүйтвэл алдааны мөр гаргахгүй (идэвхтэй хэвээр, консолд бичнэ).
 - Dashboard болон system-admin layout-д ашигласан; account хуудасны WebPushToggle хэвээр.
 
+[2026-11-09] Mobile app-ууд (carservice_customer, carcare_service_app) вэбийн «Midnight + Alizarin» өнгөнд шилжсэн
+- Theme token-ууд (OpsColors / AppColors) globals.css-ийн --oc-* (navy #1e2b38/#2c3e50 суурь, #e74c3c / light #c0392b accent) утгаар 1:1 шинэчлэгдэв; хуучин cyan (#22d3ee) бүрэн солигдсон.
+- Улаан accent алдаатай андуурагдахгүйн тулд «хийгдэж буй»/мэдээллийн төлөвүүд --oc-b6 цэнхэр (info) руу; service app-д CarserviceTheme.info token нэмэв.
+- Radius вэбийн хэмжүүр (panel 10, control 8) рүү, literal BorderRadius-ууд token болсон.
+- Лого/icon/splash PNG-үүдийг улаан+navy болгож дахин үүсгэв; splash дэвсгэр #ECF0F1 / dark #1E2B38 (customer-д цагаан wordmark-тай dark splash).
+
 [2026-11-09] Mobile tenant бүртгэл + ажилтны апп-д дутуу байсан v1 API-ууд
 - POST /api/v1/auth/signup/request-otp, POST /api/v1/auth/signup: веб signUpAction-ийн мобайл хувилбар (OTP → Tenant + «Үндсэн салбар» + OWNER, хариу /auth/login-тэй ижил token). Логик lib/auth/tenant-signup.ts-д нэгтгэгдэж, веб action мөн түүнийг дуудна.
 - GET/PATCH /api/v1/tenant, POST/DELETE /api/v1/tenant/logo (lib/tenant-settings.ts; бичих нь зөвхөн эзэн).
