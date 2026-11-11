@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<title>carservice.mn poster</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--carbon:#1e2b38;--deep:#16212b;--panel:#2c3e50;--panel2:#26374a;--line:#3b5167;--ink:#ecf0f1;--ink2:#dde3e6;--muted:#bdc6c8;--muted3:#95a5a6;--muted4:#5d6d7e;--red:#e74c3c;--red-hi:#f1948a;--ok:#58d68d;--warn:#f7c948;--blue:#5dade2;--purple:#bb8fce}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:1240px;height:1754px;overflow:hidden;font-family:Inter,sans-serif;color:var(--ink);background:var(--carbon)}
+.poster{position:relative;width:1240px;height:1754px;overflow:hidden;background:radial-gradient(1200px 900px at 85% 8%,#3a2a33 0%,transparent 60%),linear-gradient(180deg,#22313f 0%,var(--carbon) 45%,var(--deep) 100%)}
+.grid{position:absolute;inset:0;background-image:linear-gradient(rgba(236,240,241,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(236,240,241,.04) 1px,transparent 1px);background-size:56px 56px;mask-image:linear-gradient(180deg,#000 0%,#000 55%,transparent 85%)}
+.glow{position:absolute;border-radius:50%;filter:blur(110px)}
+h1,h2,h3,.m{font-family:Manrope,sans-serif;letter-spacing:-.025em}
+.mono{font-family:'JetBrains Mono',monospace}
+.red{color:var(--red)}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:999px;background:rgba(44,62,80,.75);border:1px solid var(--line);font:600 16px Inter;color:var(--ink2)}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--red);display:block}
+.win{position:absolute;border-radius:20px;background:#17222d;border:1px solid #3b5167;box-shadow:0 60px 120px -30px rgba(0,0,0,.75),0 0 0 1px rgba(255,255,255,.03) inset;overflow:hidden}
+.bar{height:40px;display:flex;align-items:center;gap:8px;padding:0 16px;background:#1b2734;border-bottom:1px solid #2e4152}
+.bar span{width:11px;height:11px;border-radius:50%}
+.url{margin-left:18px;flex:1;max-width:340px;height:24px;border-radius:7px;background:#121b24;font:500 12px 'JetBrains Mono';color:var(--muted3);display:flex;align-items:center;padding:0 12px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.kpi .l{font-size:11.5px;color:var(--muted3)}
+.kpi .v{font:800 23px Manrope;margin-top:6px;letter-spacing:-.02em}
+.kpi .d{font:600 11px Inter;margin-top:4px;color:var(--ok)}
+.feat{display:flex;gap:16px;align-items:flex-start}
+.feat .ic{flex:none;width:52px;height:52px;border-radius:14px;display:grid;place-items:center;background:rgba(231,76,60,.14);color:var(--red)}
+.feat svg{width:26px;height:26px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.feat h3{font-size:20px;font-weight:800}
+.feat p{font-size:14.5px;line-height:1.5;color:var(--muted);margin-top:4px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<symbol id="mark" viewBox="0 0 38 38">
+<path fill="currentColor" d="M18.9329 9.5022C19.3102 9.5022 19.693 9.52887 20.0813 9.58224C20.4696 9.63561 20.8458 9.71109 21.2098 9.80859C21.4538 9.88619 21.6312 10.0054 21.742 10.1664C21.8531 10.3274 21.9375 10.5155 21.9952 10.7307C22.0529 10.9459 22.0511 11.1572 21.99 11.3646C21.9291 11.5723 21.8166 11.7582 21.6525 11.9223L17.0424 16.5987L21.3561 20.9129L25.9662 16.3361C26.1303 16.1719 26.3217 16.0592 26.5403 15.9981C26.7587 15.9369 26.9757 15.9352 27.1912 15.9929C27.4064 16.0506 27.5943 16.1406 27.755 16.2629C27.916 16.385 28.0352 16.5569 28.1128 16.7787C28.2328 17.1425 28.3194 17.513 28.3724 17.8903C28.4258 18.2677 28.4525 18.6449 28.4525 19.0219C28.4525 21.6626 27.5261 23.9094 25.6732 25.7623C23.8204 27.6152 21.5736 28.5416 18.9329 28.5416C18.1361 28.5416 17.4032 28.4619 16.7342 28.3023C16.0653 28.1425 15.4312 27.9027 14.8321 27.5831L11.6842 30.7372L7.21922 26.2722L10.3717 23.1228C10.0746 22.4795 9.8405 21.8232 9.66944 21.1539C9.49867 20.485 9.41322 19.7743 9.41321 19.0219C9.41321 16.3815 10.3397 14.1348 12.1925 12.2819C14.0454 10.4288 16.2922 9.5022 18.9329 9.5022Z"/>
+<path fill="currentColor" fill-rule="evenodd" d="M25.4405 0C32.3768 0 37.9997 5.623 37.9997 12.5593V30.2712C37.9997 34.5397 34.5394 38 30.271 38H10.5077L0 27.4922V7.72881C0 3.49367 3.40641 0.0541312 7.62883 0.000628972L7.72876 0H25.4405ZM7.72876 4.99153C6.21701 4.99153 4.99149 6.21705 4.99149 7.72881V26.1079L11.8921 33.0085H30.271C31.7827 33.0085 33.0082 31.783 33.0082 30.2712V12.5593C33.0082 8.37974 29.62 4.99153 25.4405 4.99153H7.72876Z"/>
+</symbol></defs></svg>
+
+<div class="poster">
+  <div class="grid"></div>
+  <div class="glow" style="width:700px;height:700px;right:-220px;top:-200px;background:rgba(231,76,60,.32)"></div>
+  <div class="glow" style="width:600px;height:500px;left:-260px;top:760px;background:rgba(93,173,226,.10)"></div>
+  <svg style="position:absolute;right:-150px;top:-60px;width:620px;height:620px;color:rgba(231,76,60,.08)"><use href="#mark"/></svg>
+
+  <!-- header -->
+  <div style="position:absolute;left:80px;right:80px;top:70px;display:flex;justify-content:space-between;align-items:center">
+    <div style="display:flex;align-items:center;gap:14px"><svg style="width:50px;height:50px;color:var(--red)"><use href="#mark"/></svg><span class="m" style="font-size:30px;font-weight:800">carservice<span class="red">.mn</span></span></div>
+    <span class="pill"><i></i>Монголд бүтээв</span>
+  </div>
+
+  <!-- headline -->
+  <div style="position:absolute;left:80px;top:190px;width:1080px">
+    <div style="font:700 17px Inter;letter-spacing:.22em;color:var(--red);display:flex;align-items:center;gap:14px"><span style="width:36px;height:3px;background:var(--red);border-radius:2px"></span>АВТОСЕРВИСИЙН УДИРДЛАГЫН ПЛАТФОРМ</div>
+    <h1 style="margin-top:26px;font-size:112px;line-height:.95;font-weight:800;letter-spacing:-.045em">Засварын газраа<br><span class="red">нэг дэлгэцээс</span> удирд.</h1>
+    <p style="margin-top:30px;font-size:25px;line-height:1.5;color:var(--muted);max-width:860px">Цаг захиалга, засварын хуудас, оношилгоо, сэлбэг, төлбөр, машины түүх — бүгд нэг дор. Цаас, утас, Excel-гүйгээр.</p>
+  </div>
+
+  <!-- dashboard window -->
+  <div class="win" style="left:80px;top:700px;width:830px;height:560px">
+    <div class="bar"><span style="background:#e74c3c"></span><span style="background:#f7c948"></span><span style="background:#58d68d"></span><div class="url">carservice.mn/dashboard</div></div>
+    <div style="display:flex;height:520px">
+      <div style="width:190px;background:#2c3e50;border-right:1px solid #3b5167;padding:18px 14px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:22px"><svg style="width:24px;height:24px;color:var(--red)"><use href="#mark"/></svg><span class="m" style="font-weight:800;font-size:15px">carservice</span></div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)">
+          <div style="padding:9px 12px;border-radius:9px;background:rgba(231,76,60,.18);color:#fff;font-weight:600;border-left:3px solid var(--red)">Хянах самбар</div>
+          <div style="padding:9px 12px">Цаг захиалга</div><div style="padding:9px 12px">Засварын хуудас</div><div style="padding:9px 12px">Оношилгоо</div><div style="padding:9px 12px">Машинууд</div><div style="padding:9px 12px">Нөөц, сэлбэг</div><div style="padding:9px 12px">Санхүү</div><div style="padding:9px 12px">Тайлан</div>
+        </div>
+      </div>
+      <div style="flex:1;padding:22px 24px;background:#1e2b38">
+        <div style="display:flex;justify-content:space-between;align-items:center"><div class="m" style="font-size:21px;font-weight:800">Өнөөдөр</div><div style="font-size:12px;color:var(--muted3)">Хан-Уул салбар ▾</div></div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px">
+          <div class="kpi"><div class="l">Орлого</div><div class="v">4.82<span style="font-size:14px;color:var(--muted3)"> сая₮</span></div><div class="d">▲ 18%</div></div>
+          <div class="kpi"><div class="l">Нээлттэй ажил</div><div class="v">23</div><div class="d" style="color:var(--warn)">7 хүлээгдэж буй</div></div>
+          <div class="kpi"><div class="l">Цаг захиалга</div><div class="v">31</div><div class="d">▲ 12 онлайн</div></div>
+          <div class="kpi"><div class="l">Үнэлгээ</div><div class="v">4.9<span style="font-size:14px;color:var(--warn)"> ★</span></div><div class="d">128 сэтгэгдэл</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1.45fr 1fr;gap:12px;margin-top:12px">
+          <div class="kpi" style="padding:16px">
+            <div style="display:flex;justify-content:space-between"><div class="l">7 хоногийн орлого</div><div class="l mono">₮</div></div>
+            <svg viewBox="0 0 400 170" style="width:100%;height:170px;margin-top:8px">
+              <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e74c3c" stop-opacity=".45"/><stop offset="1" stop-color="#e74c3c" stop-opacity="0"/></linearGradient></defs>
+              <g stroke="#3b5167" stroke-width="1"><line x1="0" y1="40" x2="400" y2="40"/><line x1="0" y1="85" x2="400" y2="85"/><line x1="0" y1="130" x2="400" y2="130"/></g>
+              <path d="M0 128 C40 120 60 100 95 104 S150 70 190 78 S250 40 290 52 S350 20 400 16 L400 170 L0 170Z" fill="url(#g)"/>
+              <path d="M0 128 C40 120 60 100 95 104 S150 70 190 78 S250 40 290 52 S350 20 400 16" fill="none" stroke="#e74c3c" stroke-width="3.5" stroke-linecap="round"/>
+              <circle cx="400" cy="16" r="6" fill="#e74c3c" stroke="#2c3e50" stroke-width="3"/>
+            </svg>
+          </div>
+          <div class="kpi" style="padding:16px">
+            <div class="l">Засварын явц</div>
+            <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;font-size:12.5px">
+              <div style="display:flex;justify-content:space-between;align-items:center"><span class="mono" style="font-weight:700">1234 УБА</span><span style="padding:3px 9px;border-radius:999px;background:rgba(88,214,141,.15);color:var(--ok);font-weight:700;font-size:11px">Бэлэн</span></div>
+              <div style="display:flex;justify-content:space-between;align-items:center"><span class="mono" style="font-weight:700">5678 УНА</span><span style="padding:3px 9px;border-radius:999px;background:rgba(231,76,60,.16);color:var(--red-hi);font-weight:700;font-size:11px">Засварт</span></div>
+              <div style="display:flex;justify-content:space-between;align-items:center"><span class="mono" style="font-weight:700">9012 УББ</span><span style="padding:3px 9px;border-radius:999px;background:rgba(247,201,72,.15);color:var(--warn);font-weight:700;font-size:11px">Оношилгоо</span></div>
+              <div style="display:flex;justify-content:space-between;align-items:center"><span class="mono" style="font-weight:700">3456 УАВ</span><span style="padding:3px 9px;border-radius:999px;background:rgba(93,173,226,.15);color:var(--blue);font-weight:700;font-size:11px">Хүлээн авсан</span></div>
+              <div style="display:flex;justify-content:space-between;align-items:center"><span class="mono" style="font-weight:700">7890 УНД</span><span style="padding:3px 9px;border-radius:999px;background:rgba(187,143,206,.15);color:var(--purple);font-weight:700;font-size:11px">Сэлбэг хүлээж</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="kpi" style="margin-top:12px;display:flex;align-items:center;gap:14px;padding:12px 16px">
+          <span style="width:34px;height:34px;border-radius:9px;background:rgba(231,76,60,.16);color:var(--red);display:grid;place-items:center;font:800 13px Manrope">OBD</span>
+          <div style="flex:1"><div style="font-size:13px;font-weight:700">P0420 · Катализаторын үр ашиг бага</div><div style="font-size:11.5px;color:var(--muted3);margin-top:2px">Оношилгооны тайлан бэлэн · PDF</div></div>
+          <span style="font:700 12px Inter;color:var(--red-hi)">Нээх →</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- phone -->
+  <div style="position:absolute;left:870px;top:730px;width:290px;height:580px;border-radius:46px;background:#0f1720;border:9px solid #3b5167;box-shadow:0 60px 120px -20px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.06);padding:20px 16px;overflow:hidden">
+    <div style="width:90px;height:22px;border-radius:14px;background:#000;margin:-6px auto 16px"></div>
+    <div style="font-size:11px;color:var(--muted3)">Сайн байна уу 👋</div>
+    <div class="m" style="font:800 20px Manrope;margin-top:2px">Миний машинууд</div>
+    <div style="margin-top:14px;border-radius:16px;padding:16px;background:linear-gradient(135deg,#e74c3c,#c0392b);color:#fff;position:relative;overflow:hidden">
+      <svg style="position:absolute;right:-24px;bottom:-24px;width:110px;height:110px;color:rgba(255,255,255,.14)"><use href="#mark"/></svg>
+      <div class="mono" style="font-size:20px;font-weight:700;letter-spacing:.05em">1234 УБА</div>
+      <div style="font-size:12px;opacity:.9;margin-top:2px">Toyota Prius 30 · 2012</div>
+      <div style="display:flex;gap:16px;margin-top:16px;font-size:11px"><div><div style="opacity:.8">Гүйлт</div><b style="font-size:14px">184,200 км</b></div><div><div style="opacity:.8">Засвар</div><b style="font-size:14px">14</b></div></div>
+    </div>
+    <div style="margin-top:12px;border-radius:14px;padding:12px;background:var(--panel);border:1px solid var(--line)">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted3)"><span>Дараагийн цаг</span><span style="color:var(--ok);font-weight:700">Баталгаажсан</span></div>
+      <div class="m" style="font-weight:800;font-size:15px;margin-top:5px">Мягмар, 10 · 13:00</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:2px">Тос солих + шүүлтүүр</div>
+    </div>
+    <div style="margin-top:12px;font-size:11px;color:var(--muted3)">Сүүлийн засварууд</div>
+    <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:12px;background:var(--panel2);font-size:12px"><span>Тоормосны наак</span><b class="mono">185,000₮</b></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:12px;background:var(--panel2);font-size:12px"><span>Оношилгоо</span><b class="mono">40,000₮</b></div>
+    </div>
+    <div style="position:absolute;left:16px;right:16px;bottom:22px;padding:13px;border-radius:14px;background:var(--red);text-align:center;font:800 14px Manrope;color:#fff">+ Цаг захиалах</div>
+  </div>
+
+  <!-- notification toast -->
+  <div style="position:absolute;left:44px;top:1210px;display:flex;gap:12px;align-items:center;padding:12px 16px;border-radius:14px;background:rgba(44,62,80,.92);border:1px solid var(--line);box-shadow:0 24px 50px -15px rgba(0,0,0,.6);backdrop-filter:blur(8px)">
+    <span style="width:34px;height:34px;border-radius:10px;background:var(--ok);display:grid;place-items:center;color:#0f1720;font-weight:800">✓</span>
+    <div><div style="font-weight:700;font-size:13.5px">Шинэ онлайн захиалга</div><div style="font-size:12px;color:var(--muted3)">1234 УБА · Маргааш 13:00</div></div>
+  </div>
+
+  <!-- features -->
+  <div style="position:absolute;left:80px;right:80px;top:1370px;display:grid;grid-template-columns:repeat(3,1fr);gap:30px 40px">
+    <div class="feat"><div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 15l2 2 4-4"/></svg></div><div><h3>Онлайн цаг захиалга</h3><p>Газрын зургаас олоод сул цагаа сонгоно.</p></div></div>
+    <div class="feat"><div class="ic"><svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div><h3>Ухаалаг оношилгоо</h3><p>OBD-II код, загвар, PDF тайлан.</p></div></div>
+    <div class="feat"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/></svg></div><div><h3>Машины бүрэн түүх</h3><p>Засвар, сэлбэг, мастер — үүрд хадгална.</p></div></div>
+    <div class="feat"><div class="ic"><svg viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></div><div><h3>Нөөц ба сэлбэг</h3><p>Үлдэгдэл, тооллого, ангилал.</p></div></div>
+    <div class="feat"><div class="ic"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg></div><div><h3>QPay · И-баримт</h3><p>Төлбөр, баримт системдээ шингэсэн.</p></div></div>
+    <div class="feat"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-6"/></svg></div><div><h3>Бодит цагийн тайлан</h3><p>Орлого, ачаалал, салбар бүрээр.</p></div></div>
+  </div>
+
+  <!-- footer CTA -->
+  <div style="position:absolute;left:0;right:0;bottom:0;height:150px;background:var(--red);display:flex;align-items:center;justify-content:space-between;padding:0 80px;overflow:hidden">
+    <svg style="position:absolute;right:300px;top:-60px;width:270px;height:270px;color:rgba(255,255,255,.08)"><use href="#mark"/></svg>
+    <div style="position:relative">
+      <div class="m" style="font-size:40px;font-weight:800;letter-spacing:-.03em;color:#fff">Өнөөдөр үнэгүй эхлүүл.</div>
+      <div style="font-size:17px;color:rgba(255,255,255,.88);margin-top:4px">Энгийн багц — үргэлж үнэгүй · 2 минутад бүртгэл</div>
+    </div>
+    <div style="position:relative;padding:18px 30px;border-radius:16px;background:var(--carbon);color:#fff;font:800 28px Manrope;letter-spacing:-.02em;box-shadow:0 18px 40px -12px rgba(0,0,0,.45)">carservice<span style="color:var(--red)">.mn</span></div>
+  </div>
+</div>
+</body>
+</html>

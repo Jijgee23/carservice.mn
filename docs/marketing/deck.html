@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<title>carservice.mn — Танилцуулга</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --carbon:#1e2b38; --panel:#2c3e50; --panel2:#26374a; --line:#3b5167; --line2:#314559;
+  --ink:#ecf0f1; --ink2:#dde3e6; --muted:#bdc6c8; --muted3:#95a5a6; --muted4:#5d6d7e;
+  --red:#e74c3c; --red-d:#c0392b; --red-hi:#f1948a; --ok:#58d68d; --warn:#f7c948; --blue:#5dade2; --purple:#bb8fce;
+  --paper:#ecf0f1; --paper2:#f4f6f7; --pline:#d5dcdf; --pink:#2c3e50; --pmuted:#5f6b6d;
+}
+@page{size:1280px 720px;margin:0}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#111a23}
+body{font-family:Inter,Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.slide{width:1280px;height:720px;position:relative;overflow:hidden;page-break-after:always;break-after:page;background:var(--carbon);color:var(--ink);padding:72px 88px}
+.slide:last-child{page-break-after:auto;break-after:auto}
+.light{background:var(--paper);color:var(--pink)}
+h1,h2,h3{font-family:Manrope,Inter,sans-serif;letter-spacing:-.02em}
+h2{font-size:46px;line-height:1.08;font-weight:800;max-width:900px}
+.eyebrow{display:inline-flex;align-items:center;gap:10px;font:700 13px/1 Inter;letter-spacing:.18em;text-transform:uppercase;color:var(--red);margin-bottom:22px}
+.eyebrow::before{content:"";width:28px;height:3px;border-radius:2px;background:var(--red)}
+.light .eyebrow{color:var(--red-d)}.light .eyebrow::before{background:var(--red-d)}
+.lead{font-size:20px;line-height:1.5;color:var(--muted);max-width:760px;margin-top:18px}
+.light .lead{color:var(--pmuted)}
+.foot{position:absolute;left:88px;right:88px;bottom:34px;display:flex;justify-content:space-between;align-items:center;font:500 12px Inter;color:var(--muted3);letter-spacing:.04em}
+.light .foot{color:var(--pmuted)}
+.foot b{font-family:Manrope;font-weight:800;color:inherit}
+.foot .pg{font-family:'JetBrains Mono';}
+.on-red::before{background:#fff!important}
+.red{color:var(--red)} .light .red{color:var(--red-d)}
+.grid{position:absolute;inset:0;background-image:linear-gradient(rgba(236,240,241,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(236,240,241,.045) 1px,transparent 1px);background-size:48px 48px;pointer-events:none}
+.glow{position:absolute;border-radius:50%;filter:blur(90px);pointer-events:none}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:28px}
+.light .card{background:#fff;border-color:var(--pline);box-shadow:0 1px 0 rgba(44,62,80,.04),0 12px 30px -18px rgba(44,62,80,.25)}
+.ico{width:48px;height:48px;border-radius:12px;display:grid;place-items:center;background:rgba(231,76,60,.14);color:var(--red);margin-bottom:20px}
+.light .ico{background:rgba(192,57,43,.09);color:var(--red-d)}
+.ico svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.card h3{font-size:21px;font-weight:800;margin-bottom:8px}
+.card p{font-size:15.5px;line-height:1.55;color:var(--muted)}
+.light .card p{color:var(--pmuted)}
+.logo{display:flex;align-items:center;gap:12px;font:800 22px Manrope;letter-spacing:-.02em}
+.logo svg{width:40px;height:40px}
+.mono{font-family:'JetBrains Mono',monospace}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="mark" viewBox="0 0 38 38">
+      <path fill="currentColor" d="M18.9329 9.5022C19.3102 9.5022 19.693 9.52887 20.0813 9.58224C20.4696 9.63561 20.8458 9.71109 21.2098 9.80859C21.4538 9.88619 21.6312 10.0054 21.742 10.1664C21.8531 10.3274 21.9375 10.5155 21.9952 10.7307C22.0529 10.9459 22.0511 11.1572 21.99 11.3646C21.9291 11.5723 21.8166 11.7582 21.6525 11.9223L17.0424 16.5987L21.3561 20.9129L25.9662 16.3361C26.1303 16.1719 26.3217 16.0592 26.5403 15.9981C26.7587 15.9369 26.9757 15.9352 27.1912 15.9929C27.4064 16.0506 27.5943 16.1406 27.755 16.2629C27.916 16.385 28.0352 16.5569 28.1128 16.7787C28.2328 17.1425 28.3194 17.513 28.3724 17.8903C28.4258 18.2677 28.4525 18.6449 28.4525 19.0219C28.4525 21.6626 27.5261 23.9094 25.6732 25.7623C23.8204 27.6152 21.5736 28.5416 18.9329 28.5416C18.1361 28.5416 17.4032 28.4619 16.7342 28.3023C16.0653 28.1425 15.4312 27.9027 14.8321 27.5831L11.6842 30.7372L7.21922 26.2722L10.3717 23.1228C10.0746 22.4795 9.8405 21.8232 9.66944 21.1539C9.49867 20.485 9.41322 19.7743 9.41321 19.0219C9.41321 16.3815 10.3397 14.1348 12.1925 12.2819C14.0454 10.4288 16.2922 9.5022 18.9329 9.5022Z"/>
+      <path fill="currentColor" fill-rule="evenodd" d="M25.4405 0C32.3768 0 37.9997 5.623 37.9997 12.5593V30.2712C37.9997 34.5397 34.5394 38 30.271 38H10.5077L0 27.4922V7.72881C0 3.49367 3.40641 0.0541312 7.62883 0.000628972L7.72876 0H25.4405ZM7.72876 4.99153C6.21701 4.99153 4.99149 6.21705 4.99149 7.72881V26.1079L11.8921 33.0085H30.271C31.7827 33.0085 33.0082 31.783 33.0082 30.2712V12.5593C33.0082 8.37974 29.62 4.99153 25.4405 4.99153H7.72876Z"/>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- 01 COVER -->
+<section class="slide" style="padding:0">
+  <div class="grid"></div>
+  <div class="glow" style="width:620px;height:620px;right:-160px;top:-180px;background:rgba(231,76,60,.30)"></div>
+  <div class="glow" style="width:520px;height:520px;left:-200px;bottom:-260px;background:rgba(93,173,226,.12)"></div>
+  <svg style="position:absolute;right:-120px;top:70px;width:640px;height:640px;color:rgba(231,76,60,.10)"><use href="#mark"/></svg>
+  <div style="position:absolute;left:88px;top:72px" class="logo"><svg style="color:var(--red)"><use href="#mark"/></svg><span>carservice<span class="red">.mn</span></span></div>
+  <div style="position:absolute;left:88px;top:212px;width:780px">
+    <div class="eyebrow">Автосервисийн удирдлагын платформ</div>
+    <h1 style="font-size:84px;line-height:.98;font-weight:800;letter-spacing:-.035em">Засварын газраа<br><span class="red">нэг дэлгэцээс</span><br>удирд.</h1>
+    <p class="lead" style="margin-top:28px;font-size:21px">Цаг захиалгаас эхлээд машин хүлээлгэн өгөх хүртэл — автозасварын газрыг удирдах хамгийн ухаалаг, хамгийн хурдан шийдэл.</p>
+  </div>
+  <div style="position:absolute;left:88px;bottom:56px;display:flex;gap:10px">
+    <span style="padding:9px 16px;border-radius:999px;background:var(--panel);border:1px solid var(--line);font:600 14px Inter">Засварын газар</span>
+    <span style="padding:9px 16px;border-radius:999px;background:var(--panel);border:1px solid var(--line);font:600 14px Inter">Мастер</span>
+    <span style="padding:9px 16px;border-radius:999px;background:var(--panel);border:1px solid var(--line);font:600 14px Inter">Жолооч</span>
+    <span style="padding:9px 4px;font:500 14px Inter;color:var(--muted3)">— нэг платформ дээр</span>
+  </div>
+</section>
+
+<!-- 02 OLD WAY -->
+<section class="slide light">
+  <div class="eyebrow">Хуучин арга</div>
+  <h2>Цаас, утас, Excel — засварын газрыг удирдах <span class="red">хамгийн удаан</span> арга.</h2>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:56px">
+    <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M9 13l6 6M15 13l-6 6"/></svg></div>
+      <h3>Цаасан засварын хуудас</h3><p>Алга болдог, бохирдодог, хайхад боломжгүй.</p></div>
+    <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/><path d="M16 2l6 6M22 2l-6 6"/></svg></div>
+      <h3>Утсаар цаг захиалах</h3><p>Аваагүй дуудлага бүр — алдсан үйлчлүүлэгч.</p></div>
+    <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg></div>
+      <h3>Excel дээрх нөөц</h3><p>Үргэлж нэг гүйлгээгээр хоцорч байдаг.</p></div>
+  </div>
+  <div style="margin-top:44px;display:flex;align-items:center;gap:18px;padding:22px 28px;border-radius:16px;background:var(--pink);color:var(--ink)">
+    <span class="mono" style="font-size:30px;font-weight:700;color:var(--red)">×3</span>
+    <span style="font-size:17px;line-height:1.45;color:var(--ink2)">Гурван тусдаа хэрэгсэл, гурван тусдаа үнэн. Нэг ч нь машины бүрэн түүхийг хадгалдаггүй.</span>
+  </div>
+  <div class="foot"><b>carservice.mn</b><span class="pg">02</span></div>
+</section>
+
+<!-- 03 NEW WAY -->
+<section class="slide">
+  <div class="grid"></div>
+  <div class="glow" style="width:500px;height:300px;left:40px;top:330px;background:rgba(231,76,60,.18)"></div>
+  <div style="position:relative">
+    <div class="eyebrow">Шинэ арга</div>
+    <h2>Нэг урсгал. Цаг захиалгаас <span class="red">машин хүлээлгэн өгөх</span> хүртэл.</h2>
+  </div>
+  <div style="position:relative;margin-top:84px">
+    <div style="position:absolute;left:44px;right:44px;top:43px;height:3px;background:linear-gradient(90deg,var(--red) 0%,var(--red) 16%,var(--line) 16%)"></div>
+    <div style="display:grid;grid-template-columns:repeat(6,1fr);text-align:center;position:relative">
+      <div><div style="width:88px;height:88px;margin:0 auto;border-radius:22px;background:var(--red);display:grid;place-items:center;font:800 34px Manrope;color:#fff;box-shadow:0 0 0 8px rgba(231,76,60,.18),0 18px 40px -10px rgba(231,76,60,.7)">1</div><div style="margin-top:26px;font:800 18px Manrope">Цаг захиалга</div><div style="margin-top:6px;font-size:14px;color:var(--muted3)">онлайнаар</div></div>
+      <div><div style="width:88px;height:88px;margin:0 auto;border-radius:22px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;font:800 34px Manrope;color:var(--muted)">2</div><div style="margin-top:26px;font:800 18px Manrope">Засварын хуудас</div><div style="margin-top:6px;font-size:14px;color:var(--muted3)">ажил нээх</div></div>
+      <div><div style="width:88px;height:88px;margin:0 auto;border-radius:22px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;font:800 34px Manrope;color:var(--muted)">3</div><div style="margin-top:26px;font:800 18px Manrope">Оношилгоо</div><div style="margin-top:6px;font-size:14px;color:var(--muted3)">OBD-II</div></div>
+      <div><div style="width:88px;height:88px;margin:0 auto;border-radius:22px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;font:800 34px Manrope;color:var(--muted)">4</div><div style="margin-top:26px;font:800 18px Manrope">Засвар</div><div style="margin-top:6px;font-size:14px;color:var(--muted3)">ажил + сэлбэг</div></div>
+      <div><div style="width:88px;height:88px;margin:0 auto;border-radius:22px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;font:800 34px Manrope;color:var(--muted)">5</div><div style="margin-top:26px;font:800 18px Manrope">Төлбөр</div><div style="margin-top:6px;font-size:14px;color:var(--muted3)">QPay · И-баримт</div></div>
+      <div><div style="width:88px;height:88px;margin:0 auto;border-radius:22px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;font:800 34px Manrope;color:var(--muted)">6</div><div style="margin-top:26px;font:800 18px Manrope">Түүх</div><div style="margin-top:6px;font-size:14px;color:var(--muted3)">үүрд хадгална</div></div>
+    </div>
+  </div>
+  <div class="foot"><b>carservice.mn</b><span class="pg">03</span></div>
+</section>
+
+<!-- 04 MAGIC MOMENT -->
+<section class="slide light">
+  <div style="display:grid;grid-template-columns:1fr 520px;gap:56px;align-items:center;height:100%;margin-top:-20px">
+    <div>
+      <div class="eyebrow">Гайхалтай мөч</div>
+      <h2 style="font-size:50px">Улсын дугаараа оруул.<br><span class="red">Машины мэдээлэл бэлэн.</span></h2>
+      <p class="lead">Марк, загвар, үйлдвэрлэсэн он, VIN кодыг ХУР системээс шууд татна. Гараар бичих шаардлагагүй.</p>
+    </div>
+    <div style="background:var(--carbon);border-radius:24px;padding:34px;color:var(--ink);box-shadow:0 40px 80px -30px rgba(30,43,56,.55)">
+      <div style="font:600 12px Inter;letter-spacing:.2em;color:var(--muted3)">УЛСЫН ДУГААР</div>
+      <div style="margin-top:14px;border:2px solid var(--red);border-radius:14px;padding:16px 22px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 0 0 6px rgba(231,76,60,.15)">
+        <span class="mono" style="font-size:34px;font-weight:700;letter-spacing:.06em">1234 УБА</span>
+        <span style="font:700 12px Inter;padding:6px 10px;border-radius:999px;background:rgba(88,214,141,.15);color:var(--ok)">✓ ХУР</span>
+      </div>
+      <div style="margin-top:22px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px"><div style="font-size:12px;color:var(--muted3)">Марк</div><div style="font:700 18px Manrope;margin-top:4px">Toyota</div></div>
+        <div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px"><div style="font-size:12px;color:var(--muted3)">Загвар</div><div style="font:700 18px Manrope;margin-top:4px">Prius 30</div></div>
+        <div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px"><div style="font-size:12px;color:var(--muted3)">Он</div><div style="font:700 18px Manrope;margin-top:4px">2012</div></div>
+        <div style="background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px"><div style="font-size:12px;color:var(--muted3)">Өнгө</div><div style="font:700 18px Manrope;margin-top:4px">Мөнгөлөг</div></div>
+        <div style="grid-column:1/-1;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px"><div style="font-size:12px;color:var(--muted3)">VIN</div><div class="mono" style="font-size:17px;font-weight:700;margin-top:4px;letter-spacing:.04em">JTDKN3DU0C•••••••</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><b>carservice.mn</b><span>жишээ дугаар болон машин нь зөвхөн үзүүлэн · <span class="pg">04</span></span></div>
+</section>
+
+<!-- 05 WHO -->
+<section class="slide">
+  <div class="glow" style="width:500px;height:500px;right:-150px;top:-200px;background:rgba(231,76,60,.18)"></div>
+  <div class="eyebrow">Хэнд зориулсан</div>
+  <h2>Нэг платформ. <span class="red">Гурван</span> сэтгэл ханамжтай хэрэглэгч.</h2>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:60px">
+    <div class="card" style="border-top:3px solid var(--red)"><div class="ico"><svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg></div>
+      <h3>Байгууллагын эзэн</h3><p>Салбар бүр, төгрөг бүр, мастер бүрийг нэг дэлгэцээс бодит цагаар хянана.</p></div>
+    <div class="card" style="border-top:3px solid var(--warn)"><div class="ico" style="background:rgba(247,201,72,.14);color:var(--warn)"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z"/></svg></div>
+      <h3>Засварчин мастер</h3><p>Өнөөдрийн ажил, машины түүх, ашиглах сэлбэг — бүгд гар утсан дээр.</p></div>
+    <div class="card" style="border-top:3px solid var(--blue)"><div class="ico" style="background:rgba(93,173,226,.14);color:var(--blue)"><svg viewBox="0 0 24 24"><path d="M5 17h14v-5l-2-5H7l-2 5z"/><path d="M5 12h14"/><circle cx="8" cy="17" r="2"/><circle cx="16" cy="17" r="2"/></svg></div>
+      <h3>Жолооч</h3><p>Онлайнаар цаг захиалж, засварын явцаа хянаж, машиныхаа бүрэн түүхийг хадгална.</p></div>
+  </div>
+  <div class="foot"><b>carservice.mn</b><span class="pg">05</span></div>
+</section>
+
+<!-- 06 FEATURES -->
+<section class="slide light">
+  <div class="eyebrow">Боломжууд</div>
+  <h2>Засварын газарт хэрэгтэй бүхэн. <span class="red">Илүүц зүйлгүй.</span></h2>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:34px">
+    <div class="card" style="padding:24px"><div class="ico" style="width:42px;height:42px;margin-bottom:16px"><svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><h3 style="font-size:19px">Ухаалаг оношилгоо</h3><p>Загвар, тайлан, OBD-II код, PDF экспорт.</p></div>
+    <div class="card" style="padding:24px"><div class="ico" style="width:42px;height:42px;margin-bottom:16px"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/></svg></div><h3 style="font-size:19px">Машины бүрэн түүх</h3><p>Засвар, сэлбэг, гүйцэтгэсэн мастер — үүрд хадгалагдана.</p></div>
+    <div class="card" style="padding:24px"><div class="ico" style="width:42px;height:42px;margin-bottom:16px"><svg viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></div><h3 style="font-size:19px">Нөөц ба сэлбэг</h3><p>Үлдэгдэл, тооллого, хэмжих нэгж, ангилал.</p></div>
+    <div class="card" style="padding:24px"><div class="ico" style="width:42px;height:42px;margin-bottom:16px"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg></div><h3 style="font-size:19px">Баг ба эрхийн удирдлага</h3><p>Өөрийн үүрэг, нөөц бүрийн эрх, ажлын хуваарь.</p></div>
+    <div class="card" style="padding:24px"><div class="ico" style="width:42px;height:42px;margin-bottom:16px"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 15l2 2 4-4"/></svg></div><h3 style="font-size:19px">Цаг захиалгын төв</h3><p>Онлайн болон утсаар ирсэн захиалга нэг календарьт.</p></div>
+    <div class="card" style="padding:24px"><div class="ico" style="width:42px;height:42px;margin-bottom:16px"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-6"/></svg></div><h3 style="font-size:19px">Бодит цагийн тайлан</h3><p>Орлого, ачаалал, үйлдлийн бүрэн бүртгэл.</p></div>
+  </div>
+  <div class="foot"><b>carservice.mn</b><span class="pg">06</span></div>
+</section>
+
+<!-- 07 DRIVERS -->
+<section class="slide">
+  <div class="grid"></div>
+  <div style="display:grid;grid-template-columns:1fr 380px;gap:64px;position:relative">
+    <div>
+      <div class="eyebrow">Жолоочдод</div>
+      <h2 style="font-size:44px">Засварын газарт цаг захиалах <span class="red">хамгийн хялбар</span> арга.</h2>
+      <p class="lead" style="font-size:18px">Нууц үг шаардлагагүй. Зөвхөн утасны дугаар ба 6 оронтой код.</p>
+      <div style="margin-top:34px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:center;gap:18px"><span class="mono" style="width:40px;height:40px;border-radius:10px;background:var(--red);color:#fff;display:grid;place-items:center;font-weight:700">1</span><span style="font-size:18px">Газрын зураг дээрээс засварын газраа олно</span></div>
+        <div style="display:flex;align-items:center;gap:18px"><span class="mono" style="width:40px;height:40px;border-radius:10px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;font-weight:700">2</span><span style="font-size:18px">Салбар, өдөр, сул цагаа сонгоно</span></div>
+        <div style="display:flex;align-items:center;gap:18px"><span class="mono" style="width:40px;height:40px;border-radius:10px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;font-weight:700">3</span><span style="font-size:18px">Баталгаажуулалт, SMS болон push сануулга авна</span></div>
+        <div style="display:flex;align-items:center;gap:18px"><span class="mono" style="width:40px;height:40px;border-radius:10px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center;font-weight:700">4</span><span style="font-size:18px">«Миний машинууд» хэсгээс бүх засвараа харна</span></div>
+      </div>
+    </div>
+    <!-- phone -->
+    <div style="width:300px;height:600px;margin-top:-20px;border-radius:44px;background:#0f1720;border:8px solid #34495e;box-shadow:0 40px 80px -20px rgba(0,0,0,.6);padding:22px 18px;position:relative;overflow:hidden">
+      <div style="width:90px;height:22px;border-radius:14px;background:#000;margin:-8px auto 18px"></div>
+      <div style="font:800 20px Manrope">Цаг сонгох</div>
+      <div style="font-size:12px;color:var(--muted3);margin-top:4px">Жишээ авто засвар · Хан-Уул салбар</div>
+      <div style="display:flex;gap:6px;margin-top:16px">
+        <div style="flex:1;text-align:center;padding:8px 0;border-radius:10px;background:var(--panel)"><div style="font-size:10px;color:var(--muted3)">ДА</div><div style="font:700 15px Manrope">9</div></div>
+        <div style="flex:1;text-align:center;padding:8px 0;border-radius:10px;background:var(--red);color:#fff"><div style="font-size:10px;opacity:.85">МЯ</div><div style="font:700 15px Manrope">10</div></div>
+        <div style="flex:1;text-align:center;padding:8px 0;border-radius:10px;background:var(--panel)"><div style="font-size:10px;color:var(--muted3)">ЛХ</div><div style="font:700 15px Manrope">11</div></div>
+        <div style="flex:1;text-align:center;padding:8px 0;border-radius:10px;background:var(--panel)"><div style="font-size:10px;color:var(--muted3)">ПҮ</div><div style="font:700 15px Manrope">12</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:16px" class="mono">
+        <div style="padding:9px 0;text-align:center;border-radius:8px;border:1px solid var(--line);font-size:12px;color:var(--muted4);text-decoration:line-through">09:00</div>
+        <div style="padding:9px 0;text-align:center;border-radius:8px;border:1px solid var(--line);font-size:12px">10:00</div>
+        <div style="padding:9px 0;text-align:center;border-radius:8px;border:1px solid var(--line);font-size:12px">11:00</div>
+        <div style="padding:9px 0;text-align:center;border-radius:8px;border:2px solid var(--red);font-size:12px;color:var(--red-hi);font-weight:700">13:00</div>
+        <div style="padding:9px 0;text-align:center;border-radius:8px;border:1px solid var(--line);font-size:12px">14:00</div>
+        <div style="padding:9px 0;text-align:center;border-radius:8px;border:1px solid var(--line);font-size:12px;color:var(--muted4);text-decoration:line-through">15:00</div>
+      </div>
+      <div style="margin-top:16px;background:var(--panel);border-radius:12px;padding:12px">
+        <div style="font-size:11px;color:var(--muted3)">Үйлчилгээ</div>
+        <div style="font:700 14px Manrope;margin-top:3px">Тос солих + шүүлтүүр</div>
+        <div style="font-size:11px;color:var(--muted3);margin-top:8px">Машин</div>
+        <div class="mono" style="font-size:13px;font-weight:700;margin-top:3px">1234 УБА · Prius 30</div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:10px;align-items:center;background:rgba(88,214,141,.10);border:1px solid rgba(88,214,141,.35);border-radius:12px;padding:10px 12px">
+        <span style="width:26px;height:26px;border-radius:8px;background:var(--ok);color:#0f1720;display:grid;place-items:center;font-weight:800;font-size:13px">✓</span>
+        <span style="font-size:11.5px;line-height:1.35;color:var(--ink2)">Сул цаг байна. SMS болон push сануулга 1 цагийн өмнө ирнэ.</span>
+      </div>
+      <div style="position:absolute;left:18px;right:18px;bottom:26px;padding:14px;border-radius:14px;background:var(--red);text-align:center;font:800 15px Manrope;color:#fff">Захиалах</div>
+    </div>
+  </div>
+  <div class="foot"><b>carservice.mn</b><span class="pg">07</span></div>
+</section>
+
+<!-- 08 STATEMENT -->
+<section class="slide" style="background:var(--red);color:#fff;display:flex;flex-direction:column;justify-content:center">
+  <svg style="position:absolute;right:-140px;bottom:-160px;width:620px;height:620px;color:rgba(255,255,255,.09)"><use href="#mark"/></svg>
+  <div class="eyebrow on-red" style="color:#fff;opacity:.9">Яагаад carservice.mn</div>
+  <h1 style="font-size:104px;line-height:.98;font-weight:800;letter-spacing:-.04em;position:relative">Цааснаас хурдан.<br><span style="color:var(--carbon)">Excel-ээс ухаалаг.</span></h1>
+  <div class="foot" style="color:rgba(255,255,255,.8)"><b>carservice.mn</b><span class="pg">08</span></div>
+</section>
+
+<!-- 09 BUILT FOR MONGOLIA -->
+<section class="slide light">
+  <div class="eyebrow">Монголд бүтээв</div>
+  <h2>Монголын зах зээлд зориулсан <span class="red">хамгийн бүрэн</span> шийдэл.</h2>
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-top:56px">
+    <div class="card" style="padding:26px 20px;text-align:center"><div style="font:800 24px Manrope">ХУР</div><div style="font-size:13px;color:var(--pmuted);margin-top:8px">Тээврийн хэрэгслийн мэдээлэл</div></div>
+    <div class="card" style="padding:26px 20px;text-align:center"><div style="font:800 24px Manrope">QPay</div><div style="font-size:13px;color:var(--pmuted);margin-top:8px">Дотоодын төлбөр</div></div>
+    <div class="card" style="padding:26px 20px;text-align:center"><div style="font:800 24px Manrope">И-баримт</div><div style="font-size:13px;color:var(--pmuted);margin-top:8px">НӨАТ-ын баримт</div></div>
+    <div class="card" style="padding:26px 20px;text-align:center"><div style="font:800 24px Manrope">SMS</div><div style="font-size:13px;color:var(--pmuted);margin-top:8px">sendsms.mn</div></div>
+    <div class="card" style="padding:26px 20px;text-align:center"><div style="font:800 24px Manrope">Push</div><div style="font-size:13px;color:var(--pmuted);margin-top:8px">Апп мэдэгдэл</div></div>
+  </div>
+  <p class="lead" style="margin-top:44px;font-size:19px;max-width:900px">Монгол улсын дугаар, дотоодын төлбөрийн систем, И-баримт, SMS үйлчилгээ — <b style="color:var(--pink)">нэмэлтээр бус, суурьдаа шингэсэн.</b></p>
+  <div class="foot"><b>carservice.mn</b><span class="pg">09</span></div>
+</section>
+
+<!-- 10 TRUST -->
+<section class="slide">
+  <div class="glow" style="width:520px;height:520px;left:-200px;top:-220px;background:rgba(231,76,60,.16)"></div>
+  <div class="eyebrow">Найдвартай байдал</div>
+  <h2>Таны өгөгдөл. <span class="red">Зөвхөн танд.</span></h2>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:60px">
+    <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><h3 style="font-size:19px">Тусгаарлагдсан</h3><p>Байгууллага бүрийн өгөгдөл бусдаас бүрэн тусгаарлагдсан.</p></div>
+    <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><h3 style="font-size:19px">Эрхийн удирдлага</h3><p>Харах, үүсгэх, засах, устгах эрхийг үүрэг тус бүрээр.</p></div>
+    <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg></div><h3 style="font-size:19px">Хяналт, бүртгэл</h3><p>Үйлдэл бүр бүртгэгдэнэ. Нэвтэрсэн төхөөрөмжийг алсаас гаргана.</p></div>
+    <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/></svg></div><h3 style="font-size:19px">Нөөцлөлт</h3><p>Шифрлэгдсэн, өдөр бүр автоматаар нөөцлөгдөнө.</p></div>
+  </div>
+  <div class="foot"><b>carservice.mn</b><span class="pg">10</span></div>
+</section>
+
+<!-- 11 GET STARTED -->
+<section class="slide light">
+  <div class="eyebrow">Эхлүүлэх</div>
+  <h2>Ойролцоогоор <span class="red">хоёр минутад</span> ажиллаж эхэлнэ.</h2>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:60px">
+    <div class="card"><div class="mono" style="font-size:44px;font-weight:700;color:var(--red-d)">01</div><h3 style="margin-top:14px">Салбараа үүсгэнэ</h3><p>Имэйлээр бүртгүүлж, ажлын цаг, байршлаа тохируулна.</p></div>
+    <div class="card"><div class="mono" style="font-size:44px;font-weight:700;color:var(--red-d)">02</div><h3 style="margin-top:14px">Багаа урина</h3><p>Менежер, мастер, кассчдаа үүрэгтэйгээр нь урина.</p></div>
+    <div class="card"><div class="mono" style="font-size:44px;font-weight:700;color:var(--red-d)">03</div><h3 style="margin-top:14px">Анхны ажлаа нээнэ</h3><p>Excel өгөгдлөө импортлоод шууд ажиллаж эхэлнэ.</p></div>
+  </div>
+  <div class="foot"><b>carservice.mn</b><span class="pg">11</span></div>
+</section>
+
+<!-- 12 PRICING -->
+<section class="slide">
+  <div class="eyebrow">Багц</div>
+  <h2 style="font-size:40px">Жижгээс эхэл. Томоор өс. <span class="red">Системээ солих шаардлагагүй.</span></h2>
+  <p style="margin-top:12px;font-size:16px;color:var(--muted3)">Багц бүр модулиар ялгарна — ажилтан, салбар, захиалгын тоонд хязгааргүй.</p>
+  <div style="display:grid;grid-template-columns:1fr 1.08fr 1fr;gap:18px;margin-top:34px;align-items:stretch">
+    <div class="card" style="padding:26px">
+      <div style="font:700 12px Inter;letter-spacing:.16em;color:var(--muted3)">ЭНГИЙН</div>
+      <div style="font:800 34px Manrope;margin-top:10px">Үнэгүй</div>
+      <div style="font-size:13px;color:var(--muted3);margin-top:2px">үргэлж, хугацаагүй</div>
+      <ul style="list-style:none;margin-top:20px;display:flex;flex-direction:column;gap:9px;font-size:14.5px;color:var(--ink2)">
+        <li>✓ Засварын хуудас, машины түүх</li><li>✓ Цаг захиалгын календарь</li><li>✓ Оношилгоо</li><li>✓ Хязгааргүй хэрэглэгч</li>
+      </ul>
+    </div>
+    <div class="card" style="padding:26px;background:linear-gradient(180deg,#3a2530,var(--panel));border:2px solid var(--red);box-shadow:0 30px 60px -25px rgba(231,76,60,.55);position:relative">
+      <div style="position:absolute;top:-13px;left:26px;padding:5px 12px;border-radius:999px;background:var(--red);color:#fff;font:700 11px Inter;letter-spacing:.12em">САНАЛ БОЛГОХ</div>
+      <div style="font:700 12px Inter;letter-spacing:.16em;color:var(--red-hi)">БИЗНЕС</div>
+      <div style="font:800 34px Manrope;margin-top:10px">QPay-ээр</div>
+      <div style="font-size:13px;color:var(--muted3);margin-top:2px">шууд идэвхжүүлнэ</div>
+      <ul style="list-style:none;margin-top:20px;display:flex;flex-direction:column;gap:9px;font-size:14.5px;color:var(--ink2)">
+        <li>✓ Энгийн багцын бүх боломж</li><li>✓ Онлайн цаг захиалга</li><li>✓ Санхүү, нөөц, тайлан</li><li>✓ Олон салбар, ажлын хуваарь</li><li>✓ Үйлчлүүлэгчид зар илгээх</li>
+      </ul>
+    </div>
+    <div class="card" style="padding:26px">
+      <div style="font:700 12px Inter;letter-spacing:.16em;color:var(--muted3)">ЭНТЕРПРАЙЗ</div>
+      <div style="font:800 34px Manrope;margin-top:10px">Үнийн санал</div>
+      <div style="font-size:13px;color:var(--muted3);margin-top:2px">модулиа өөрөө сонгоно</div>
+      <ul style="list-style:none;margin-top:20px;display:flex;flex-direction:column;gap:9px;font-size:14.5px;color:var(--ink2)">
+        <li>✓ Бизнес багцын бүх боломж</li><li>✓ Аудит лог</li><li>✓ Гадаад API интеграц</li><li>✓ Сүлжээ байгууллагуудад</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><b>carservice.mn</b><span>үнийг багц тус бүрээр платформ дээр тохируулдаг · <span class="pg">12</span></span></div>
+</section>
+
+<!-- 13 CTA -->
+<section class="slide" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center">
+  <div class="grid"></div>
+  <div class="glow" style="width:760px;height:420px;left:260px;top:160px;background:rgba(231,76,60,.28)"></div>
+  <svg style="width:72px;height:72px;color:var(--red);position:relative"><use href="#mark"/></svg>
+  <h1 style="position:relative;margin-top:34px;font-size:62px;line-height:1.06;font-weight:800;letter-spacing:-.03em;max-width:980px">Засварын газраа шинэчлэх хамгийн тохиромжтой цаг бол <span class="red">өнөөдөр.</span></h1>
+  <div style="position:relative;margin-top:42px;display:flex;gap:14px;align-items:center">
+    <span style="padding:18px 30px;border-radius:14px;background:var(--red);color:#fff;font:800 19px Manrope;box-shadow:0 20px 40px -15px rgba(231,76,60,.8)">Үнэгүй эхлүүлэх →</span>
+    <span style="padding:18px 26px;border-radius:14px;border:1px solid var(--line);background:rgba(44,62,80,.6);font:700 19px Manrope">carservice.mn</span>
+  </div>
+</section>
+</body>
+</html>
