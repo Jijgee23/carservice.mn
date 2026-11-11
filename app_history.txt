@@ -2240,3 +2240,9 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - GET /api/v1/auth/signup/address?lat=&lng= — газрын зургийн цэгийн хаяг (OpenStreetMap Nominatim, lib/reverse-geocode.ts) → засаг захиргааны лавлахтай тааруулсан { city, district, khoroo, address }; олдохгүй бол хоосон (хаяг заавал биш). Env: NOMINATIM_BASE_URL.
 - resolveAddressFromGeocode ба хаягийн төрлүүдийг "use client" address-select.tsx-ээс lib/address-match.ts руу шилжүүлэв (route handler ашиглана); хуучин импортууд re-export-оор хэвээр.
 - POST /api/v1/auth/signup: төхөөрөмжийн талбар (fcm…) заавал биш болов — FCM token-гүй утас OTP оруулсны дараа 400-д унахгүй, push төхөөрөмжгүй нэвтэрнэ.
+
+[2026-11-11] Хэрэглэгчийн апп (carservice_customer) шинэ дизайнаар (canvas «carservice.mn өнгөний схем», Хэрэглэгч board-ууд)
+- Geist / Geist Mono фонт bundle, design token-ууд (card, hero, inverse, soft badge), lib/core/widgets/cs_ui.dart компонентын багц.
+- 4 таб: Нүүр (шинэ — машин + идэвхтэй засвар/захиалга, шуурхай үйлдэл, ойролцоох сервис) · Сервис · Захиалга · Машин (шинэ — машины карт, тоо, засварын түүх); хөвөгч pill навигаци. Профайл/Түүх/Цаг захиалах нь push route.
+- Бүх дэлгэц (onboarding, нэвтрэх/OTP, машин нэмэх, хайлт/газрын зураг, цаг захиалах — өдрийн чип, засварын явц hero + timeline, профайл — theme сонгогч) шинэ загварт. Dark горим хэвээр.
+- Backend-гүй хэсгүүд (нэмэлт ажил зөвшөөрөх, механиктай чат, сануулга, км, нийт үнэ) хуурамч өгөгдлөөр хийгээгүй — дараагийн шатанд.
