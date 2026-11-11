@@ -10,6 +10,7 @@ import { OrderCommandError } from "@/lib/orders/order-commands";
 import { createOrderCommand } from "@/lib/orders/order-create-command";
 import { readIntakeBody, validateIntakeFields, type IntakeInput } from "@/lib/orders/order-intake-server";
 import { parseCreateOrderBody } from "@/lib/orders/order-create-request";
+import { attachOwnerToUnownedVehicle } from "@/lib/orders/plate-intake-server";
 import { buildOrderListWhere, parseOrderListQuery } from "@/lib/orders/order-list-query";
 import { summarizeOrderProgress } from "@/lib/orders/order-progress";
 import { PAID_AT_SELECT, withPaidInFull } from "@/lib/orders/order-payment-totals";
@@ -134,6 +135,12 @@ export async function POST(req: Request) {
   }
 
   try {
+    // Машины хайлтаас эзэмшигчгүй бүртгэсэн машиныг (POST /vehicles/from-plate)
+    // сонгосон үйлчлүүлэгчид холбоно — вебийн createOrderAction-тэй ижил.
+    // Эзэнтэй машинд хөндөхгүй; тааралгүй бол createOrderCommand татгалзана.
+    if (vehicleId && customerId) {
+      await attachOwnerToUnownedVehicle(auth.user, vehicleId, customerId);
+    }
     const created = await createOrderCommand({
       tenantId: auth.user.tenantId,
       actorId: auth.user.id,

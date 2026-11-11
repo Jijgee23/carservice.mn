@@ -16,7 +16,8 @@ import { setBypassContext } from "@/lib/tenant-context";
  * POST /api/v1/auth/signup — шинэ засвар (tenant) бүртгэлийн 2-р шат.
  *
  * Body (JSON): /auth/signup/request-otp-тэй ижил талбарууд + `code` (6 оронтой OTP)
- * + /auth/login-ийн төхөөрөмжийн талбарууд (fcm, deviceId, type, model, os, ...).
+ * + /auth/login-ийн төхөөрөмжийн талбарууд (fcm, deviceId, type, model, os, ...) —
+ * login-оос ялгаатай нь заавал биш: буруу/дутуу бол push төхөөрөмжгүй нэвтэрнэ.
  *
  * OTP зөв бол Tenant + «Үндсэн салбар» + OWNER хэрэглэгчийг үүсгэж (веб
  * signUpAction-тэй ижил transaction), шууд нэвтрүүлнэ — хариу нь /auth/login-тэй
@@ -57,13 +58,10 @@ export async function POST(req: Request) {
     });
   }
 
+  // Төхөөрөмжийн талбар (push бүртгэл) заавал биш: FCM token-гүй утас
+  // (push зөвшөөрөөгүй, симулятор) бүртгэлээ OTP оруулсны дараа алдахгүй.
   const parsedDevice = parseLoginDevice(body);
-  if (!parsedDevice.ok) {
-    return jsonError(400, Object.values(parsedDevice.fieldErrors)[0], {
-      code: "VALIDATION",
-      fieldErrors: parsedDevice.fieldErrors,
-    });
-  }
+  const device = parsedDevice.ok ? parsedDevice.device : null;
 
   const otp = await verifyOtp({ email: data.adminEmail, phone: data.phone, type: "SIGNUP", code: otpCode });
   if (!otp.ok) {
@@ -112,5 +110,5 @@ export async function POST(req: Request) {
     console.warn("[notify] tenant_created:", err);
   }
 
-  return jsonOk(await buildApiLoginResponse(user, req, parsedDevice.device), { status: 201 });
+  return jsonOk(await buildApiLoginResponse(user, req, device), { status: 201 });
 }

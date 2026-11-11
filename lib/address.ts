@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { AddressData } from "@/app/dashboard/branches/address-select";
+import type { AddressData } from "@/lib/address-match";
 
 /**
  * Каскад хаягийн dropdown-д зориулж Монголын засаг захиргааны лавлахыг

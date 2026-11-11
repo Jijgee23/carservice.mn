@@ -2224,3 +2224,13 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - /api/v1/stock-counts (жагсаалт/эхлүүлэх/дэлгэрэнгүй/хадгалах/дуусгах/цуцлах), GET /api/v1/reports/stock — enable_inventory gate (plan-modules.ts).
 - GET /api/v1/reviews, PUT /api/v1/reviews/[id]/reply, POST /api/v1/orders/[id]/items/complete-all.
 - Source-scan тестүүдийг шилжсэн lib файлууд руу чиглүүлэв; бүтэн suite-ийн унадаг тест HEAD-тэй ижил (52, шинэ алдаагүй).
+
+[2026-11-11] Ажилтны апп: засварын хуудасны машины хайлтаас «+ дугаар — машин бүртгэх» (вебтэй ижил)
+- POST /api/v1/vehicles/from-plate { plate, customerId?, make?, model? }: вебийн registerVehicleFromPlateAction-ийн мобайл хувилбар (ижил registerVehicleFromPlate) — дугаараар мэдээлэл татаж бүртгэнэ, customerId-гүй бол эзэмшигчгүй; олдоогүй бол 200 { needsDetails, reason } (марк/загвартай дахин илгээнэ). vehicles.create эрх + идэвхтэй багц.
+- POST /api/v1/orders: эзэмшигчгүй машиныг сонгосон үйлчлүүлэгчид attachOwnerToUnownedVehicle-аар холбож байж хуудас үүсгэнэ (веб createOrderAction-тэй ижил; эзэнтэй машинд хөндөхгүй).
+
+[2026-11-11] Мобайл бүртгэл: регистр/байршлын туслах API, push-гүй бүртгэл
+- GET /api/v1/auth/signup/lookup?regno= — регистрээр eBarimt-аас нэр (нэвтрэлтгүй, IP-ээр 20/мин): { regno, kind, found, name }.
+- GET /api/v1/auth/signup/address?lat=&lng= — газрын зургийн цэгийн хаяг (OpenStreetMap Nominatim, lib/reverse-geocode.ts) → засаг захиргааны лавлахтай тааруулсан { city, district, khoroo, address }; олдохгүй бол хоосон (хаяг заавал биш). Env: NOMINATIM_BASE_URL.
+- resolveAddressFromGeocode ба хаягийн төрлүүдийг "use client" address-select.tsx-ээс lib/address-match.ts руу шилжүүлэв (route handler ашиглана); хуучин импортууд re-export-оор хэвээр.
+- POST /api/v1/auth/signup: төхөөрөмжийн талбар (fcm…) заавал биш болов — FCM token-гүй утас OTP оруулсны дараа 400-д унахгүй, push төхөөрөмжгүй нэвтэрнэ.
