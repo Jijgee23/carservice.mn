@@ -9,6 +9,7 @@ import { redirect } from "next/navigation";
 import { Prisma } from "@/app/generated/prisma/client";
 import { requireSuperAdmin } from "@/lib/auth/system";
 import { prisma } from "@/lib/prisma";
+import { type AdminBulkResult, parseAdminBulkInput, runAdminBulk } from "@/lib/system-admin-bulk";
 
 export type SystemCategoryActionState = {
   ok: boolean;
@@ -130,6 +131,50 @@ async function systemCategoryUsage(id: string): Promise<number> {
   if (!c) return 0;
   const n = c._count;
   return n.services + n.diagnosticTemplates + n.appointments + n.appointmentLinks + n.orderLinks;
+}
+
+/**
+ * Жагсаалтаас олноор идэвхжүүлэх / идэвхгүй болгох / устгах. Бараа, загвар,
+ * захиалга эсвэл нэгдсэн сангийн мөр холбогдсон ангиллыг устгахгүй —
+ * идэвхгүй болгоно (deleteSystemCategoryAction-тэй ижил дүрэм).
+ */
+export async function bulkSystemCategoriesAction(ids: unknown, op: unknown): Promise<AdminBulkResult> {
+  await requireSuperAdmin();
+  const input = parseAdminBulkInput(ids, op);
+  if ("error" in input) return { ok: false, message: input.error };
+
+  const result = await runAdminBulk(
+    {
+      existing: async (list) =>
+        (await prisma.category.findMany({ where: { id: { in: list }, ...SYSTEM_GOODS }, select: { id: true } })).map((c) => c.id),
+      inUse: async (list) => {
+        const rows = await prisma.category.findMany({
+          where: { id: { in: list }, ...SYSTEM_GOODS },
+          select: {
+            id: true,
+            _count: {
+              select: {
+                services: true,
+                diagnosticTemplates: true,
+                appointments: true,
+                appointmentLinks: true,
+                orderLinks: true,
+                catalogItems: true,
+              },
+            },
+          },
+        });
+        return new Set(rows.filter((r) => Object.values(r._count).some((n) => n > 0)).map((r) => r.id));
+      },
+      setActive: async (list, isActive) =>
+        (await prisma.category.updateMany({ where: { id: { in: list }, ...SYSTEM_GOODS }, data: { isActive } })).count,
+      remove: async (list) => (await prisma.category.deleteMany({ where: { id: { in: list }, ...SYSTEM_GOODS } })).count,
+    },
+    input.ids,
+    input.op,
+  );
+  revalidate();
+  return result;
 }
 
 export async function deleteSystemCategoryAction(formData: FormData): Promise<void> {

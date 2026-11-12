@@ -24,6 +24,7 @@ import {
 } from "@/lib/catalog/normalize";
 import { parseNonNegativeDecimal } from "@/lib/decimal-input";
 import { prisma } from "@/lib/prisma";
+import { type AdminBulkResult, parseAdminBulkInput, runAdminBulk } from "@/lib/system-admin-bulk";
 
 export type SystemCatalogState = {
   ok: boolean;
@@ -184,6 +185,38 @@ export async function mergeCatalogItemAction(
       ? `Нэгтгэлээ. ${conflicts} байгууллагад код давхцсан тул кодыг хэвээр үлдээв.`
       : "Нэгтгэлээ.",
   };
+}
+
+/**
+ * Жагсаалтаас олноор идэвхжүүлэх / идэвхгүй болгох / устгах. Аль нэг
+ * байгууллагын ажил/бараа холбогдсон мөрийг устгахгүй — идэвхгүй болгоно
+ * (холбоос тасарвал тенант нэр/код sync-ээ алдана; давхардлыг «Нэгтгэх»-ээр).
+ */
+export async function bulkCatalogItemsAction(ids: unknown, op: unknown): Promise<AdminBulkResult> {
+  await requireSuperAdmin();
+  const input = parseAdminBulkInput(ids, op);
+  if ("error" in input) return { ok: false, message: input.error };
+
+  const result = await runAdminBulk(
+    {
+      existing: async (list) =>
+        (await prisma.catalogItem.findMany({ where: { id: { in: list } }, select: { id: true } })).map((c) => c.id),
+      inUse: async (list) => {
+        const rows = await prisma.catalogItem.findMany({
+          where: { id: { in: list } },
+          select: { id: true, _count: { select: { services: true } } },
+        });
+        return new Set(rows.filter((r) => r._count.services > 0).map((r) => r.id));
+      },
+      setActive: async (list, isActive) =>
+        (await prisma.catalogItem.updateMany({ where: { id: { in: list } }, data: { isActive } })).count,
+      remove: async (list) => (await prisma.catalogItem.deleteMany({ where: { id: { in: list } } })).count,
+    },
+    input.ids,
+    input.op,
+  );
+  revalidate();
+  return result;
 }
 
 // --- Шинээр бүртгэх / Excel импорт ------------------------------------------

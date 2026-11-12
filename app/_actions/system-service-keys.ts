@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@/app/generated/prisma/client";
 import { requireSuperAdmin } from "@/lib/auth/system";
 import { prisma } from "@/lib/prisma";
+import { type AdminBulkResult, parseAdminBulkInput, runAdminBulk } from "@/lib/system-admin-bulk";
 
 export type ServiceKeyActionState = {
   ok: boolean;
@@ -97,6 +98,38 @@ export async function updateServiceKeyAction(
   revalidatePath("/system/service-keys");
   revalidatePath(`/system/service-keys/${id}`);
   return { ok: true, message: "Хадгалагдлаа." };
+}
+
+/**
+ * Жагсаалтаас олноор идэвхжүүлэх / идэвхгүй болгох / устгах. Тенантын
+ * ангилал холбогдсон түлхүүрийг устгахгүй — идэвхгүй болгоно
+ * (deleteServiceKeyAction-тэй ижил дүрэм; FK нь Restrict).
+ */
+export async function bulkServiceKeysAction(ids: unknown, op: unknown): Promise<AdminBulkResult> {
+  await requireSuperAdmin();
+  const input = parseAdminBulkInput(ids, op);
+  if ("error" in input) return { ok: false, message: input.error };
+
+  const result = await runAdminBulk(
+    {
+      existing: async (list) =>
+        (await prisma.systemServiceKey.findMany({ where: { id: { in: list } }, select: { id: true } })).map((k) => k.id),
+      inUse: async (list) => {
+        const rows = await prisma.systemServiceKey.findMany({
+          where: { id: { in: list } },
+          select: { id: true, _count: { select: { categories: true } } },
+        });
+        return new Set(rows.filter((r) => r._count.categories > 0).map((r) => r.id));
+      },
+      setActive: async (list, isActive) =>
+        (await prisma.systemServiceKey.updateMany({ where: { id: { in: list } }, data: { isActive } })).count,
+      remove: async (list) => (await prisma.systemServiceKey.deleteMany({ where: { id: { in: list } } })).count,
+    },
+    input.ids,
+    input.op,
+  );
+  revalidatePath("/system/service-keys");
+  return result;
 }
 
 export async function deleteServiceKeyAction(formData: FormData): Promise<void> {

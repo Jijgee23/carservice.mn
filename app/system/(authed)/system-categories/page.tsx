@@ -1,33 +1,66 @@
-import { Chip } from "@/app/_components/landing-ops-ui";
-import { ClickableRow } from "@/app/_components/clickable-row";
-import { PageHeader } from "@/app/_components/page-header";
+import { Prisma } from "@/app/generated/prisma/client";
+import { bulkSystemCategoriesAction } from "@/app/_actions/system-categories";
+import { FilterSelect, ResetFilters, SearchBox } from "@/app/_components/list-filters";
+import { EmptyState, PageHeader } from "@/app/_components/page-header";
+import { Pagination } from "@/app/_components/pagination";
 import { requireSuperAdmin } from "@/lib/auth/system";
+import { formatShortDateTime, parseSort } from "@/lib/list-sort";
+import { buildMeta, getPageInfo } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
+import { AdminListTable, NumCell } from "../_components/admin-list-table";
 import { CreateSystemCategoryButton } from "./create-system-category-modal";
 
 export const metadata = { title: "Сэлбэгийн ангилал" };
 
 export const dynamic = "force-dynamic";
 
-export default async function SystemCategoriesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string }>;
-}) {
+const SORT_KEYS = ["name", "goods", "created"] as const;
+
+type Search = { q?: string; status?: string; sort?: string; dir?: string; page?: string };
+
+export default async function SystemCategoriesPage({ searchParams }: { searchParams: Promise<Search> }) {
   await requireSuperAdmin();
-  const q = ((await searchParams).q ?? "").trim();
+  const sp = await searchParams;
+  const q = (sp.q ?? "").trim();
+  const status = sp.status === "active" || sp.status === "inactive" ? sp.status : "";
+  const sort = parseSort(sp, SORT_KEYS, { key: "created", dir: "desc" });
+  const { page, pageSize, skip, take } = getPageInfo(sp.page);
 
-  const categories = await prisma.category.findMany({
-    where: {
-      tenantId: null,
-      kind: "GOODS",
-      ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}),
-    },
-    orderBy: [{ isActive: "desc" }, { name: "asc" }],
-    include: { _count: { select: { services: true } } },
-  });
+  const where: Prisma.CategoryWhereInput = {
+    tenantId: null,
+    kind: "GOODS",
+    ...(q
+      ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { description: { contains: q, mode: "insensitive" } }] }
+      : {}),
+    ...(status ? { isActive: status === "active" } : {}),
+  };
+  const orderBy: Prisma.CategoryOrderByWithRelationInput[] =
+    sort.key === "name"
+      ? [{ name: sort.dir }]
+      : sort.key === "goods"
+        ? [{ services: { _count: sort.dir } }, { name: "asc" }]
+        : [{ createdAt: sort.dir }, { id: sort.dir }];
 
-  // Хэдэн байгууллага ашиглаж байгаа (бараа бүртгэсэн тенантын тоо).
+  const [categories, total] = await Promise.all([
+    prisma.category.findMany({
+      where,
+      orderBy,
+      skip,
+      take,
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        isActive: true,
+        createdAt: true,
+        _count: { select: { services: true, catalogItems: true } },
+      },
+    }),
+    prisma.category.count({ where }),
+  ]);
+  const meta = buildMeta(total, page, pageSize);
+
+  // Хэдэн байгууллага ашиглаж байгаа (бараа бүртгэсэн тенантын тоо) — энэ хуудасны мөрүүдэд.
   const usage = categories.length
     ? await prisma.service.groupBy({
         by: ["categoryId", "tenantId"],
@@ -47,65 +80,60 @@ export default async function SystemCategoriesPage({
         actions={<CreateSystemCategoryButton />}
       />
 
-      <form className="mb-4 flex gap-2 max-w-md">
-        <input
-          name="q"
-          type="search"
-          defaultValue={q}
-          placeholder="Ангиллын нэрээр хайх…"
-          className="auth-input flex-1"
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <SearchBox placeholder="Нэр, тайлбараар хайх..." />
+        <FilterSelect
+          paramName="status"
+          placeholder="Бүх төлөв"
+          options={[
+            { value: "active", label: "Идэвхтэй" },
+            { value: "inactive", label: "Идэвхгүй" },
+          ]}
         />
-      </form>
+        <ResetFilters paramNames={["q", "status", "sort", "dir"]} />
+        <span className="ml-auto text-xs text-[var(--oc-muted3)] tabular-nums">Нийт {total}</span>
+      </div>
 
       {categories.length === 0 ? (
-        <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-10 text-center text-sm text-[var(--oc-muted3)]">
-          {q ? "Хайлтад тохирох ангилал алга." : "Одоогоор системийн ангилал алга байна."}
-        </div>
+        <EmptyState
+          title="Ангилал алга"
+          description={q || status ? "Энэ шүүлтэд тохирох ангилал алга." : "Одоогоор системийн ангилал алга байна."}
+        />
       ) : (
-        <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] overflow-hidden flex-1 min-h-0 flex flex-col">
-          <div className="overflow-auto flex-1 min-h-0">
-            <table className="w-full min-w-[640px]">
-              <thead>
-                <tr className="border-b border-[var(--oc-line)]">
-                  {["Нэр", "Бараа", "Байгууллага", "Төлөв"].map((h) => (
-                    <th
-                      key={h}
-                      className="text-left font-plex-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--oc-muted3)] font-medium px-5 py-3"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--oc-line)]">
-                {categories.map((c) => (
-                  <ClickableRow key={c.id} href={`/system/system-categories/${c.id}`}>
-                    <td className="px-5 py-3">
-                      <div className="text-sm font-medium text-[var(--oc-ink)]">{c.name}</div>
-                      {c.description ? (
-                        <div className="text-xs text-[var(--oc-muted3)] mt-0.5 line-clamp-1">
-                          {c.description}
-                        </div>
-                      ) : null}
-                    </td>
-                    <td className="px-5 py-3 font-plex-mono text-sm text-[var(--oc-muted2)]">
-                      {c._count.services}
-                    </td>
-                    <td className="px-5 py-3 font-plex-mono text-sm text-[var(--oc-muted2)]">
-                      {tenantsBy.get(c.id) ?? 0}
-                    </td>
-                    <td className="px-5 py-3">
-                      <Chip tone={c.isActive ? "ok" : "neutral"}>
-                        {c.isActive ? "Идэвхтэй" : "Идэвхгүй"}
-                      </Chip>
-                    </td>
-                  </ClickableRow>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <AdminListTable
+          noun="ангилал"
+          sort={sort}
+          bulkAction={bulkSystemCategoriesAction}
+          deleteNote="Бараа, загвар, захиалга эсвэл нэгдсэн сангийн мөр холбогдсон ангилал устахгүй — идэвхгүй болж, шинэ сонголтоос нуугдана."
+          columns={[
+            { label: "Бараа", sortKey: "goods" },
+            { label: "Сангийн мөр" },
+            { label: "Байгууллага" },
+            { label: "Үүссэн", sortKey: "created", className: "whitespace-nowrap" },
+          ]}
+          rows={categories.map((c) => ({
+            id: c.id,
+            name: c.name,
+            href: `/system/system-categories/${c.id}`,
+            isActive: c.isActive,
+            sub: c.description ?? undefined,
+            cells: [
+              <NumCell key="g">{c._count.services}</NumCell>,
+              <NumCell key="c">{c._count.catalogItems}</NumCell>,
+              <NumCell key="t">{tenantsBy.get(c.id) ?? 0}</NumCell>,
+              <span key="d" className="text-xs text-[var(--oc-muted3)] tabular-nums">{formatShortDateTime(c.createdAt)}</span>,
+            ],
+          }))}
+        />
       )}
+
+      <Pagination
+        page={meta.page}
+        totalPages={meta.totalPages}
+        total={meta.total}
+        params={{ q, status, sort: sp.sort ?? "", dir: sp.dir ?? "" }}
+        tone="danger"
+      />
     </div>
   );
 }

@@ -1,13 +1,16 @@
 import Link from "next/link";
 import { Prisma } from "@/app/generated/prisma/client";
+import { bulkCatalogItemsAction } from "@/app/_actions/system-catalog";
 import { FilterSelect, ResetFilters, SearchBox } from "@/app/_components/list-filters";
 import { EmptyState, PageHeader } from "@/app/_components/page-header";
 import { Pagination } from "@/app/_components/pagination";
 import { requireSuperAdmin } from "@/lib/auth/system";
 import { normalizeCatalogCode, normalizeCatalogName } from "@/lib/catalog/normalize";
+import { formatShortDateTime, parseSort } from "@/lib/list-sort";
 import { formatTugrik } from "@/lib/orders";
 import { buildMeta, getPageInfo } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
+import { AdminListTable, NumCell } from "../_components/admin-list-table";
 
 export const metadata = { title: "Нэгдсэн сан" };
 
@@ -15,20 +18,26 @@ export const dynamic = "force-dynamic";
 
 const TYPE_LABEL = { LABOR: "Ажил", GOODS: "Сэлбэг / Бараа" } as const;
 
-type Search = { q?: string; type?: string; status?: string; page?: string };
+const SORT_KEYS = ["name", "price", "usage", "created"] as const;
+
+type Search = { q?: string; type?: string; status?: string; category?: string; sort?: string; dir?: string; page?: string };
 
 export default async function SystemCatalogPage({ searchParams }: { searchParams: Promise<Search> }) {
   await requireSuperAdmin();
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const type = sp.type === "LABOR" || sp.type === "GOODS" ? sp.type : "";
-  const status = sp.status ?? "";
+  const status = sp.status === "active" || sp.status === "inactive" ? sp.status : "";
+  const category = sp.category ?? "";
+  const sort = parseSort(sp, SORT_KEYS, { key: "created", dir: "desc" });
   const { page, pageSize, skip, take } = getPageInfo(sp.page);
 
   const where: Prisma.CatalogItemWhereInput = {};
   if (type) where.type = type;
   if (status === "active") where.isActive = true;
   if (status === "inactive") where.isActive = false;
+  if (category === "none") where.categoryId = null;
+  else if (category) where.categoryId = category;
   if (q) {
     const codeKey = normalizeCatalogCode(q);
     where.OR = [
@@ -37,10 +46,19 @@ export default async function SystemCatalogPage({ searchParams }: { searchParams
     ];
   }
 
-  const [rows, total] = await Promise.all([
+  const orderBy: Prisma.CatalogItemOrderByWithRelationInput[] =
+    sort.key === "name"
+      ? [{ name: sort.dir }]
+      : sort.key === "price"
+        ? [{ price: sort.dir }, { name: "asc" }]
+        : sort.key === "usage"
+          ? [{ services: { _count: sort.dir } }, { name: "asc" }]
+          : [{ createdAt: sort.dir }, { id: sort.dir }];
+
+  const [rows, total, categories] = await Promise.all([
     prisma.catalogItem.findMany({
       where,
-      orderBy: [{ services: { _count: "desc" } }, { name: "asc" }],
+      orderBy,
       skip,
       take,
       select: {
@@ -52,13 +70,20 @@ export default async function SystemCatalogPage({ searchParams }: { searchParams
         unitName: true,
         price: true,
         isActive: true,
+        createdAt: true,
         category: { select: { name: true } },
         _count: { select: { services: true } },
       },
     }),
     prisma.catalogItem.count({ where }),
+    prisma.category.findMany({
+      where: { tenantId: null, kind: "GOODS" },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
   ]);
   const meta = buildMeta(total, page, pageSize);
+  const filtered = Boolean(q || type || status || category);
 
   return (
     <div className="p-4 sm:p-6 max-w-full flex-1 flex flex-col min-h-0 w-full">
@@ -94,6 +119,13 @@ export default async function SystemCatalogPage({ searchParams }: { searchParams
           ]}
         />
         <FilterSelect
+          paramName="category"
+          placeholder="Бүх ангилал"
+          searchable
+          searchPlaceholder="Ангилал хайх..."
+          options={[{ value: "none", label: "Ангилалгүй" }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
+        />
+        <FilterSelect
           paramName="status"
           placeholder="Бүх төлөв"
           options={[
@@ -101,59 +133,59 @@ export default async function SystemCatalogPage({ searchParams }: { searchParams
             { value: "inactive", label: "Идэвхгүй" },
           ]}
         />
-        <ResetFilters paramNames={["q", "type", "status"]} />
+        <ResetFilters paramNames={["q", "type", "category", "status", "sort", "dir"]} />
+        <span className="ml-auto text-xs text-[var(--oc-muted3)] tabular-nums">Нийт {total}</span>
       </div>
 
       {rows.length === 0 ? (
-        <EmptyState title="Мөр алга" description="Энэ шүүлтэд тохирох ажил/сэлбэг санд алга." />
+        <EmptyState
+          title="Мөр алга"
+          description={filtered ? "Энэ шүүлтэд тохирох ажил/сэлбэг санд алга." : "Санд одоогоор ажил, сэлбэг алга. Excel импорт эсвэл «Шинээр бүртгэх»-ээр нэмнэ үү."}
+        />
       ) : (
-        <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] overflow-x-auto">
-          <table className="w-full min-w-[860px]">
-            <thead>
-              <tr className="border-b border-[var(--oc-line2)]">
-                {["Нэр", "Код / баркод", "Төрөл", "Нэгж", "Санал болгох үнэ", "Ангилал", "Байгууллага", "Төлөв"].map((h) => (
-                  <th key={h} className="text-left text-xs text-[var(--oc-muted4)] font-medium px-5 py-3">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-b border-[var(--oc-line2)] last:border-0 hover:bg-white/[0.02]">
-                  <td className="px-5 py-3 text-sm">
-                    <Link href={`/system/catalog/${r.id}`} className="text-[var(--oc-ink2)] hover:underline">
-                      {r.name}
-                    </Link>
-                  </td>
-                  <td className="px-5 py-3 font-plex-mono text-xs text-[var(--oc-muted2)]">
-                    {r.code ?? "—"}
-                    {r.barcode ? <div className="text-[11px] text-[var(--oc-muted3)]">▮ {r.barcode}</div> : null}
-                  </td>
-                  <td className="px-5 py-3 text-sm text-[var(--oc-muted)]">{TYPE_LABEL[r.type as keyof typeof TYPE_LABEL] ?? r.type}</td>
-                  <td className="px-5 py-3 text-sm text-[var(--oc-muted)]">{r.unitName || "—"}</td>
-                  <td className="px-5 py-3 font-plex-mono text-xs text-[var(--oc-ink2)]">{formatTugrik(r.price.toString())}</td>
-                  <td className="px-5 py-3 text-sm text-[var(--oc-muted)]">{r.category?.name ?? "—"}</td>
-                  <td className="px-5 py-3 text-sm text-[var(--oc-muted)] tabular-nums">{r._count.services}</td>
-                  <td className="px-5 py-3 text-xs">
-                    {r.isActive ? (
-                      <span className="text-[var(--oc-ok)]">Идэвхтэй</span>
-                    ) : (
-                      <span className="text-[var(--oc-muted3)]">Идэвхгүй</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <AdminListTable
+          noun="мөр"
+          sort={sort}
+          bulkAction={bulkCatalogItemsAction}
+          deleteNote="Аль нэг байгууллага ашиглаж буй мөр устахгүй — идэвхгүй болж, шинэ сонголтоос нуугдана. Давхардлыг мөрийн хуудасны «Нэгтгэх»-ээр нэгтгэнэ үү."
+          columns={[
+            { label: "Төрөл" },
+            { label: "Нэгж" },
+            { label: "Санал болгох үнэ", sortKey: "price" },
+            { label: "Ангилал" },
+            { label: "Байгууллага", sortKey: "usage" },
+            { label: "Үүссэн", sortKey: "created", className: "whitespace-nowrap" },
+          ]}
+          rows={rows.map((r) => ({
+            id: r.id,
+            name: r.name,
+            href: `/system/catalog/${r.id}`,
+            isActive: r.isActive,
+            sub:
+              r.code || r.barcode ? (
+                <span className="font-plex-mono">
+                  {r.code ?? ""}
+                  {r.code && r.barcode ? " · " : ""}
+                  {r.barcode ? `▮ ${r.barcode}` : ""}
+                </span>
+              ) : undefined,
+            cells: [
+              <span key="t" className="text-[var(--oc-muted)]">{TYPE_LABEL[r.type as keyof typeof TYPE_LABEL] ?? r.type}</span>,
+              <span key="u" className="text-[var(--oc-muted)]">{r.unitName || "—"}</span>,
+              <span key="p" className="font-plex-mono text-xs text-[var(--oc-ink2)]">{formatTugrik(r.price.toString())}</span>,
+              <span key="c" className="text-[var(--oc-muted)]">{r.category?.name ?? "—"}</span>,
+              <NumCell key="n">{r._count.services}</NumCell>,
+              <span key="d" className="text-xs text-[var(--oc-muted3)] tabular-nums">{formatShortDateTime(r.createdAt)}</span>,
+            ],
+          }))}
+        />
       )}
 
       <Pagination
         page={meta.page}
         totalPages={meta.totalPages}
         total={meta.total}
-        params={{ q, type, status }}
+        params={{ q, type, category, status, sort: sp.sort ?? "", dir: sp.dir ?? "" }}
         tone="danger"
       />
     </div>
