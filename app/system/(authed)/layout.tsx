@@ -3,8 +3,10 @@ import {
   SystemMobileTopbar,
   SystemSidebar,
 } from "@/app/_components/system-sidebar";
+import { DataAgentFab } from "@/app/_components/data-agent-fab";
 import { ToastProvider } from "@/app/_components/toast";
 import { WebPushBar } from "@/app/_components/web-push";
+import { isDataAgentConfigured } from "@/lib/ai/data-agent";
 import { requireSuperAdmin } from "@/lib/auth/system";
 
 // Ops Console дизайны фонт — dashboard/account-той ижил механизм, зөвхөн
@@ -53,6 +55,8 @@ export default async function SystemAdminLayout({
           />
           <main className="flex-1 min-w-0">{children}</main>
         </div>
+        {/* `.landing-ops` дотор байх ёстой — --oc-* token, фонт зөвхөн энд тодорхойлогдсон. */}
+        <DataAgentFab configured={isDataAgentConfigured()} />
       </div>
     </ToastProvider>
   );

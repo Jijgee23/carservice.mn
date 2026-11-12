@@ -2259,3 +2259,10 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 [2026-11-12] Ажилтны апп: засварын хуудасны мөр нэмэхэд нэгдсэн сангаас сонгох v1 API
 - GET /api/v1/orders/catalog-items?type=LABOR|GOODS&q=&page=&pageSize= — нэгдсэн сангийн (CatalogItem) идэвхтэй ажил/сэлбэг, тенант өөртөө хараахан холбоогүйг нь (вэбийн засварын хуудасны «мөр нэмэх»-тэй ижил). Хайлт searchCatalogAction-тэй ижил: нэр (nameKey агуулсан), код (codeKey эхлэл), баркод. Эрх: orders.edit эсвэл orders.editOwn (POST /orders/:id/items-тэй ижил). Хариу: { items: [{ id, type, name, code, unitName, price, description, category }], pagination }.
 - Сонгосныг апп POST /api/v1/orders/:id/items-д catalogItemId-аар илгээнэ — сервер тенантын ажил/сэлбэг болгон холбоно (lib/services/catalog-adopt.ts, өөрчлөгдөөгүй).
+
+[2026-11-12] Super admin: «AI туслах» — Claude API-аар нийтлэг өгөгдөл байгуулах агент (/system/data-agent)
+- lib/ai/data-agent.ts: @anthropic-ai/sdk (1.8) tool runner, claude-opus-5-5 (adaptive thinking, effort medium, server-side fallback "default", prompt cache). Хэрэгслүүд: list_reference_data, search_catalog (шууд уншина), propose_catalog_items, propose_named_records (Системийн ангилал / Сэлбэгийн ангилал / Салбарын шошго) — ШУУД БИЧИХГҮЙ, parseCatalogInput + давхардал (код/нэр/баркод, case-insensitive нэр) шалгаад санал болгоно.
+- Admin саналыг хянаж, хасаж, «Хэрэгжүүлэх» дарахад applyDataProposals бичнэ: ангилал/шошго эхлээд, дараа нь createCatalogItemAdmin (server дээр дахин шалгана, давхардлыг алгасна).
+- app/_actions/system-data-agent.ts (requireSuperAdmin, zod оролт). UI: app/_components/data-agent-fab.tsx — /system layout дахь floating action button (баруун доод булан) → Чат / Санал табтай самбар; layout-д байрлах тул хуудас солигдоход яриа, санал хадгалагдана, хаахад Esc, санал тоо badge-ээр.
+- RLS: tool бүрийн эхэнд setBypassContext(), prisma-г return await.
+- Env: ANTHROPIC_API_KEY (байхгүй бол хуудас тохиргооны заавар харуулна).
