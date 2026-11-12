@@ -1,4 +1,7 @@
 import { Code, Endpoint, Section } from "./_shared";
+import { OperationsDocs } from "./sections/operations-docs";
+import { StaffDocs } from "./sections/staff-docs";
+import { TenantAdminDocs } from "./sections/tenant-admin-docs";
 
 const BEARER = "Bearer (Ажилтан)";
 
@@ -64,13 +67,16 @@ Res:  200 {
     "id": "...", "email": "...", "firstName": "...", "lastName": "...", "phone": "...",
     "isOwner": true, "role": { "id": "...", "name": "Менежер", "permissions": [...] } | null,
     "branchId": "..." | null, "tenant": { "id": "...", "name": "Инфосистемс" }
-  }
+  },
+  "reactivated": false   // true = ажилтан өөрөө хаасан (deactivatedAt) бүртгэлээ энэ нэвтрэлтээр сэргээсэн
 }
 400 { "error": "...", "code": "VALIDATION", "fieldErrors": { "type" | "fcm" | "model" | "os" | "loc": "..." } }
 401 { "error": "Нэвтрэх нэр эсвэл нууц үг буруу." }
 423 { "error": "Хэт олон удаа буруу оролдсон тул аккаунт түгжигдсэн. Нууц үгээ сэргээнэ үү." }
 403 { "error": "Энэ аккаунт идэвхжээгүй байна. Веб дээр анхны нэвтрэлт хийж нууц үгээ үүсгэнэ үү." }
-403 { "error": "Таны байгууллага түр хугацаагаар зогссон байна." }`}</Code>
+403 { "error": "Таны байгууллага түр хугацаагаар зогссон байна." }
+403 { "error": "Энэ хэрэглэгч идэвхгүй болсон. Менежертэйгээ холбоо барина уу." }   // isActive=false (админ хаалт — нууц үгээр сэргэхгүй)
+403 { "error": "Энэ хэрэглэгчийн хугацаа <огноо>-нд дууссан." }                   // activeUntil өнгөрсөн`}</Code>
         </Endpoint>
 
         <Endpoint
@@ -193,12 +199,16 @@ Res:  200 { "device": { "id": "...", "deviceId": "..." } }
 
       {/* --- Салбар / Үйлчлүүлэгч / Машин --- */}
       <Section title="4. Салбар, үйлчлүүлэгч, машин">
-        <Endpoint method="GET" path="/api/v1/branches" auth="bearer" bearerLabel={BEARER} tags={["branch-scoped"]} title="Байгууллагын салбарууд (branch-с гадуурх ажилтан зөвхөн өөрийн салбарыг харна).">
+        <Endpoint method="GET" path="/api/v1/branches" auth="bearer" bearerLabel={BEARER} title="Байгууллагын идэвхтэй салбарууд — хэрэглэгчийн ажиллаж болох (eligible) салбаруудаар хязгаарлагдана.">
           <Code>{`Query: ?page=&pageSize=
-Res: 200 { "branches": [{ "id": "...", "name": "...", "address": "...", "phone": "..." }], "pagination": {...} }`}</Code>
+Res: 200 { "branches": [{ "id": "...", "name": "...", "address": "...", "phone": "..." }], "pagination": {...} }   // нэрээр эрэмбэлсэн
+// Зөвхөн isActive=true салбар. Owner → бүх идэвхтэй салбар.
+// Ажилтан → өөрийн үндсэн салбар (branchId) + оноогдсон салбарууд (assignableBranchIds).
+// Тогтсон салбаргүй, оноолтгүй (floating) ажилтан → байгууллагын БҮХ идэвхтэй салбар.
+// X-Working-Branch header энэ жагсаалтыг хязгаарлахгүй.`}</Code>
         </Endpoint>
 
-        <Endpoint method="GET" path="/api/v1/customers" auth="bearer" bearerLabel={BEARER} title="Үйлчлүүлэгчдийн жагсаалт (нэр/утас/имэйл/байгууллагын нэр, регистрээр хайлт).">
+        <Endpoint method="GET" path="/api/v1/customers" auth="bearer" bearerLabel={BEARER} tags={["Эрх: customers.view"]} title="Үйлчлүүлэгчдийн жагсаалт (нэр/утас/имэйл/байгууллагын нэр, регистрээр хайлт).">
           <Code>{`Query: ?q=&kind=org|person&page=&pageSize=
 Res: 200 { "customers": [{ "id": "...", "fullName": "...", "phone": "...", "email": "...", "note": "...",
   "isOrganization": false, "orgRegnum": null, "orgName": null, "orgEmail": null, "createdAt": "..." }], "pagination": {...} }`}</Code>
@@ -208,10 +218,13 @@ Res: 200 { "customers": [{ "id": "...", "fullName": "...", "phone": "...", "emai
           <Code>{`Req:  { "phone": "99112233", "fullName": "...", "email": "...", "note": "...",
         "isOrganization": true, "orgRegnum": "1234567", "orgName": "...", "orgEmail": "..." }  // phone заавал; org* нь зөвхөн isOrganization=true үед (7 оронтой регистр, нэр заавал), эс бөгөөс null хадгалагдана
 Res:  201 { "customer": { "id": "...", "fullName": "...", "phone": "...", "email": "...", "note": "...", "isOrganization": false, "orgRegnum": null, "orgName": null, "orgEmail": null, "createdAt": "..." } }
+Res:  200 { "customer": {...ижил бүтэц} }   // ШИНЭЭР ҮҮСГЭЭГҮЙ — утас нь апп хэрэглэгчийн (Account) дугаар бөгөөд:
+      //   энэ байгууллагад тухайн Account-тай харилцагч аль хэдийн байвал түүнийг буцаана (өгсөн талбарууд хадгалагдахгүй), эсвэл
+      //   ижил утастай Account-гүй харилцагчийг Account-тай холбож (claim), өгсөн нэр/имэйл/тэмдэглэл/org талбараар шинэчилнэ.
 403  { "error": "Танд энэ үйлдэл хийх эрх байхгүй." }
 403  { "error": "...", "code": "SUBSCRIPTION_EXPIRED" }
 422  { "error": "Хүсэлт буруу.", "fieldErrors": { "phone": "Утас шаардлагатай." } }
-409  { "error": "Энэ утасны дугаартай харилцагч аль хэдийн бүртгэлтэй байна." }`}</Code>
+409  { "error": "Энэ утасны дугаартай үйлчлүүлэгч аль хэдийн бүртгэлтэй байна.", "fieldErrors": { "phone": "..." } }`}</Code>
         </Endpoint>
 
         <Endpoint method="GET" path="/api/v1/ebarimt/org" auth="bearer" bearerLabel={BEARER} tags={["Эрх: customers.create эсвэл customers.edit", "20 хүсэлт/мин (хэрэглэгч тутамд)"]} title="eBarimt-аас байгууллагын нэр татах (7 оронтой регистр).">
@@ -232,7 +245,7 @@ Res:  201 { "customer": { "id": "...", "fullName": "...", "phone": "...", "email
 502  { "error": "...", "code": "HUR_UPSTREAM" }`}</Code>
         </Endpoint>
 
-        <Endpoint method="GET" path="/api/v1/vehicles" auth="bearer" bearerLabel={BEARER} title="Машинуудын жагсаалт (дугаар/загвар/vin-ээр хайлт, харилцагчаар шүүлт).">
+        <Endpoint method="GET" path="/api/v1/vehicles" auth="bearer" bearerLabel={BEARER} tags={["Эрх: vehicles.view"]} title="Машинуудын жагсаалт (дугаар/загвар/vin-ээр хайлт, харилцагчаар шүүлт).">
           <Code>{`Query: ?q=&customerId=&ownerKind=org|person&page=&pageSize=
 Res: 200 { "vehicles": [{ "id": "...", "plate": "...", "vin": "...", "make": "...", "model": "...",
   "year": 2018, "mileage": 45000, "customerId": "...", "isPostpaid": false, "ownerIsOrganization": false,
@@ -241,7 +254,7 @@ Res: 200 { "vehicles": [{ "id": "...", "plate": "...", "vin": "...", "make": "..
 // isPostpaid: TenantVehicle-ийн дараа тооцоо тохиргоо — захиалга үүсгэх формыг урьдчилан бөглөхөд.`}</Code>
         </Endpoint>
 
-        <Endpoint method="GET" path="/api/v1/vehicles/{id}/vin-history" auth="bearer" bearerLabel={BEARER} tags={["Эрх: vehicles.view"]} title="Ижил арлын дугаартай (VIN) бусад бүртгэл.">
+        <Endpoint method="GET" path="/api/v1/vehicles/[id]/vin-history" auth="bearer" bearerLabel={BEARER} tags={["Эрх: vehicles.view"]} title="Ижил арлын дугаартай (VIN) бусад бүртгэл.">
           <Code>{`Res: 200 { "vin": "..."|null, "records": [{ "vehicleId": "...", "plate": "...", "make": "...", "model": "...", "year": 2018|null,
   "ownerName": "..."|null, "orderCount": 3, "lastOrderAt": "ISO"|null, "createdAt": "ISO" }], "otherTenantRecords": 0 }
 // records: зөвхөн энэ байгууллагад холбоотой (TenantVehicle) бүртгэл, шинэ нь түрүүлж. orderCount: цуцлагдаагүй захиалга.
@@ -260,14 +273,23 @@ Res:  201 { "vehicle": { "id": "...", "plate": "...", "vin": "...", "make": "...
       {/* --- Засварын хуудас --- */}
       <Section title="5. Засварын хуудас">
         <Endpoint method="GET" path="/api/v1/orders" auth="bearer" bearerLabel={BEARER} tags={["branch-scoped"]} title="Засварын хуудасны жагсаалт (статус/салбар/машин/харилцагчаар шүүлт).">
-          <Code>{`Query: ?status=&branchId=&vehicleId=&customerId=&internal=yes|no&page=&pageSize=
+          <Code>{`Query: ?status=&paymentStatus=&branchId=&vehicleId=&customerId=&assignedToId=&internal=yes|no&postpaid=true|false
+       &q=&plate=&dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD&page=&pageSize= (эсвэл limit; default 50, max 100)
       // internal=yes — зөвхөн дотоод засвар, internal=no — дотоод засваргүй. Өгөөгүй бол бүгд.
+      // postpaid=true|false — дараа тооцоот эсэхээр. paymentStatus — UNPAID | PARTIAL | PAID.
+      // q — дугаар, харилцагч (нэр/утас/байгууллага), улсын дугаар (snapshot + одоогийн), make/model, VIN (≥4 тэмдэгт) хайлт.
+      // dateFrom/dateTo — scheduledAt-ээр, Улаанбаатарын өдрөөр (dateTo өдрийг бүтэн оруулна). dateFrom > dateTo бол 400.
+      // pageSize, limit хоёул ирвэл pageSize давуу. Ажиллах салбар (X-Working-Branch) тогтсон бол branchId-г дарна.
 Res: 200 { "orders": [{ "id": "...", "number": "...", "status": "...", "paymentStatus": "...",
-  "scheduledAt": "...", "startedAt": "...", "completedAt": "...", "totalAmount": 0, "paidAmount": 0,
+  "scheduledAt": "...", "startedAt": "...", "completedAt": "...", "expectedFinishAt": "..."|null, "estimatedDurationMinutes": 90|null,
+  "totalAmount": 0, "paidAmount": 0,
   "notes": "...", "createdAt": "...", "customer": {...}, "vehicle": {...}, "branch": {...}, "assignedTo": {...},
   "isPostpaid": false, "isInternal": false, "paidInFullBeforeCompletion": false, "plateSnapshot": "1234УБА"|null, "vinSnapshot": "..."|null,
-  "hasLockedPayment": false }],   // true = захиалгын ямар нэг PAID төлбөр ХААГДСАН ээлжид: буцаах/цуцлах боломжгүй (PAID_PAYMENT_LOCKED). Мөн GET/PATCH /orders/[id], GET /orders/postpaid (orders[]), GET /overview (recentlyUpdatedOrders[]) дээр ижил
+  "hasLockedPayment": false,   // true = захиалгын ямар нэг PAID төлбөр ХААГДСАН ээлжид: буцаах/цуцлах боломжгүй (PAID_PAYMENT_LOCKED). Мөн GET/PATCH /orders/[id], GET /orders/postpaid (orders[]), GET /overview (recentlyUpdatedOrders[]) дээр ижил
+  "progress": { "total": 3, "completed": 1 },          // ажлын явц — PART болон цуцлагдсан мөр тооцогдохгүй
+  "servicePreview": ["Тосны солилт", "Тоормос шалгах"] }],   // цуцлагдаагүй, PART биш эхний 2 мөрийн тайлбар
   "pagination": {...} }
+400 { "error": "status утга буруу байна.", "field": "status" }   // буруу enum/огноо/тоо (field = параметрийн нэр)
 // isInternal: дотоод засвар (төлбөргүй, орлогод орохгүй — «Дотоод зардал»-д бүртгэгдэнэ). isPostpaid-тэй зэрэг true байж болохгүй.
 // isPostpaid: дараа тооцоот захиалга. paidInFullBeforeCompletion: зөвхөн status=COMPLETED, paymentStatus=PAID бөгөөд
 //   сүүлийн PAID төлбөрийн paidAt <= completedAt үед true ("Шууд төлсөн"). plateSnapshot/vinSnapshot: үүсгэх үеийн машины дугаар.
@@ -276,6 +298,7 @@ Res: 200 { "orders": [{ "id": "...", "number": "...", "status": "...", "paymentS
 
         <Endpoint method="POST" path="/api/v1/orders" auth="bearer" bearerLabel={BEARER} tags={["Эрх: orders.create", "Багц идэвхтэй байх шаардлагатай"]} title="Шинэ засварын хуудас үүсгэх.">
           <Code>{`Req:  { "branchId": "...", "customerId": "...", "vehicleId": "...", "assignedToId": "...", "scheduledAt": "...", "notes": "...", "isPostpaid": true, "isInternal": false,
+        "appointmentId": "...", "estimatedDurationMinutes": 90,
         "intake": { "notes": "...", "photoPaths": ["/uploads/..."], "signaturePath": "/uploads/...", "mileageKm": 152300 } }
       // intake заавал биш — машин хүлээн авах бүртгэл. ЗӨВХӨН үүсгэх үед бичигдэж, дараа нь засагдахгүй (PATCH хүлээн авахгүй).
       // photoPaths/signaturePath нь POST /uploads (kind=intake)-ээр өөрөө байршуулсан замууд. Дээд тал нь 20 зураг, notes ≤ 5000 тэмдэгт.
@@ -283,6 +306,11 @@ Res: 200 { "orders": [{ "id": "...", "number": "...", "status": "...", "paymentS
       // isPostpaid (boolean) заавал биш — өгөөгүй бол машины (TenantVehicle) isPostpaid-аас авна.
       // isInternal (boolean) заавал биш (анхдагч false) — дотоод засвар. isPostpaid=true-тэй зэрэг илгээвэл 422 ORDER_INTERNAL_POSTPAID_CONFLICT.
       // assignedToId заавал. orders.assign эрхгүй бол илгээхгүй байж болно — өөрөө оноогдоно.
+      //   appointmentId өгсөн бол assignedToId-гүй байж болно — цагийн хариуцах мастер дамжина.
+      // "appointmentId": "..." (заавал биш) — цаг захиалгаас үүсгэх: цаг энэ захиалгатай холбогдож CONFIRMED болно,
+      //   ирсэн цаг (arrivedAt) тэмдэглэгдэнэ; ажлын хугацааг цагаас авна. Холбож чадаагүй бол 422 APPOINTMENT_LINK_FAILED.
+      // "estimatedDurationMinutes": 90 (заавал биш) — бүхэл тоо 5–720 мин. appointmentId-тэй зэрэг илгээвэл 422
+      //   (fieldErrors.estimatedDurationMinutes: "Цаг захиалгатай үед хугацааг цаг захиалгаас авна.").
 Res:  201 { "order": {...} }
 422  { "error": "Хариуцах мастер сонгоно уу.", "fieldErrors": { "assignedToId": "..." } }   // ASSIGNEE_REQUIRED
 422  { "error": "Дотоод засвар болон дараа тооцоо зэрэг байж болохгүй.", "code": "ORDER_INTERNAL_POSTPAID_CONFLICT" }
@@ -308,9 +336,14 @@ Res:  201 { "order": {...} }
 
         <Endpoint method="PATCH" path="/api/v1/orders/[id]" auth="bearer" bearerLabel={BEARER} tags={["Эрх: orders.edit (эсвэл orders.editOwn — өөрийн хариуцсан)", "Багц идэвхтэй байх шаардлагатай"]} title="Засварын хуудасны статус/тэмдэглэл/хариуцагч засах — зөвшөөрөгдсөн шилжилтээр л статус солигдоно. IN_PROGRESS руу шилжихэд ажлын хугацаа тодорхойгүй бол (мөрүүдээс тооцоолох боломжгүй) durationMinutes заавал.">
           <Code>{`Req:  { "status": "IN_PROGRESS", "durationMinutes": 90, "notes": "...", "assignedToId": "...", "isPostpaid": true, "isInternal": true }  // бүгд заавал биш
-      // isInternal: дотоод засвар болгох/болихыг өөрчилнө (orders.edit шаардана). true болговол isPostpaid автоматаар false болно; isPostpaid=true-тэй зэрэг (эсвэл дотоод захиалгад isPostpaid=true) илгээвэл 422 ORDER_INTERNAL_POSTPAID_CONFLICT.
+      // Эрх: status, notes, isPostpaid, isInternal → orders.edit, эсвэл orders.editOwn (зөвхөн өөрт оноогдсон захиалга; бусдынх 403).
+      //   assignedToId → orders.assign (тусдаа шалгагдана; зөвхөн мастер солих хүсэлтэд orders.edit шаардахгүй).
+      // Танигдах талбар (status, notes, assignedToId, isPostpaid, isInternal)-гүй body (ж: {} эсвэл зөвхөн durationMinutes) хүчингүй:
+      //   одоогоор тодорхой 4xx буцаахгүй — захиалга олдсон бол handler хариу буцаадаггүй тул 500 болно (олдоогүй бол 404). Ийм хүсэлт бүү илгээ.
+      // Төрлийн алдаа: 400 «Статус буруу байна.» | «notes нь string байна.» | «isPostpaid нь boolean байна.» | «isInternal нь boolean байна.» | «assignedToId нь string эсвэл null байна.»
+      // isInternal: дотоод засвар болгох/болихыг өөрчилнө. true болговол isPostpaid автоматаар false болно; isPostpaid=true-тэй зэрэг (эсвэл дотоод захиалгад isPostpaid=true) илгээвэл 422 ORDER_INTERNAL_POSTPAID_CONFLICT.
       //   Төлбөр (PAID) бүртгэгдсэн захиалгыг дотоод болгох гэвэл 409 ORDER_INTERNAL_HAS_PAYMENTS. Дотоод захиалга төлбөргүйгээр COMPLETED болно.
-      // isPostpaid: дараа тооцоо тэмдэглэгээг өөрчилнө (orders.edit шаардана). Машин солигдсон үед (web) өгөөгүй бол шинэ машинаас дахин авна.
+      // isPostpaid: дараа тооцоо тэмдэглэгээг өөрчилнө. Машин солигдсон үед (web) өгөөгүй бол шинэ машинаас дахин авна.
 Res:  200 { "order": {...} }   // list-ийн isPostpaid, paidInFullBeforeCompletion, plateSnapshot, vinSnapshot талбарууд орно
 409  { "error": "Төлбөр бүртгэгдсэн захиалгыг дотоод засвар болгох боломжгүй.", "code": "ORDER_INTERNAL_HAS_PAYMENTS" }
 403  { "error": "Дараа тооцоот захиалгыг төлбөр дутуу байхад зөвхөн эрхтэй хэрэглэгч (нягтлан) хаана.", "code": "POSTPAID_CLOSE_FORBIDDEN" }
@@ -660,12 +693,13 @@ Res:  201 { "url": "/uploads/cash/{tenantId}/....jpg", "size": 12345, "mime": "i
 400 { "error": "...", "code": "CASH_ATTACHMENT_INVALID" }`}</Code>
         </Endpoint>
 
-        <Endpoint method="GET" path="/api/v1/orders/[id]/qpay" auth="bearer" bearerLabel={BEARER} title="Засварын хуудасны идэвхтэй QPay нэхэмжлэхийг харах.">
+        <Endpoint method="GET" path="/api/v1/orders/[id]/qpay" auth="bearer" bearerLabel={BEARER} tags={["Эрх: payments.view"]} title="Засварын хуудасны идэвхтэй QPay нэхэмжлэхийг харах.">
           <Code>{`Res: 200 { "qpayEnabled": true, "pending": { "id": "...", "qrImage": "...", "qrText": "...", "amount": "0", "urls": [...] } | null }
+403 { "error": "Танд энэ засварын хуудсыг харах эрх байхгүй." }
 404 { "error": "Засварын хуудас олдсонгүй." }`}</Code>
         </Endpoint>
 
-        <Endpoint method="POST" path="/api/v1/orders/[id]/qpay" auth="bearer" bearerLabel={BEARER} tags={["Эрх: payments.create"]} title="Засварын хуудсанд QPay нэхэмжлэх үүсгэх (анхдагч нь үлдэгдэл дүн).">
+        <Endpoint method="POST" path="/api/v1/orders/[id]/qpay" auth="bearer" bearerLabel={BEARER} tags={["Эрх: payments.create", "Багц идэвхтэй байх шаардлагатай"]} title="Засварын хуудсанд QPay нэхэмжлэх үүсгэх (анхдагч нь үлдэгдэл дүн).">
           <Code>{`Req (заавал биш): { "amount": "20000" }   // string; байхгүй бол үлдэгдэл дүнгээр. Тухайн дүнтэй PENDING нэхэмжлэх байвал дахин ашиглана, өөр дүнтэй бол цуцлаад шинээр үүсгэнэ.
 Res: 200 { "payment": { "id": "...", "qrImage": "...", "qrText": "...", "amount": "0", "urls": [...] } }
 404 { "error": "Засварын хуудас олдсонгүй." }
@@ -679,16 +713,16 @@ Res: 200 { "payment": { "id": "...", "qrImage": "...", "qrText": "...", "amount"
 502 { "error": "<qpay провайдерын алдаа>" }`}</Code>
         </Endpoint>
 
-        <Endpoint method="DELETE" path="/api/v1/orders/[id]/qpay" auth="bearer" bearerLabel={BEARER} tags={["Эрх: payments.delete"]} title="Хүлээгдэж буй QPay нэхэмжлэхийг цуцлах.">
+        <Endpoint method="DELETE" path="/api/v1/orders/[id]/qpay" auth="bearer" bearerLabel={BEARER} tags={["Эрх: payments.delete", "Багц идэвхтэй байх шаардлагатай"]} title="Хүлээгдэж буй QPay нэхэмжлэхийг цуцлах.">
           <Code>{`Req:  { "paymentId": "..." }
-Res:  200 { "ok": true }   // нэхэмжлэх эхлээд QPay дээр цуцлагдаж, дараа нь локал бүртгэл CANCELLED болно
+Res:  200 { "ok": true, "paymentId": "..." }   // цуцлагдсан төлбөрийн id; нэхэмжлэх эхлээд QPay дээр цуцлагдаж, дараа нь локал бүртгэл CANCELLED болно
 400 { "error": "paymentId шаардлагатай." }
 409 { "error": "...", "code": "QPAY_INVOICE_PAID" }   // нэхэмжлэх QPay дээр төлөгдсөн байсан — төлбөр бүртгэгдсэн, цуцлаагүй: жагсаалтаа дахин ачаална
 409 { "error": "...", "code": "QPAY_INVOICE_PARTIALLY_PAID" }   // хэсэгчлэн төлөгдсөн — цуцлахгүй
 502 { "error": "QPay нэхэмжлэх цуцлахад алдаа гарлаа. Дахин оролдоно уу.", "code": "QPAY_CANCEL_FAILED" }   // QPay цуцлалт амжилтгүй — локал бүртгэл өөрчлөгдөөгүй`}</Code>
         </Endpoint>
 
-        <Endpoint method="POST" path="/api/v1/orders/[id]/qpay/check" auth="bearer" bearerLabel={BEARER} tags={["Эрх: payments.edit"]} title="QPay нэхэмжлэхийн төлбөр орсон эсэхийг шалгах.">
+        <Endpoint method="POST" path="/api/v1/orders/[id]/qpay/check" auth="bearer" bearerLabel={BEARER} tags={["Эрх: payments.edit", "Багц идэвхтэй байх шаардлагатай"]} title="QPay нэхэмжлэхийн төлбөр орсон эсэхийг шалгах.">
           <Code>{`Req:  { "paymentId": "..." }
 Res:  200 { "paid": true } | { "paid": false, "message": "Төлбөр төлөгдөөгүй байна." }
 404 { "error": "Төлбөр олдсонгүй." }
@@ -700,9 +734,13 @@ Res:  200 { "paid": true } | { "paid": false, "message": "Төлбөр төлө�
       {/* --- Цаг захиалга --- */}
       <Section title="6. Цаг захиалга">
         <Endpoint method="GET" path="/api/v1/appointments" auth="bearer" bearerLabel={BEARER} tags={["Эрх: appointments.view", "branch-scoped"]} title="Цагийн жагсаалт. month= параметрээр өдөр тус бүрийн тоог авах боломжтой.">
-          <Code>{`Query: ?status=&date=YYYY-MM-DD&month=YYYY-MM&branchId=&page=&pageSize=
+          <Code>{`Query: ?status=&date=YYYY-MM-DD&month=YYYY-MM&branchId=&q=&page=&pageSize=
+      // q — апп хэрэглэгчийн нэр/утас, харилцагч, тэмдэглэлээр хайх.
 Res (month горим): 200 { "dates": ["2026-09-02", "2026-09-05", ...] }
-Res (энгийн):      200 { "appointments": [{ "id": "...", "status": "PENDING", "requestedAt": "...", "note": "...", "createdAt": "...",
+Res (энгийн):      200 { "appointments": [{ "id": "...", "status": "PENDING", "requestedAt": "...",
+  "arrivedAt": "..." | null,                                                    // үйлчлүүлэгч ирсэн гэж тэмдэглэсэн цаг
+  "paymentStatus": "NOT_REQUIRED" | "PENDING" | "UNDERPAID" | "FAILED" | "PAID" | "REFUNDED",  // онлайн захиалгын хураамжийн төлөв (серверт тооцоолсон; түүхий fee талбар ирэхгүй)
+  "note": "...", "createdAt": "...",
   "branch": { "id": "...", "name": "..." }, "category": { "id": "...", "name": "..." } | null,
   "account": { "name": "...", "phone": "..." } | null,                          // онлайн захиалга
   "customer": { "id": "...", "fullName": "...", "phone": "..." } | null,
@@ -713,11 +751,12 @@ Res (энгийн):      200 { "appointments": [{ "id": "...", "status": "PENDIN
   "pagination": {...} }   // pageSize max 100`}</Code>
         </Endpoint>
 
-        <Endpoint method="POST" path="/api/v1/appointments" auth="bearer" bearerLabel={BEARER} tags={["Эрх: appointments.create", "branch-scoped"]} title="Ажилтан утсаар цаг бүртгэх (CONFIRMED-ээр үүснэ).">
+        <Endpoint method="POST" path="/api/v1/appointments" auth="bearer" bearerLabel={BEARER} tags={["Эрх: appointments.create", "Багц идэвхтэй байх шаардлагатай", "branch-scoped"]} title="Ажилтан утсаар цаг бүртгэх (CONFIRMED-ээр үүснэ).">
           <Code>{`Req:  { "branchId": "...", "customerId": "...", "requestedAt": "2026-09-02T10:00:00", "vehicleId"?: "...", "note"?: "...",
         "categoryIds"?: ["..."], "confirmed"?: false,
         "assignedToId"?: "..." }     // хариуцах мастер ЗААВАЛ (orders.assign эрхтэй хэрэглэгчид). orders.assign эрхгүй бол илгээхгүй байж болно — өөрөө оноогдоно.
-Res:  201 { "appointment": {...} }       // жагсаалтын нэг элемент, assignedToId/assignedTo-той
+Res:  201 { "appointment": {...} }       // жагсаалтын нэг элемент (arrivedAt, paymentStatus, assignedToId/assignedTo-той)
+403  { "error": "...", "code": "SUBSCRIPTION_EXPIRED" }
 403  { "error": "Зөвхөн өөрийгөө хариуцагчаар оноож болно." }   // orders.assign эрхгүй ажилтан өөр хүн оноох гэвэл
 422  { "error": "Хариуцах мастер сонгоно уу.", "code": "ASSIGNEE_REQUIRED", "fieldErrors": { "assignedToId": "Хариуцах мастер сонгоно уу." } }   // orders.assign эрхтэй хэрэглэгч мастер өгөөгүй
 422  { "error": "Сонгосон ажилтан энэ салбарт хариуцагч болж болохгүй.", "code": "ASSIGNEE_INELIGIBLE", "fieldErrors": { "assignedToId": "..." } }
@@ -744,73 +783,88 @@ Res:  200 { "appointment": {...} }
 
       {/* --- Каталог --- */}
       <Section title="7. Үйлчилгээний каталог">
-        <Endpoint method="GET" path="/api/v1/services" auth="bearer" bearerLabel={BEARER} title="Ажил/сэлбэг/оношилгооны каталог.">
-          <Code>{`Query: ?type=LABOR|GOODS|DIAGNOSTIC&q=&isActive=&page=&pageSize=
-Res: 200 { "services": [{ "id": "...", "type": "...", "name": "...", "code": "...", "price": 0, "costPrice": 0,
-  "stock": 0, "description": "...", "isActive": true,
+        <Endpoint method="GET" path="/api/v1/services" auth="bearer" bearerLabel={BEARER} tags={["Эрх: services.view"]} title="Ажил/сэлбэг/оношилгооны каталог.">
+          <Code>{`Query: ?type=LABOR|GOODS|DIAGNOSTIC&q=&isActive=false&page=&pageSize=
+      // Анхдагчаар зөвхөн идэвхтэй; isActive=false → идэвхгүйг ч оруулна.
+      // q — нэр, код, тайлбар (хэсэгчлэн) болон баркод (яг тэнцүү, зай хасаж том үсгээр) хайлт.
+Res: 200 { "services": [{ "id": "...", "type": "...", "name": "...", "code": "...", "barcode": "4901234567894" | null,
+  "price": 0, "costPrice": 0, "stock": 0, "description": "..." | null, "isActive": true,
   "durationValue": 1.5 | null, "durationUnit": { "id": "...", "name": "цаг", "code": "h" } | null,   // ажлын хугацаа (LABOR)
+  "reminderIntervalMonths": 6 | null,   // үйлчилгээний сануулгын давтамж (сар)
   "unit": { "id": "...", "name": "...", "code": "..." } | null, "category": { "id": "...", "name": "..." } | null, "createdAt": "..." }],
   "pagination": {...} }`}</Code>
         </Endpoint>
 
-        <Endpoint method="POST" path="/api/v1/services" auth="bearer" bearerLabel={BEARER} tags={["Багц идэвхтэй байх шаардлагатай"]} title="Шинэ ажил/сэлбэг/оношилгоо үүсгэх.">
+        <Endpoint method="POST" path="/api/v1/services" auth="bearer" bearerLabel={BEARER} tags={["Эрх: services.create", "Багц идэвхтэй байх шаардлагатай"]} title="Шинэ ажил/сэлбэг/оношилгоо үүсгэх.">
           <Code>{`Req:  { "type": "GOODS", "name": "...", "price": 0, "code": "...", "costPrice": 0, "stock": 0, "unitId": "...", "categoryId": "...",
-        "durationValue": 1.5, "durationUnitId": "...", "catalogItemId": "..." }   // type/name/price заавал
+        "durationValue": 1.5, "durationUnitId": "...", "catalogItemId": "...",
+        "barcode": "4901234567894",   // зөвхөн GOODS; 4–64 тэмдэгт (тоо, үсэг, - .), бусад төрөлд үл тооцно
+        "description": "...", "isActive": true }   // type/name/price заавал; isActive анхдагч true
 // LABOR/GOODS → нэгдсэн сан: catalogItemId өгвөл тэр мөртэй холбоно; эс бөгөөс кодоор (кодгүй бол нэрээр)
 // таарах мөртэй холбоно, олдохгүй бол санд шинээр нэмнэ. Холбогдсон бол name/code нь сангийнх (PATCH-аар засагдахгүй).
-Res:  200 { "service": {...} }
+// code том үсгээр хадгалагдана. reminderIntervalMonths энд хүлээн авахгүй (хариунд null).
+Res:  200 { "service": {...list-ийн бүтэц} }
 400  { "error": "Төрөл буруу байна (LABOR | GOODS | DIAGNOSTIC)" } | { "error": "Нэр заавал шаардлагатай" } | { "error": "Үнэ буруу байна" }
-409  { "error": "Энэ ажил/сэлбэг танд аль хэдийн бүртгэлтэй байна." }   // тенант тухайн сангийн мөрийг аль хэдийн холбосон`}</Code>
+400  { "error": "Өртөг буруу байна" } | { "error": "Үлдэгдэл буруу байна" } | { "error": "Хугацаа буруу байна" }
+400  { "error": "Баркод буруу байна", "fieldErrors": { "barcode": "..." } } | { "error": "...", "fieldErrors": { "unitId" | "categoryId" | "durationUnitId": "..." } }
+409  { "error": "Энэ ажил/сэлбэг танд аль хэдийн бүртгэлтэй байна.", "fieldErrors": { "name": "..." } }   // тенант тухайн сангийн мөрийг аль хэдийн холбосон
+409  { "error": "Ийм кодтой бүртгэл аль хэдийн байна.", "fieldErrors": { "code": "Код давхардаж байна." } }   // код давхардсан`}</Code>
         </Endpoint>
 
-        <Endpoint method="GET" path="/api/v1/services/[id]" auth="bearer" bearerLabel={BEARER} title="Ганц үйлчилгээний дэлгэрэнгүй.">
-          <Code>{`Res: 200 { "service": { ...list-ийн талбарууд, "updatedAt", "_count": { "items": 0 } } }
+        <Endpoint method="GET" path="/api/v1/services/[id]" auth="bearer" bearerLabel={BEARER} tags={["Эрх: services.view"]} title="Ганц үйлчилгээний дэлгэрэнгүй.">
+          <Code>{`Res: 200 { "service": { ...list-ийн талбарууд (barcode, reminderIntervalMonths хамт), "updatedAt", "_count": { "items": 0 } } }
 404 { "error": "Үйлчилгээ олдсонгүй." }`}</Code>
         </Endpoint>
 
-        <Endpoint method="GET" path="/api/v1/labor-categories" auth="bearer" bearerLabel={BEARER} title="Ажлын ангиллын жагсаалт.">
+        <Endpoint method="GET" path="/api/v1/labor-categories" auth="bearer" bearerLabel={BEARER} tags={["Эрх: services.view"]} title="Ажлын ангиллын жагсаалт.">
           <Code>{`Query: ?all=true (идэвхгүй ч оруулах)
 Res: 200 { "categories": [{ "id": "...", "name": "...", "description": "...", "isActive": true, "createdAt": "..." }] }`}</Code>
         </Endpoint>
 
-        <Endpoint method="POST" path="/api/v1/labor-categories" auth="bearer" bearerLabel={BEARER} title="Шинэ ажлын ангилал үүсгэх (нэр давхцахгүй).">
+        <Endpoint method="POST" path="/api/v1/labor-categories" auth="bearer" bearerLabel={BEARER} tags={["Зөвхөн эзэмшигч (owner)"]} title="Шинэ ажлын ангилал үүсгэх (нэр давхцахгүй).">
           <Code>{`Req:  { "name": "...", "description": "...", "isActive": true }
 Res:  200 { "category": {...} }        // системийн ангилал автоматаар "Ерөнхий" түлхүүрт холбогдоно
+403  { "error": "Танд энэ үйлдэл хийх эрх байхгүй." }   // owner биш
 400  { "error": "Тийм нэртэй ангилал аль хэдийн байна" }
 500  { "error": "Системийн ерөнхий ангилал тохируулагдаагүй байна." }`}</Code>
         </Endpoint>
 
-        <Endpoint method="PATCH" path="/api/v1/labor-categories/[id]" auth="bearer" bearerLabel={BEARER} title="Ажлын ангилал засах.">
+        <Endpoint method="PATCH" path="/api/v1/labor-categories/[id]" auth="bearer" bearerLabel={BEARER} tags={["Зөвхөн эзэмшигч (owner)"]} title="Ажлын ангилал засах.">
           <Code>{`Req:  { "name": "...", "description": "...", "isActive": true }  // бүгд заавал биш
 Res:  200 { "category": {...} }
+403  { "error": "Танд энэ үйлдэл хийх эрх байхгүй." }   // owner биш
 404  { "error": "Ангилал олдсонгүй" }`}</Code>
         </Endpoint>
 
-        <Endpoint method="DELETE" path="/api/v1/labor-categories/[id]" auth="bearer" bearerLabel={BEARER} title="Ажлын ангилал устгах (ашиглагдаж байгаа бол боломжгүй).">
+        <Endpoint method="DELETE" path="/api/v1/labor-categories/[id]" auth="bearer" bearerLabel={BEARER} tags={["Зөвхөн эзэмшигч (owner)"]} title="Ажлын ангилал устгах (ашиглагдаж байгаа бол боломжгүй).">
           <Code>{`Res: 200 { "ok": true }
+403 { "error": "Танд энэ үйлдэл хийх эрх байхгүй." }   // owner биш
 404 { "error": "Ангилал олдсонгүй" }
 400 { "error": "3 үйлчилгээнд ашиглагдаж байгаа тул устгах боломжгүй" }`}</Code>
         </Endpoint>
 
-        <Endpoint method="GET" path="/api/v1/units" auth="bearer" bearerLabel={BEARER} title="Хэмжих нэгжийн жагсаалт.">
+        <Endpoint method="GET" path="/api/v1/units" auth="bearer" bearerLabel={BEARER} tags={["Эрх: services.view"]} title="Хэмжих нэгжийн жагсаалт.">
           <Code>{`Query: ?all=true
 Res: 200 { "units": [{ "id": "...", "name": "...", "code": "...", "isActive": true, "createdAt": "..." }] }`}</Code>
         </Endpoint>
 
-        <Endpoint method="POST" path="/api/v1/units" auth="bearer" bearerLabel={BEARER} title="Шинэ нэгж үүсгэх (нэр давхцахгүй).">
+        <Endpoint method="POST" path="/api/v1/units" auth="bearer" bearerLabel={BEARER} tags={["Зөвхөн эзэмшигч (owner)"]} title="Шинэ нэгж үүсгэх (нэр давхцахгүй).">
           <Code>{`Req:  { "name": "...", "code": "...", "isActive": true }
 Res:  200 { "unit": {...} }
+403  { "error": "Танд энэ үйлдэл хийх эрх байхгүй." }   // owner биш
 400  { "error": "Тийм нэртэй нэгж аль хэдийн байна" }`}</Code>
         </Endpoint>
 
-        <Endpoint method="PATCH" path="/api/v1/units/[id]" auth="bearer" bearerLabel={BEARER} title="Нэгж засах.">
+        <Endpoint method="PATCH" path="/api/v1/units/[id]" auth="bearer" bearerLabel={BEARER} tags={["Зөвхөн эзэмшигч (owner)"]} title="Нэгж засах.">
           <Code>{`Req:  { "name": "...", "code": "...", "isActive": true }  // бүгд заавал биш
 Res:  200 { "unit": {...} }
+403  { "error": "Танд энэ үйлдэл хийх эрх байхгүй." }   // owner биш
 404  { "error": "Нэгж олдсонгүй" }`}</Code>
         </Endpoint>
 
-        <Endpoint method="DELETE" path="/api/v1/units/[id]" auth="bearer" bearerLabel={BEARER} title="Нэгж устгах (ашиглагдаж байгаа бол боломжгүй).">
+        <Endpoint method="DELETE" path="/api/v1/units/[id]" auth="bearer" bearerLabel={BEARER} tags={["Зөвхөн эзэмшигч (owner)"]} title="Нэгж устгах (ашиглагдаж байгаа бол боломжгүй).">
           <Code>{`Res: 200 { "ok": true }
+403 { "error": "Танд энэ үйлдэл хийх эрх байхгүй." }   // owner биш
 404 { "error": "Нэгж олдсонгүй" }
 400 { "error": "5 үйлчилгээнд ашиглагдаж байгаа тул устгах боломжгүй" }`}</Code>
         </Endpoint>
@@ -847,13 +901,13 @@ Res:  201 { "report": { "id": "...", "createdAt": "...", "templateVersion": 1, "
 422 { "error": "Дууссан ажлыг засах боломжгүй.", "code": "ITEM_COMPLETED_LOCKED" }  // холбогдсон оношилгооны мөр COMPLETED бол`}</Code>
         </Endpoint>
 
-        <Endpoint method="GET" path="/api/v1/diagnostics/templates" auth="bearer" bearerLabel={BEARER} title="Оношилгооны загваруудын жагсаалт (унших зөвхөн — засах вэб дашбоардаас).">
+        <Endpoint method="GET" path="/api/v1/diagnostics/templates" auth="bearer" bearerLabel={BEARER} tags={["Эрх: diagnostics.view"]} title="Оношилгооны загваруудын жагсаалт. Загварыг API-аар үүсгэх/засах/устгах боломжтой (POST /diagnostics/templates, PATCH/DELETE /diagnostics/templates/[id]) — «25»-р хэсгийг үзнэ үү.">
           <Code>{`Query: ?type=&q=&includeInactive=true&page=&pageSize=
 Res: 200 { "templates": [{ "id": "...", "name": "...", "description": "...", "type": "...", "version": 1,
   "isActive": true, "price": 0, "durationMin": 0, "updatedAt": "..." }], "pagination": {...} }`}</Code>
         </Endpoint>
 
-        <Endpoint method="GET" path="/api/v1/diagnostics/templates/[id]" auth="bearer" bearerLabel={BEARER} title="Загварын дэлгэрэнгүй (schema хамт).">
+        <Endpoint method="GET" path="/api/v1/diagnostics/templates/[id]" auth="bearer" bearerLabel={BEARER} tags={["Эрх: diagnostics.view"]} title="Загварын дэлгэрэнгүй (schema хамт).">
           <Code>{`Res: 200 { "template": { ...list-ийн талбарууд, "schema": {...}, "updatedAt": "..." } }
 404 { "error": "Загвар олдсонгүй." }`}</Code>
         </Endpoint>
@@ -881,7 +935,11 @@ Res: 200 { "notifications": [{ "id": "...", "type": "...", "title": "...", "body
       <Section title="10. Багц">
         <Endpoint method="GET" path="/api/v1/subscription" auth="bearer" bearerLabel={BEARER} title="Байгууллагын багцын төлөв (олон бичих endpoint эндээс SUBSCRIPTION_EXPIRED алдаа буцаах эсэхийг тодорхойлно).">
           <Code>{`Res: 200 { "plan": "...", "status": "...", "locked": false, "isTrial": false, "daysLeft": 12 | null,
-  "expiresAt": "...", "expiringSoon": false, "warnDays": 7, "hasPendingPayment": false }`}</Code>
+  "expiresAt": "...", "expiringSoon": false, "warnDays": 7, "hasPendingPayment": false,
+  "modules": [...], "moduleCatalog": [...], "planModules": {...}, "prices": [...],
+  "pendingPayment": {...} | null, "payments": [...], "canManage": true }
+// Бүтэн хариуны (modules, moduleCatalog, planModules, prices, pendingPayment, payments, canManage) тайлбарыг
+// «16. Багц худалдан авах» хэсгээс үзнэ үү.`}</Code>
         </Endpoint>
       </Section>
 
@@ -911,8 +969,13 @@ matchedCustomerId — эзэмшигчийн утсаар таарсан ЭНЭ 
         </Endpoint>
       </Section>
 
+      {/* --- 14–27: тохиргоо, ажилтан, үйл ажиллагааны нэмэлт endpoint-ууд (sections/*) --- */}
+      <TenantAdminDocs />
+      <StaffDocs />
+      <OperationsDocs />
+
       {/* --- Алдааны формат --- */}
-      <Section title="13. Алдааны формат">
+      <Section title="27. Алдааны формат">
         <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-5">
           <p className="text-sm text-[var(--oc-muted)] mb-3">
             Ихэнх алдаа <code className="font-plex-mono">{`{ "error": "..." }`}</code> хэлбэртэй,

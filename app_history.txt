@@ -2266,3 +2266,9 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - app/_actions/system-data-agent.ts (requireSuperAdmin, zod оролт). UI: app/_components/data-agent-fab.tsx — /system layout дахь floating action button (баруун доод булан) → Чат / Санал табтай самбар; layout-д байрлах тул хуудас солигдоход яриа, санал хадгалагдана, хаахад Esc, санал тоо badge-ээр.
 - RLS: tool бүрийн эхэнд setBypassContext(), prisma-г return await.
 - Env: ANTHROPIC_API_KEY (байхгүй бол хуудас тохиргооны заавар харуулна).
+
+[2026-11-12] API баримт (/page/api-docs) бүрэн шинэчлэгдэв
+- Баримтжаагүй байсан mobile API-уудыг нэмэв: 13–26-р хэсэг (app/page/api-docs/sections/*): байгууллага бүртгүүлэх, тохиргоо/QPay/лого, салбар + хуваарь, багц худалдан авах, ажилтан/үүрэг/эрх, ээлжийн хуваарь, миний бүртгэл/session, тооллого, үнэлгээ, засварын хуудас/цаг захиалга/үйлчлүүлэгч/машин/каталог/оношилгооны нэмэлт үйлдлүүд, тайлан/аудит/санал хүсэлт. «Алдааны формат» 27-р хэсэг болов.
+- Хэрэглэгчийн app (account-docs): мэдэгдэл, бүртгэл хаах/устгах, health, салбарын үнэлгээ, захиалгын үнэлгээ нэмэгдэв.
+- Буруу/дутуу байсныг засав: units/labor-categories зөвхөн эзэн, эрхийн шошго, GET /subscription, GET/POST /orders талбарууд, login reactivated/403, verify-otp rate limit, app cancel refundPending, POST /customers 200, GET /branches харагдах дүрэм, нийтийн catalog 120/мин.
+- Үлдсэн баримтгүй нь зөвхөн cron, QPay callback, вэбийн lookup/discovery (mobile-д хамааралгүй). Баримт ↔ route тулгалт: 243 endpoint, байхгүй endpoint руу заасан баримт 0.

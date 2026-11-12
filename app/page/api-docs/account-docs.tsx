@@ -27,16 +27,19 @@ Res:  200 { "ok": true }
           method="POST"
           path="/api/v1/app/auth/verify-otp"
           auth="public"
+          tags={["Rate limit: 30/15 мин (IP)"]}
           title="Алхам 2 — кодыг баталгаажуулж accessToken авах. Account шинэ бол автоматаар үүснэ."
         >
-          <Code>{`Req:  { "phone": "99112233", "code": "123456", "name": "Бат" }  // name заавал биш
+          <Code>{`Req:  { "phone": "99112233", "code": "123456", "name": "Бат" }  // name заавал биш (зөвхөн нэргүй Account-д хадгалагдана)
 Res:  200 {
   "accessToken": "<JWT>",
-  "account": { "id": "...", "phone": "99112233", "name": "Бат" | null }
+  "reactivated": false,   // true = түр хаасан (POST /account/deactivate) бүртгэл энэ нэвтрэлтээр сэргэсэн
+  "account": { "id": "...", "phone": "99112233", "name": "Бат" | null, "hasPassword": false }   // hasPassword — «Нууц үгээр нэвтрэх» сонголтыг харуулахад
 }
 400  { "error": "Утасны дугаар буруу." } | { "error": "6 оронтой код шаардлагатай." }
 401  { "error": "Код буруу байна." } | { "error": "Кодны хугацаа дууссан." } | { "error": "Хэт олон удаа буруу оролдсон." }
-403  { "error": "Энэ дугаар түр хаагдсан байна." }`}</Code>
+403  { "error": "Энэ дугаар түр хаагдсан байна." }
+429  { "error": "Хэт олон хүсэлт илгээлээ. Түр хүлээгээд дахин оролдоно уу." }`}</Code>
         </Endpoint>
 
         <Endpoint
@@ -89,7 +92,7 @@ Res:  200 { "ok": true, "hasPassword": false }
           <p className="text-xs text-[var(--oc-muted3)] mt-2">
             Токен <strong>хугацаагүй</strong> (`exp` claim байхгүй) — refresh
             endpoint шаардлагагүй, апп үүгээр дахин суулгах хүртэл ашиглана.
-            Зөвхөн Account идэвхгүй (устгагдсан/блоклогдсон) болгосноор хүчингүй
+            Зөвхөн Account идэвхгүй (устгагдсан/блоклогдсон/түр хаасан) болгосноор хүчингүй
             болно.
           </p>
         </div>
@@ -107,6 +110,7 @@ Res:  200 { "ok": true, "hasPassword": false }
           method="GET"
           path="/api/v1/app/orgs"
           auth="public"
+          tags={["Rate limit: 120/60с (IP)"]}
           title="Байгууллагын каталог (байгууллагаар pagination-тэй). lat/lng өгсөн бол хамгийн ойрын салбараар эрэмбэлж, салбар бүрд distanceKm хавсаргана."
         >
           <Code>{`Query: ?q=&city=&district=&lat=&lng=&radius=<км, max 100>&openNow=1&weekend=1
@@ -126,13 +130,15 @@ Res: 200 {
   "pagination": { "page": 1, "pageSize": 20, "total": 12, "totalPages": 1, "hasPrev": false, "hasNext": false },
   "facets": { "cities": ["Улаанбаатар", ...], "districts": ["Баянзүрх", ...] }
 }
-400 { "error": "Шүүлтүүр буруу байна." }`}</Code>
+400 { "error": "Шүүлтүүр буруу байна." }
+429 { "error": "Хэт олон хүсэлт илгээлээ. Түр хүлээгээд дахин оролдоно уу." }   // 6 каталог endpoint нэг IP-ийн хязгаарыг хуваалцана`}</Code>
         </Endpoint>
 
         <Endpoint
           method="GET"
           path="/api/v1/app/orgs/map"
           auth="public"
+          tags={["Rate limit: 120/60с (IP)"]}
           title="Газрын зургийн marker-ууд (хөнгөн). Ижил шүүлтүүр + viewport (north/south/east/west — дөрвүүлээ хамт). Хамгийн ихдээ 500 marker."
         >
           <Code>{`Query: ?north=&south=&east=&west=  + orgs-тэй ижил шүүлтүүрүүд (q, city, district, lat, lng, radius, openNow, weekend, serviceKey, tag)
@@ -145,31 +151,37 @@ Res: 200 {
   }],
   "count": 37, "truncated": false, "max": 500
 }
-400 { "error": "north, south, east, west бүгд шаардлагатай." } | { "error": "Газрын зургийн хүрээ буруу байна." }`}</Code>
+400 { "error": "north, south, east, west бүгд шаардлагатай." } | { "error": "Газрын зургийн хүрээ буруу байна." }
+429 { "error": "Хэт олон хүсэлт илгээлээ. Түр хүлээгээд дахин оролдоно уу." }   // 6 каталог endpoint нэг IP-ийн хязгаарыг хуваалцана`}</Code>
         </Endpoint>
 
         <Endpoint
           method="GET"
           path="/api/v1/app/service-keys"
           auth="public"
+          tags={["Rate limit: 120/60с (IP)"]}
           title="Системийн ангиллын түлхүүрүүд — “Ямар ажил хийлгэх гэж байна?” сонголт. orgs-ийн ?serviceKey= шүүлт болон branch.serviceKeyIds-тай тааруулна. Ямар ч ангилалд холбогдоогүй түлхүүр орохгүй."
         >
-          <Code>{`Res: 200 { "serviceKeys": [{ "id": "...", "name": "Тоормос" }] }`}</Code>
+          <Code>{`Res: 200 { "serviceKeys": [{ "id": "...", "name": "Тоормос" }] }
+429 { "error": "Хэт олон хүсэлт илгээлээ. Түр хүлээгээд дахин оролдоно уу." }   // 6 каталог endpoint нэг IP-ийн хязгаарыг хуваалцана`}</Code>
         </Endpoint>
 
         <Endpoint
           method="GET"
           path="/api/v1/app/branch-tags"
           auth="public"
+          tags={["Rate limit: 120/60с (IP)"]}
           title="Бизнесийн төрлийн шошго — orgs-ийн ?tag= шүүлт болон branch.tags-тай тааруулна. Салбарт холбогдоогүй шошго орохгүй."
         >
-          <Code>{`Res: 200 { "tags": [{ "id": "...", "name": "Автомашины угаалга" }] }`}</Code>
+          <Code>{`Res: 200 { "tags": [{ "id": "...", "name": "Автомашины угаалга" }] }
+429 { "error": "Хэт олон хүсэлт илгээлээ. Түр хүлээгээд дахин оролдоно уу." }   // 6 каталог endpoint нэг IP-ийн хязгаарыг хуваалцана`}</Code>
         </Endpoint>
 
         <Endpoint
           method="GET"
           path="/api/v1/app/orgs/[slug]"
           auth="public"
+          tags={["Rate limit: 120/60с (IP)"]}
           title="Нэг байгууллагын дэлгэрэнгүй + салбарууд. Салбар бүрд онлайн захиалгад санал болгох ангилалууд (хугацаатай) болон бүтэн цагийн хуваарь хавсарна."
         >
           <Code>{`Res: 200 {
@@ -187,13 +199,15 @@ Res: 200 {
     }]
   }
 }
-404 { "error": "Байгууллага олдсонгүй." }`}</Code>
+404 { "error": "Байгууллага олдсонгүй." }
+429 { "error": "Хэт олон хүсэлт илгээлээ. Түр хүлээгээд дахин оролдоно уу." }   // 6 каталог endpoint нэг IP-ийн хязгаарыг хуваалцана`}</Code>
         </Endpoint>
 
         <Endpoint
           method="GET"
           path="/api/v1/app/branches/[branchId]/availability?date=YYYY-MM-DD&categoryIds=a,b"
           auth="public"
+          tags={["Rate limit: 120/60с (IP)"]}
           title="Тухайн өдрийн сул цагууд (slot). categoryIds өгсөн бол сонгосон ангиллуудын нийлбэр хугацаанд багтах slot-уудыг л буцаана; хоосон бол салбарын анхдагч slot урт. Цаг захиалахын өмнө ЭНИЙГ дуудаж slot.iso-г requestedAt-д илгээнэ."
         >
           <Code>{`Res: 200 {
@@ -207,7 +221,8 @@ Res: 200 {
 }
 400 { "error": "date (YYYY-MM-DD) шаардлагатай." } | { "error": "Буруу өдөр." } | { "error": "Үйлчилгээний ангиллаа дахин сонгоно уу." }
 403 { "error": "Энэ байгууллага онлайн цаг захиалга хүлээн авахгүй." }
-404 { "error": "Салбар олдсонгүй." }`}</Code>
+404 { "error": "Салбар олдсонгүй." }
+429 { "error": "Хэт олон хүсэлт илгээлээ. Түр хүлээгээд дахин оролдоно уу." }   // 6 каталог endpoint нэг IP-ийн хязгаарыг хуваалцана`}</Code>
         </Endpoint>
       </Section>
 
@@ -237,7 +252,8 @@ Res: 200 {
         "colorName": "Цагаан", "capacity": 1496, "purpose": "Суудал" }   // plate/make/model-оос бусад нь заавал биш
 Res:  201 { "vehicle": vehicle }
 400  { "error": "plate, make, model шаардлагатай." } | { "error": "year буруу." } | { "error": "capacity буруу." }
-409  { "error": "Энэ дугаар аль хэдийн бүртгэгдсэн." }`}</Code>
+409  { "error": "Энэ машин таны жагсаалтад аль хэдийн байна." }   // энэ Account-д ижил машин холбогдсон
+500  { "error": "Машин нэмэхэд алдаа гарлаа." }`}</Code>
         </Endpoint>
 
         <Endpoint method="DELETE" path="/api/v1/app/vehicles/[id]" auth="bearer" title="Өөрийн нэмсэн машиныг устгах (id = холбоосын id).">
@@ -292,20 +308,23 @@ Res:  201 { "vehicle": vehicle }
       "scheduledAt": "...", "startedAt": "..." | null, "completedAt": "..." | null,
       "estimatedDurationMinutes": 90 | null, "expectedFinishAt": "..." | null,
       "totalAmount": 150000 | null, "paidAmount": 0 | null,
+      "hasIntake": true,                                     // машин хүлээн авах бүртгэлтэй эсэх (дэлгэрэнгүйг GET /orders/[id]-ийн intake-аас)
       "vehicle": { "plate": "...", "make": "...", "model": "...", "year": 2018 },
       "items": [{ "id": "...", "kind": "LABOR", "description": "...", "status": "PENDING", "quantity": 1, "unitPrice": 50000, "total": 50000 }],
       "reports": [{ "id": "...", "type": "POST_SERVICE", "templateName": "...", "createdAt": "...", "mileageAtReport": 45000 }]
-    } | null,
+    } | null,                                                // дотоод засвар бол null
     "payment": { ...хураамжийн объект, харах 4.1 } | null
   }],
-  "walkInOrders": [{                                          // Appointment-гүй, идэвхтэй захиалга
+  "walkInOrders": [{                                          // Appointment-гүй, идэвхтэй захиалга (ажилтан шууд үүсгэсэн)
     "id": "...", "number": "1043", "status": "SCHEDULED", "paymentStatus": "UNPAID",
     "scheduledAt": "...", "startedAt": null, "completedAt": null,
     "estimatedDurationMinutes": null, "expectedFinishAt": null, "totalAmount": 0, "paidAmount": 0,
+    "hasIntake": false,
     "tenant": { "name": "...", "slug": "..." }, "branch": { "id": "...", "name": "..." },
-    "vehicle": {...}, "items": [...], "reports": [...]
+    "vehicle": {...}, "items": [...], "reports": [...]       // items/reports — serviceOrder-тэй ижил хэлбэр
   }]
-}`}</Code>
+}
+// walkInOrders: account-ийн Customer-ийн, дотоод бус, цуцлагдаагүй, (COMPLETED + PAID) биш захиалгууд. Хоёр жагсаалт тус бүр ≤200.`}</Code>
         </Endpoint>
 
         <Endpoint
@@ -349,11 +368,13 @@ Res:  200 { "ok": true }
           method="POST"
           path="/api/v1/app/appointments/[id]/cancel"
           auth="bearer"
-          title="Өөрийн цагийг цуцлах (зөвхөн PENDING/CONFIRMED төлөвт байхад)."
+          title="Өөрийн цагийг цуцлах (зөвхөн PENDING/CONFIRMED төлөвт, засварын хуудас нээгдээгүй үед). Төлөгдөөгүй хураамжийн QPay нэхэмжлэх цуцлагдана."
         >
           <Code>{`Res: 200 { "ok": true }
+Res: 200 { "ok": true, "refundPending": true }   // хураамж аль хэдийн төлөгдсөн (цуцлах мөчид QR төлөгдсөн ч) — буцаан олголт хийгдэнэ
 404 { "error": "Цаг олдсонгүй." }
-409 { "error": "Энэ цагийг цуцлах боломжгүй." }`}</Code>
+409 { "error": "Энэ цагийг цуцлах боломжгүй." }   // төлөв PENDING/CONFIRMED биш, эсвэл зэрэгцээ өөрчлөгдсөн
+409 { "error": "Засвар эхэлсэн тул энэ цагийг цуцлах боломжгүй." }   // цагт засварын хуудас холбогдсон`}</Code>
         </Endpoint>
       </Section>
 
@@ -485,9 +506,70 @@ Res: 200 { "paid": false, "underpaidAmount": null, "message": null }  // хар�
     "data": { "<itemId>": { "value": "Хэвийн", "photos": ["..."], "note": "..." } },
     "signatureUrl": "..." | null, "mileageAtReport": 45000 | null, "notes": "..." | null,
     "createdAt": "..."
-  }]
+  }],
+  "review": { "rating": 5, "comment": "..." | null, "reply": "..." | null, "repliedAt": "..." | null, "updatedAt": "..." } | null,
+      // өөрийн өгсөн үнэлгээ (super admin нуусан ч өөрт харагдана); reply = засварын газрын хариу
+  "canReview": true,   // status=COMPLETED БӨГӨӨД захиалгын Customer нь энэ Account-тай холбогдсон үед true → POST /orders/[id]/review
+  "intake": { "notes": "..." | null, "photos": [{ "id": "...", "url": "/uploads/..." }], "signatureUrl": "/uploads/..." | null,
+              "mileageKm": 152300 | null, "recordedAt": "...", "recordedBy": null } | null
+      // машин хүлээн авах бүртгэл (бүртгээгүй бол null). recordedBy үргэлж null — ажилтны нэр гаргахгүй.
 } }
-404 { "error": "Засварын хуудас олдсонгүй." }`}</Code>
+404 { "error": "Засварын хуудас олдсонгүй." }   // дотоод засвар, эсвэл өөрийн биш захиалга`}</Code>
+        </Endpoint>
+
+        <Endpoint
+          method="POST"
+          path="/api/v1/app/orders/[id]/review"
+          auth="bearer"
+          title="Дууссан засварт үнэлгээ өгөх / засах. Нэг засварт нэг үнэлгээ — дахин илгээвэл шинэчилнэ. Зөвхөн тухайн засварын үйлчлүүлэгч (Customer.accountId эсвэл баталгаажсан утсаар холбогдсон)."
+        >
+          <Code>{`Req:  { "rating": 5, "comment": "Сайн үйлчилгээ" }   // rating 1–5 бүхэл тоо (string "5" ч болно); comment заавал биш, ≤1000 тэмдэгт
+Res:  200 { "review": { "id": "...", "created": true } }   // created=false — өмнөх үнэлгээг шинэчилсэн
+// Шинэ үнэлгээ үед байгууллагын эзэмшигчид мэдэгдэл очиж, салбарын дундаж үнэлгээ дахин тооцогдоно.
+400  { "error": "Буруу өгөгдөл" }   // JSON body биш
+404  { "error": "Засварын хуудас олдсонгүй.", "code": "ORDER_NOT_FOUND" }
+422  { "error": "Зөвхөн дууссан засварт үнэлгээ өгнө.", "code": "ORDER_NOT_COMPLETED" }   // COMPLETED биш эсвэл дотоод засвар
+422  { "error": "Үнэлгээ 1–5 од байх ёстой.", "code": "INVALID_RATING" }
+422  { "error": "Сэтгэгдэл 1000 тэмдэгтээс хэтэрсэн байна.", "code": "COMMENT_TOO_LONG" }`}</Code>
+        </Endpoint>
+      </Section>
+
+      {/* --- Салбарын үнэлгээ --- */}
+      <Section title="5.2. Салбарын үнэлгээ">
+        <Endpoint
+          method="GET"
+          path="/api/v1/app/branches/[branchId]/reviews?page=1"
+          auth="public"
+          title="Салбарын нийтэд харагдах (нуугдаагүй) үнэлгээнүүд, шинэ нь эхэнд, хуудас тутам 20. Нэвтрэх шаардлагагүй."
+        >
+          <Code>{`Query: ?page= (default 1)
+Res: 200 {
+  "rating": 4.6 | null,          // салбарын дундаж (үнэлгээгүй бол null)
+  "ratingCount": 12,
+  "page": 1,
+  "reviews": [{
+    "id": "...", "rating": 5, "comment": "..." | null,
+    "reply": "..." | null,       // засварын газрын хариу
+    "reviewer": "Бат Д.",        // товчилсон нэр (эхний үг + 2-р үгийн эхний үсэг); нэргүй бол "Үйлчлүүлэгч"
+    "verified": true,            // засварт холбогдсон (баталгаажсан) үнэлгээ
+    "createdAt": "..."
+  }]
+}
+404 { "error": "Салбар олдсонгүй." }   // идэвхгүй салбар эсвэл нийтэд харагдахгүй байгууллага`}</Code>
+        </Endpoint>
+
+        <Endpoint
+          method="POST"
+          path="/api/v1/app/branches/[branchId]/reviews"
+          auth="bearer"
+          title="Салбарт шууд үнэлгээ өгөх / засах (засвар шаардахгүй). Тухайн салбарт үнэлээгүй дууссан засвартай бол хамгийн сүүлийнхэд нь холбогдоно (verified: true); үгүй бол Account × салбар тутам нэг засваргүй үнэлгээ."
+        >
+          <Code>{`Req:  { "rating": 4, "comment": "..." }   // rating 1–5; comment заавал биш, ≤1000 тэмдэгт
+Res:  200 { "review": { "id": "...", "created": true, "verified": false } }
+      // created=false — өмнөх үнэлгээг шинэчилсэн. verified=true — засварт холбогдсон (POST /orders/[id]/review-тэй ижил).
+400  { "error": "Буруу өгөгдөл" }
+404  { "error": "Салбар олдсонгүй.", "code": "BRANCH_NOT_FOUND" }
+422  { "error": "Үнэлгээ 1–5 од байх ёстой.", "code": "INVALID_RATING" } | { "code": "COMMENT_TOO_LONG" }`}</Code>
         </Endpoint>
       </Section>
 
@@ -562,13 +644,88 @@ Res:  200 { "device": { "id": "...", "deviceId": "..." } }
         </Endpoint>
       </Section>
 
+      {/* --- Мэдэгдэл --- */}
+      <Section title="6.1. Мэдэгдэл (түүх)">
+        <p className="text-sm text-[var(--oc-muted)] -mt-2">
+          Push-оор илгээсэн мэдэгдлүүд DB-д хадгалагдана — апп хонхны жагсаалт,
+          уншаагүй тоог эндээс авна. Уншсан мэдэгдэл 90 хоногийн дараа
+          автоматаар цэвэрлэгдэнэ.
+        </p>
+
+        <Endpoint method="GET" path="/api/v1/app/notifications" auth="bearer" title="Өөрийн мэдэгдлүүд (шинэ нь эхэнд) + уншаагүй тоо.">
+          <Code>{`Query: ?page=&pageSize= (эсвэл limit; default 50, max 100)
+Res: 200 {
+  "notifications": [{
+    "id": "...", "type": "appointment_confirmed", "title": "...", "body": "...",
+    "data": { "appointmentId": "..." },   // зөвхөн string утгатай түлхүүрүүд (бусад нь хасагдана); байхгүй бол {}
+    "read": false,                        // readAt биш — boolean
+    "createdAt": "2026-10-15T02:00:00.000Z"
+  }],
+  "pagination": { "page": 1, "pageSize": 50, "total": 3, "totalPages": 1, "hasPrev": false, "hasNext": false },
+  "unreadCount": 2                        // бүх уншаагүйн тоо (хуудаснаас үл хамаарна) — badge-д
+}`}</Code>
+        </Endpoint>
+
+        <Endpoint method="PATCH" path="/api/v1/app/notifications/[id]/read" auth="bearer" title="Нэг мэдэгдлийг уншсан гэж тэмдэглэх (идэмпотент — аль хэдийн уншсан бол өөрчлөхгүй).">
+          <Code>{`Res: 200 { "ok": true }
+404 { "error": "Мэдэгдэл олдсонгүй." }   // байхгүй эсвэл өөр хэрэглэгчийнх`}</Code>
+        </Endpoint>
+
+        <Endpoint method="POST" path="/api/v1/app/notifications/read-all" auth="bearer" title="Бүх уншаагүй мэдэгдлийг уншсан гэж тэмдэглэх.">
+          <Code>{`Res: 200 { "ok": true, "count": 5 }   // уншсан болгосон мэдэгдлийн тоо`}</Code>
+        </Endpoint>
+      </Section>
+
+      {/* --- Бүртгэл хаах --- */}
+      <Section title="6.2. Бүртгэл түр хаах / бүрмөсөн устгах">
+        <p className="text-sm text-[var(--oc-muted)] -mt-2">
+          Хоёр үйлдэл хоёулаа бүртгэлтэй утсанд илгээсэн SMS кодоор
+          баталгаажна: эхлээд{" "}
+          <code className="font-plex-mono text-[var(--oc-muted2)]">close/request-otp</code>, дараа нь{" "}
+          <code className="font-plex-mono text-[var(--oc-muted2)]">deactivate</code> эсвэл{" "}
+          <code className="font-plex-mono text-[var(--oc-muted2)]">delete</code>. Амжилттай болсны
+          дараа одоогийн accessToken хүчингүй болно (401).
+        </p>
+
+        <Endpoint method="POST" path="/api/v1/app/account/close/request-otp" auth="bearer" tags={["Rate limit: 5/10 мин (IP)"]} title="Бүртгэл хаах/устгахад шаардлагатай 6 оронтой кодыг бүртгэлтэй утсанд илгээх.">
+          <Code>{`Req:  {}
+Res:  200 { "ok": true, "maskedPhone": "******33" }
+429  { "error": "<throttle мессеж>" }   // rate limit, эсвэл код илгээх давтамжийн хязгаар / SMS алдаа`}</Code>
+        </Endpoint>
+
+        <Endpoint method="POST" path="/api/v1/app/account/deactivate" auth="bearer" tags={["Rate limit: 10/10 мин (IP)"]} title="Бүртгэлийг түр хаах. Push төхөөрөмжүүд устгагдана. Дахин кодоор нэвтрэхэд (verify-otp) автоматаар сэргэнэ (reactivated: true).">
+          <Code>{`Req:  { "code": "123456" }
+Res:  200 { "ok": true }
+400  { "error": "JSON body шаардлагатай." } | { "error": "6 оронтой код шаардлагатай." }
+422  { "error": "Код буруу эсвэл хугацаа дууссан.", "code": "OTP_INVALID" }
+429  { "error": "Хэт олон хүсэлт илгээлээ. Түр хүлээгээд дахин оролдоно уу." }   // deactivate, delete нэг хязгаартай`}</Code>
+        </Endpoint>
+
+        <Endpoint method="POST" path="/api/v1/app/account/delete" auth="bearer" tags={["Rate limit: 10/10 мин (IP)"]} title="Бүртгэлийг бүрмөсөн устгах (буцаагдахгүй). Account нэргүйжүүлэгдэнэ; ирээдүйн PENDING/CONFIRMED цагууд цуцлагдаж, төлөгдөөгүй хураамжийн QR цуцлагдана; машин, мэдэгдэл, төхөөрөмжийн холбоос устгагдана. Байгууллагын харилцагчийн (Customer) бичлэг хадгалагдаж, Account-аас салгагдана.">
+          <Code>{`Req:  { "code": "123456" }
+Res:  200 { "ok": true }
+400  { "error": "JSON body шаардлагатай." } | { "error": "6 оронтой код шаардлагатай." }
+422  { "error": "Код буруу эсвэл хугацаа дууссан.", "code": "OTP_INVALID" }
+429  { "error": "Хэт олон хүсэлт илгээлээ. Түр хүлээгээд дахин оролдоно уу." }`}</Code>
+        </Endpoint>
+      </Section>
+
+      {/* --- Health --- */}
+      <Section title="6.3. Сүлжээ шалгах">
+        <Endpoint method="GET" path="/api/v1/app/health" auth="public" title="Серверт хүрч байгаа эсэхийг шалгах (reachability probe). DB-д хандахгүй, rate limit-гүй, Cache-Control: no-store. JSON хариу ирсэн үед л «онлайн» гэж үзнэ (captive portal-ийн HTML-ээс ялгах).">
+          <Code>{`Res: 200 { "ok": true }`}</Code>
+        </Endpoint>
+      </Section>
+
       {/* --- Алдааны формат --- */}
       <Section title="7. Алдааны формат">
         <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-5">
           <p className="text-sm text-[var(--oc-muted)] mb-3">
-            Бүх алдаа ижил хэлбэртэй буцна:
+            Бүх алдаа ижил хэлбэртэй буцна (зарим нь нэмэлт{" "}
+            <code className="font-plex-mono">code</code> талбартай):
           </p>
-          <Code>{`{ "error": "Хүний-унших мессеж." }`}</Code>
+          <Code>{`{ "error": "Хүний-унших мессеж." }
+{ "error": "...", "code": "OTP_INVALID" }`}</Code>
           <div className="mt-4 grid gap-2 sm:grid-cols-2 text-sm">
             {[
               ["400", "Буруу/дутуу параметр, өнгөрсөн/хол цаг, ажиллах цагт багтахгүй"],
@@ -576,7 +733,7 @@ Res:  200 { "device": { "id": "...", "deviceId": "..." } }
               ["403", "Онлайн захиалга хаалттай байгууллага/салбар, хаагдсан дугаар"],
               ["404", "Олдсонгүй"],
               ["409", "Зөрчил (слот дүүрсэн, дугаар давхцсан, төлөв зөвшөөрөхгүй)"],
-              ["422", "QPay invoice байхгүй (payment/check)"],
+              ["422", "QPay invoice байхгүй (payment/check), OTP код буруу, үнэлгээний валидаци"],
               ["429", "Rate limit хэтэрсэн"],
               ["502", "Гадаад үйлчилгээ (HUR/QPay) алдаа"],
             ].map(([code, label]) => (
