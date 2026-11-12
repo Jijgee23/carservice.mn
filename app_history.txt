@@ -2255,3 +2255,7 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - Сануулгын хугацаа (appointmentReminderLeadMinutes) GET/PATCH /api/v1/tenant-д аль хэдийн байсан — өөрчлөөгүй.
 - D-174 (/api/v1/reports, reports/export зөвхөн нэвтрэлт шалгадаг): вэбийн /dashboard/reports ч зөвхөн requireUser + enable_reports модультай, тохирох permission код байхгүй тул хөндөөгүй.
 - Тест: tests/staff-settings-routes.test.ts (шинэ); scheduling.test.ts, payment-accounts-actions.test.ts-ийн source-scan-ийг шилжсэн lib файлууд руу чиглүүлэв.
+
+[2026-11-12] Ажилтны апп: засварын хуудасны мөр нэмэхэд нэгдсэн сангаас сонгох v1 API
+- GET /api/v1/orders/catalog-items?type=LABOR|GOODS&q=&page=&pageSize= — нэгдсэн сангийн (CatalogItem) идэвхтэй ажил/сэлбэг, тенант өөртөө хараахан холбоогүйг нь (вэбийн засварын хуудасны «мөр нэмэх»-тэй ижил). Хайлт searchCatalogAction-тэй ижил: нэр (nameKey агуулсан), код (codeKey эхлэл), баркод. Эрх: orders.edit эсвэл orders.editOwn (POST /orders/:id/items-тэй ижил). Хариу: { items: [{ id, type, name, code, unitName, price, description, category }], pagination }.
+- Сонгосныг апп POST /api/v1/orders/:id/items-д catalogItemId-аар илгээнэ — сервер тенантын ажил/сэлбэг болгон холбоно (lib/services/catalog-adopt.ts, өөрчлөгдөөгүй).
