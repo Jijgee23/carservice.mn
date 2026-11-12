@@ -1114,18 +1114,20 @@ test("all 5 branch-schedule mutation actions take the branch row lock inside a t
     "expected updateBranch to take the Branch row lock inside its transaction",
   );
 
+  // Хуваарийн mutation-ууд lib/branch-schedule-commands.ts руу шилжсэн
+  // (вэб action + мобайл API хоёул дуудна).
   const schedulesSrc = fs.readFileSync(
-    path.join(__dirname, "..", "app", "_actions", "branch-schedules.ts"),
+    path.join(__dirname, "..", "lib", "branch-schedule-commands.ts"),
     "utf8",
   );
   const fns = [
-    "upsertBranchScheduleExceptionAction",
-    "deleteBranchScheduleExceptionAction",
-    "upsertBranchScheduleSeasonAction",
-    "deleteBranchScheduleSeasonAction",
+    "upsertBranchScheduleException",
+    "deleteBranchScheduleException",
+    "upsertBranchScheduleSeason",
+    "deleteBranchScheduleSeason",
   ];
   const starts = fns.map((name) => {
-    const idx = schedulesSrc.indexOf(`export async function ${name}`);
+    const idx = schedulesSrc.indexOf(`export async function ${name}(`);
     assert.ok(idx >= 0, `${name} not found`);
     return idx;
   });
@@ -1213,7 +1215,9 @@ test("branch schedule mutation actions require confirmed=true past a clipped-onl
   const branchesSrc =
     fs.readFileSync(path.join(__dirname, "..", "app", "_actions", "branches.ts"), "utf8") +
     fs.readFileSync(path.join(__dirname, "..", "lib", "branches-commands.ts"), "utf8");
-  const schedulesSrc = fs.readFileSync(path.join(__dirname, "..", "app", "_actions", "branch-schedules.ts"), "utf8");
+  const schedulesSrc =
+    fs.readFileSync(path.join(__dirname, "..", "app", "_actions", "branch-schedules.ts"), "utf8") +
+    fs.readFileSync(path.join(__dirname, "..", "lib", "branch-schedule-commands.ts"), "utf8");
 
   for (const [label, src] of [["branches.ts", branchesSrc], ["branch-schedules.ts", schedulesSrc]] as const) {
     assert.ok(

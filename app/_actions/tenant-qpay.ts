@@ -1,10 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { logAudit } from "@/lib/audit";
 import { requireUser } from "@/lib/auth";
-import { encryptSecret } from "@/lib/crypto";
-import { prisma } from "@/lib/prisma";
+import {
+  deleteTenantQPay,
+  saveTenantQPay,
+  setTenantQPayEnabled,
+  TENANT_QPAY_NOT_CONFIGURED_MESSAGE,
+} from "@/lib/tenant-qpay-settings";
+
+// Бизнес логик нь lib/tenant-qpay-settings.ts-д — мобайл staff API
+// (app/api/v1/tenant/qpay/**) мөн адил функцуудыг дуудна.
 
 export type TenantQPayActionState = {
   ok: boolean;
@@ -40,69 +46,18 @@ export async function saveTenantQPayAction(
     return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
   }
 
-  const username = s(formData, "username");
-  const password = s(formData, "password");
-  const invoiceCode = s(formData, "invoiceCode");
-  const callbackUrl = s(formData, "callbackUrl");
-  const enabled = formData.get("enabled") !== "off";
-
-  const fieldErrors: Record<string, string> = {};
-  if (!username) fieldErrors.username = "Username оруулна уу.";
-  if (!invoiceCode) fieldErrors.invoiceCode = "Invoice code оруулна уу.";
-
-  const existing = await prisma.tenantQPaySettings.findUnique({
-    where: { tenantId: user.tenantId },
+  const result = await saveTenantQPay(user, {
+    username: s(formData, "username"),
+    password: s(formData, "password"),
+    invoiceCode: s(formData, "invoiceCode"),
+    callbackUrl: s(formData, "callbackUrl"),
+    enabled: formData.get("enabled") !== "off",
   });
-
-  if (!existing && !password) {
-    fieldErrors.password = "Анх удаа тохируулахад password шаардлагатай.";
+  if (!result.ok) {
+    return result.code === "VALIDATION"
+      ? { ok: false, fieldErrors: result.fieldErrors }
+      : { ok: false, message: result.message };
   }
-
-  if (Object.keys(fieldErrors).length > 0) {
-    return { ok: false, fieldErrors };
-  }
-
-  try {
-    await prisma.tenantQPaySettings.upsert({
-      where: { tenantId: user.tenantId },
-      create: {
-        tenantId: user.tenantId,
-        username,
-        password: encryptSecret(password),
-        invoiceCode,
-        callbackUrl: callbackUrl || null,
-        enabled,
-      },
-      update: {
-        username,
-        invoiceCode,
-        callbackUrl: callbackUrl || null,
-        enabled,
-        // Password хоосон ирвэл хуучныг үлдээнэ
-        ...(password ? { password: encryptSecret(password) } : {}),
-        // Token cache-г шинэчилсэн үед арилгана
-        accessToken: null,
-        refreshToken: null,
-        tokenExpiresAt: null,
-        refreshTokenExpiresAt: null,
-      },
-    });
-  } catch (e) {
-    return {
-      ok: false,
-      message: e instanceof Error ? e.message : "Хадгалахад алдаа.",
-    };
-  }
-
-  await logAudit({
-    tenantId: user.tenantId,
-    userId: user.id,
-    entity: "Tenant",
-    entityId: user.tenantId,
-    action: "UPDATE",
-    summary: existing ? "QPay тохиргоо шинэчлэв" : "QPay тохиргоо нэмэв",
-    after: { username, invoiceCode, enabled },
-  });
 
   revalidatePath("/dashboard/payment_methods");
   return { ok: true, message: "Хадгалагдлаа." };
@@ -110,17 +65,8 @@ export async function saveTenantQPayAction(
 
 export async function deleteTenantQPayAction(): Promise<void> {
   const user = await authorizeOwner();
-  await prisma.tenantQPaySettings.delete({
-    where: { tenantId: user.tenantId },
-  });
-  await logAudit({
-    tenantId: user.tenantId,
-    userId: user.id,
-    entity: "Tenant",
-    entityId: user.tenantId,
-    action: "DELETE",
-    summary: "QPay тохиргоо устгав",
-  });
+  const { deleted } = await deleteTenantQPay(user);
+  if (!deleted) throw new Error(TENANT_QPAY_NOT_CONFIGURED_MESSAGE);
   revalidatePath("/dashboard/payment_methods");
 }
 
@@ -132,24 +78,8 @@ export async function setTenantQPayEnabledAction(enabled: boolean): Promise<Tena
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
   }
-  const existing = await prisma.tenantQPaySettings.findUnique({
-    where: { tenantId: user.tenantId },
-    select: { enabled: true },
-  });
-  if (!existing) return { ok: false, message: "QPay тохиргоо хийгдээгүй байна." };
-  if (existing.enabled !== enabled) {
-    await prisma.tenantQPaySettings.update({ where: { tenantId: user.tenantId }, data: { enabled } });
-    await logAudit({
-      tenantId: user.tenantId,
-      userId: user.id,
-      entity: "Tenant",
-      entityId: user.tenantId,
-      action: "UPDATE",
-      summary: enabled ? "QPay идэвхжүүлэв" : "QPay идэвхгүй болгов",
-      before: { enabled: existing.enabled },
-      after: { enabled },
-    });
-  }
+  const result = await setTenantQPayEnabled(user, enabled);
+  if (!result.ok) return { ok: false, message: result.message };
   revalidatePath("/dashboard/payment_methods");
   return { ok: true };
 }

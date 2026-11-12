@@ -133,7 +133,11 @@ test("QPay row: page reads TenantQPaySettings, switch is owner-only and flips th
   const action = (await src("app/_actions/tenant-qpay.ts")).replace(/\r\n/g, "\n");
   const body = action.slice(action.indexOf("export async function setTenantQPayEnabledAction"));
   assert.match(body, /authorizeOwner\(\)/);
-  assert.match(body, /tenantQPaySettings\.update\(\{ where: \{ tenantId: user\.tenantId \}, data: \{ enabled \} \}\)/);
-  assert.match(body, /logAudit/);
+  assert.match(body, /setTenantQPayEnabled\(user, enabled\)/);
   assert.match(body, /revalidatePath\("\/dashboard\/payment_methods"\)/);
+  // Бичих логик нь lib/tenant-qpay-settings.ts-д (вэб + мобайл API хоёул дуудна).
+  const lib = (await src("lib/tenant-qpay-settings.ts")).replace(/\r\n/g, "\n");
+  const libBody = lib.slice(lib.indexOf("export async function setTenantQPayEnabled("));
+  assert.match(libBody, /tenantQPaySettings\.update\(\{ where: \{ tenantId: actor\.tenantId \}, data: \{ enabled \} \}\)/);
+  assert.match(libBody, /logAudit/);
 });

@@ -5,7 +5,6 @@ import { headers } from "next/headers";
 import { requireUser } from "@/lib/auth";
 import { requireSuperAdmin } from "@/lib/auth/system";
 import { isEmailConfigured, sendEmail } from "@/lib/email";
-import { notifySuperAdmins } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import {
   type QuoteFieldErrors,
@@ -13,9 +12,13 @@ import {
   isQuoteStatus,
   parseQuoteRequestInput,
 } from "@/lib/quote-requests";
+import {
+  QUOTE_REQUEST_RATE_BUCKET,
+  QUOTE_REQUEST_RATE_LIMIT,
+  saveQuoteRequest,
+} from "@/lib/quote-requests-server";
 import { consumeRateLimit, ipFromHeaders, RATE_LIMITED_MESSAGE } from "@/lib/rate-limit";
 import { sendSms } from "@/lib/sms";
-import { setBypassContext } from "@/lib/tenant-context";
 
 export type QuoteRequestActionState = {
   ok: boolean;
@@ -66,7 +69,7 @@ export async function submitQuoteRequestAction(
 
   const h = await headers();
   const ip = ipFromHeaders(h);
-  if (!consumeRateLimit(`quote-request-ip:${ip}`, { limit: 5, windowMs: 10 * 60_000 }).ok) {
+  if (!consumeRateLimit(`${QUOTE_REQUEST_RATE_BUCKET}:${ip}`, QUOTE_REQUEST_RATE_LIMIT).ok) {
     return { ok: false, message: RATE_LIMITED_MESSAGE, values };
   }
 
@@ -79,25 +82,7 @@ export async function submitQuoteRequestAction(
   const parsed = parseQuoteRequestInput(values);
   if (!parsed.ok) return { ok: false, fieldErrors: parsed.fieldErrors, values };
 
-  // Нүүр хуудаснаас ирсэн мөр tenantId-гүй тул RLS bypass (Feedback-тэй адил).
-  setBypassContext();
-  const created = await prisma.quoteRequest.create({
-    data: { ...parsed.data, tenantId },
-    select: { id: true },
-  });
-
-  try {
-    await notifySuperAdmins({
-      type: "quote_request_created",
-      input: {
-        quoteRequestId: created.id,
-        orgName: parsed.data.orgName,
-        moduleCount: String(parsed.data.modules.length),
-      },
-    });
-  } catch (err) {
-    console.warn("[notify] quote_request_created:", err);
-  }
+  await saveQuoteRequest(parsed.data, tenantId);
 
   revalidatePath("/system/quote-requests");
   return { ok: true };

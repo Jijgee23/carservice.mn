@@ -2246,3 +2246,12 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - 4 таб: Нүүр (шинэ — машин + идэвхтэй засвар/захиалга, шуурхай үйлдэл, ойролцоох сервис) · Сервис · Захиалга · Машин (шинэ — машины карт, тоо, засварын түүх); хөвөгч pill навигаци. Профайл/Түүх/Цаг захиалах нь push route.
 - Бүх дэлгэц (onboarding, нэвтрэх/OTP, машин нэмэх, хайлт/газрын зураг, цаг захиалах — өдрийн чип, засварын явц hero + timeline, профайл — theme сонгогч) шинэ загварт. Dark горим хэвээр.
 - Backend-гүй хэсгүүд (нэмэлт ажил зөвшөөрөх, механиктай чат, сануулга, км, нийт үнэ) хуурамч өгөгдлөөр хийгээгүй — дараагийн шатанд.
+
+[2026-11-11] Ажилтны апп: вэбгүйгээр тохиргоо хийх дутуу v1 API-ууд (багцын төлбөр, QPay, салбарын хуваарь)
+- GET /api/v1/subscription өргөтгөв: modules (тенантын багцад нээлттэй модуль — апп багцад ороогүй дэлгэцийг нуух), moduleCatalog, planModules (FREE/BUSINESS/ENTERPRISE), prices (QPay-ээр авах идэвхтэй үнэ + features), pendingPayment (зөвхөн эзэнд, QR/deeplink), payments (сүүлийн 50), canManage. Хуучин талбарууд өөрчлөгдөөгүй.
+- POST/DELETE /api/v1/subscription/qpay (QR үүсгэх / цуцлах), POST /api/v1/subscription/qpay/check (polling, idempotent), POST /api/v1/subscription/quote (Энтерпрайз үнийн санал). Зөвхөн эзэн; багц дууссан үед ч нээлттэй (subscription lock шалгахгүй). Логик lib/subscription-payments.ts, lib/quote-requests-server.ts-д нэгтгэгдэж вэб action-ууд мөн дуудна.
+- GET/PUT/PATCH(enabled)/DELETE /api/v1/tenant/qpay — тенантын өөрийн QPay merchant тохиргоо, зөвхөн эзэн; нууц үг/токен хэзээ ч буцаахгүй (hasPassword). Логик lib/tenant-qpay-settings.ts.
+- GET/POST /api/v1/branches/[id]/schedules, PATCH/DELETE /api/v1/branches/[id]/schedules/[scheduleId] (тусгай өдөр/улирал, төрлийг сервер тодорхойлно), POST /api/v1/branches/schedules/holiday (бүх салбарт). branches.edit + идэвхтэй багц; захиалгад нөлөөлөх бол 409 SCHEDULE_IMPACT {impact, needsConfirm} + confirm:true. Логик lib/branch-schedule-commands.ts (Branch row lock + transaction хэвээр), вэб action-ууд түүнийг дуудна.
+- Сануулгын хугацаа (appointmentReminderLeadMinutes) GET/PATCH /api/v1/tenant-д аль хэдийн байсан — өөрчлөөгүй.
+- D-174 (/api/v1/reports, reports/export зөвхөн нэвтрэлт шалгадаг): вэбийн /dashboard/reports ч зөвхөн requireUser + enable_reports модультай, тохирох permission код байхгүй тул хөндөөгүй.
+- Тест: tests/staff-settings-routes.test.ts (шинэ); scheduling.test.ts, payment-accounts-actions.test.ts-ийн source-scan-ийг шилжсэн lib файлууд руу чиглүүлэв.

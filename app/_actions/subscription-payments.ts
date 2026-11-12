@@ -1,15 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma } from "@/app/generated/prisma/client";
-import { logAudit } from "@/lib/audit";
 import { requireUser } from "@/lib/auth";
-import { formatTugrik } from "@/lib/orders";
-import { prisma } from "@/lib/prisma";
-import { QPayService } from "@/lib/qpay";
-import { confirmSubscriptionPayment } from "@/lib/subscription-payments";
-import { getAppBaseUrl } from "@/lib/subscription-server";
-import { BILLING_PERIOD_LABEL, PLAN_LABEL, isSelfServePlan } from "@/lib/subscription";
+import {
+  cancelTenantSubscriptionPayment,
+  checkTenantSubscriptionPayment,
+  createSubscriptionQPayPayment,
+} from "@/lib/subscription-payments";
+
+// Бизнес логик нь lib/subscription-payments.ts-д — мобайл staff API
+// (app/api/v1/subscription/qpay/**) мөн адил функцуудыг дуудна.
 
 export type PaymentActionState = {
   ok: boolean;
@@ -36,94 +36,11 @@ export async function createSubscriptionPaymentAction(
     return { ok: false, message: "Зөвхөн админ багц авна." };
   }
 
-  const planPriceId = s(formData, "planPriceId");
-  if (!planPriceId) return { ok: false, message: "Үнэ сонгоно уу." };
-
-  const price = await prisma.planPrice.findFirst({
-    where: { id: planPriceId, isActive: true },
-  });
-  if (!price) {
-    return { ok: false, message: "Сонгосон үнэ олдсонгүй / идэвхгүй." };
-  }
-
-  // Зөвхөн тогтсон үнэтэй багцыг (BUSINESS) QPay-ээр авна. FREE үргэлж
-  // үнэгүй; ENTERPRISE-ийн үнийг тохиролцож super admin гараар олгоно.
-  if (!isSelfServePlan(price.plan)) {
-    return {
-      ok: false,
-      message:
-        price.plan === "FREE"
-          ? "Энгийн (FREE) багц үнэгүй — худалдаж авах шаардлагагүй."
-          : "Энтерпрайз багц тогтсон үнэгүй — «Үнийн санал авах»-аар хүсэлт илгээнэ үү.",
-    };
-  }
-
-  // Snapshot + payment үүсгэх
-  const amountNumber = Number.parseFloat(price.amount.toString());
-  const payment = await prisma.subscriptionPayment.create({
-    data: {
-      tenantId: user.tenantId,
-      plan: price.plan,
-      period: price.period,
-      amount: price.amount,
-      currency: price.currency,
-      planPriceId: price.id,
-      method: "QPAY",
-      status: "PENDING",
-    },
-    select: { id: true },
-  });
-
-  // QPay invoice үүсгэх. callback_url-д payment.id-г дамжуулна — QPay төлбөр
-  // хийгдсэний дараа энэ URL рүү дуудаж, бид checkPayment-ээр баталгаажуулна.
-  const inv = await QPayService.createInvoice({
-    senderInvoiceNo: payment.id,
-    invoiceReceiverCode: user.tenantId,
-    invoiceDescription: `${PLAN_LABEL[price.plan]} · ${BILLING_PERIOD_LABEL[price.period]}`,
-    amount: amountNumber,
-    callbackUrl: `${getAppBaseUrl()}/api/v1/subscriptions/qpay/callback?payment_id=${payment.id}`,
-  });
-  if ("error" in inv) {
-    await prisma.subscriptionPayment.update({
-      where: { id: payment.id },
-      data: { status: "FAILED" },
-    });
-    await logAudit({
-      tenantId: user.tenantId,
-      userId: user.id,
-      entity: "Tenant",
-      entityId: user.tenantId,
-      action: "PAYMENT_CHANGE",
-      summary: `Багцын QPay invoice үүсгэхэд алдаа: ${price.plan}`,
-      after: { paymentId: payment.id, plan: price.plan, status: "FAILED" },
-    });
-    // Provider text (status/body/config hints) stays server-side.
-    console.error("[subscription-payment] QPay createInvoice failed:", payment.id, inv.error);
-    return { ok: false, message: "QPay нэхэмжлэх үүсгэхэд алдаа гарлаа. Түр хүлээгээд дахин оролдоно уу." };
-  }
-
-  await prisma.subscriptionPayment.update({
-    where: { id: payment.id },
-    data: {
-      qpayInvoiceId: inv.invoice_id,
-      qrText: inv.qr_text,
-      qrImage: inv.qr_image,
-      qpayUrls: inv.urls ?? Prisma.JsonNull,
-    },
-  });
-
-  await logAudit({
-    tenantId: user.tenantId,
-    userId: user.id,
-    entity: "Tenant",
-    entityId: user.tenantId,
-    action: "PAYMENT_CHANGE",
-    summary: `Багцын QPay QR үүсгэв: ${price.plan} · ${formatTugrik(amountNumber)}`,
-    after: { paymentId: payment.id, plan: price.plan, amount: amountNumber },
-  });
+  const result = await createSubscriptionQPayPayment(user, s(formData, "planPriceId"));
+  if (!result.ok) return { ok: false, message: result.message };
 
   revalidatePath("/dashboard/settings/subscription");
-  return { ok: true, paymentId: payment.id };
+  return { ok: true, paymentId: result.payment.id };
 }
 
 /**
@@ -136,18 +53,13 @@ export async function checkSubscriptionPaymentAction(
   formData: FormData,
 ): Promise<{ ok: boolean; paid: boolean; message?: string }> {
   const user = await requireUser();
-  const paymentId = s(formData, "paymentId");
-  if (!paymentId) return { ok: false, paid: false, message: "ID шаардлагатай." };
-
   // Энэ payment тухайн тенантынх эсэхийг шалгаад, баталгаажуулалтыг хуваалцсан
   // core логикт даатгана (web polling + QPay callback хоёул адил замаар явна).
-  const payment = await prisma.subscriptionPayment.findFirst({
-    where: { id: paymentId, tenantId: user.tenantId },
-    select: { id: true },
-  });
-  if (!payment) return { ok: false, paid: false, message: "Төлбөр олдсонгүй." };
-
-  return confirmSubscriptionPayment(payment.id);
+  const { ok, paid, message } = await checkTenantSubscriptionPayment(
+    user.tenantId,
+    s(formData, "paymentId"),
+  );
+  return message === undefined ? { ok, paid } : { ok, paid, message };
 }
 
 /**
@@ -160,30 +72,8 @@ export async function cancelSubscriptionPaymentAction(
   const paymentId = s(formData, "paymentId");
   if (!paymentId) return;
 
-  const payment = await prisma.subscriptionPayment.findFirst({
-    where: { id: paymentId, tenantId: user.tenantId, status: "PENDING" },
-    select: { plan: true, amount: true },
-  });
-  if (!payment) return;
-
-  await prisma.subscriptionPayment.updateMany({
-    where: {
-      id: paymentId,
-      tenantId: user.tenantId,
-      status: "PENDING",
-    },
-    data: { status: "CANCELLED" },
-  });
-
-  await logAudit({
-    tenantId: user.tenantId,
-    userId: user.id,
-    entity: "Tenant",
-    entityId: user.tenantId,
-    action: "PAYMENT_CHANGE",
-    summary: `Багцын QPay QR цуцлав: ${payment.plan} · ${formatTugrik(payment.amount.toString())}`,
-    after: { paymentId, plan: payment.plan, status: "CANCELLED" },
-  });
+  const { cancelled } = await cancelTenantSubscriptionPayment(user, paymentId);
+  if (!cancelled) return;
 
   revalidatePath("/dashboard/settings/subscription");
 }
