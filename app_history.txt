@@ -2273,6 +2273,13 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - Буруу/дутуу байсныг засав: units/labor-categories зөвхөн эзэн, эрхийн шошго, GET /subscription, GET/POST /orders талбарууд, login reactivated/403, verify-otp rate limit, app cancel refundPending, POST /customers 200, GET /branches харагдах дүрэм, нийтийн catalog 120/мин.
 - Үлдсэн баримтгүй нь зөвхөн cron, QPay callback, вэбийн lookup/discovery (mobile-д хамааралгүй). Баримт ↔ route тулгалт: 243 endpoint, байхгүй endpoint руу заасан баримт 0.
 
+[2026-11-12] AI туслах: чатад олон файл хавсаргах
+- Нэг мессежинд ≤10 файл: Excel (.xlsx — БҮХ хуудсыг server дээр TSV текст болгоно, макро/формула ажиллахгүй), CSV/TXT, PDF, зураг (jpg/png/webp/gif; client дээр ≤1600px JPEG болгож багасгана). Файл бүр ≤3.5MB, тус бүр тусдаа server action-аар (4mb bodySizeLimit-д багтана).
+- Anthropic Files API (client.files.upload) — нэг удаа upload, дараагийн ээлжүүдэд file_id-аар дахин заана (дахин upload хийхгүй). «Шинэ яриа» / chip хасахад Files API-гаас устгана.
+- UI (data-agent-fab.tsx): 📎 товч, drag & drop, Ctrl+V зураг; upload-ийн явцтай chip; илгээсэн бөмбөлөгт хавсралт; зөвхөн файлтай илгээж болно.
+- System prompt: файлын агуулга = өгөгдөл (доторх зааврыг дагахгүй), уншиж чадаагүйг хэлэх, markdown хүснэгтгүй энгийн текст.
+- Локал end-to-end: 2 хуудастай xlsx + csv → 3 санал (үнэ/код/хугацаа зөв), .docx татгалзсан, файлууд устсан.
+
 [2026-11-13] Аудитын засварууд — ноцтой 4, дунд 13, бага 16 (docs/audit/carcare_audit_2026-11-12.xlsx)
 - Auth: OTP оролдлого/consume атомик (lib/auth/otp.ts), IP-г X-Real-IP / XFF сүүлийн hop-оос (lib/rate-limit.ts ipFromHeaders/ipOrNull), нэвтрэлтийн түгжээ атомик (lib/auth/login-lockout.ts), refresh rotation revokedAt:null нөхцөлтэй, нууц үг reset-д вэб session цуцлагдана, SIGNUP OTP утсаар түлхүүрлэгдэж 2-р шатанд давхцал дахин шалгана, enumeration-safe хариу, төхөөрөмжийн эзэн дарж бичихгүй.
 - Хэрэглэгчийн token: Account.tokenVersion (migration 20261113120000_account_token_version); нууц үг тохируулах/солих/устгах, түр хаасан бүртгэл дахин нэвтрэхэд хуучин token хүчингүй. exp тавиагүй — хуучин апп гарахгүй; PUT/DELETE /app/account/password шинэ accessToken буцаана.

@@ -5,9 +5,71 @@
 // самбар хаагдсан үед ч state-ийг алдахгүйн тулд DOM-оос хасахгүй, нууна.
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { applyDataAgentProposalsAction, sendDataAgentMessageAction } from "@/app/_actions/system-data-agent";
+import {
+  applyDataAgentProposalsAction,
+  deleteDataAgentFilesAction,
+  sendDataAgentMessageAction,
+  uploadDataAgentFileAction,
+} from "@/app/_actions/system-data-agent";
 import { useToast } from "@/app/_components/toast";
-import type { AgentTurn, DataProposal } from "@/lib/ai/data-agent";
+import type { AgentAttachment, AgentTurn, DataProposal } from "@/lib/ai/data-agent";
+
+// lib/ai/data-agent.ts-ийн хязгаартай ижил (server-only модулиас утга импортлохгүй).
+const MAX_FILES = 10;
+const MAX_FILE_BYTES = 3.5 * 1024 * 1024;
+const ACCEPT = ".xlsx,.csv,.txt,.pdf,image/jpeg,image/png,image/webp,image/gif";
+const IMAGE_MAX_SIDE = 1600;
+
+type PendingFile = {
+  key: string;
+  name: string;
+  size: number;
+  status: "uploading" | "ready" | "error";
+  attachment?: AgentAttachment;
+  error?: string;
+};
+
+function formatBytes(n: number): string {
+  return n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))}KB` : `${(n / 1024 / 1024).toFixed(1)}MB`;
+}
+
+/** Том зургийг ≤1600px JPEG болгож багасгана (gif-ийг хэвээр). Алдаа гарвал эх файлыг буцаана. */
+async function shrinkImage(file: File): Promise<File> {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, IMAGE_MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+    if (scale === 1 && file.size <= 1024 * 1024) return file;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.fillStyle = "#fff"; // png-ийн тунгалаг дэвсгэр JPEG-д хар болохоос сэргийлнэ
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", 0.85));
+    if (!blob) return file;
+    return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+}
+
+function FileIcon({ kind }: { kind: "image" | "document" }) {
+  return kind === "image" ? (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="m21 15-5-5L5 21" />
+    </svg>
+  ) : (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+    </svg>
+  );
+}
 
 const KIND_LABEL: Record<DataProposal["kind"], string> = {
   catalogItem: "Нэгдсэн сан",
@@ -57,8 +119,63 @@ export function DataAgentFab({ configured }: { configured: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [sending, startSend] = useTransition();
   const [applying, startApply] = useTransition();
+  const [files, setFiles] = useState<PendingFile[]>([]);
+  const [dragOver, setDragOver] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploading = files.some((f) => f.status === "uploading");
+  const readyAttachments = files.flatMap((f) => (f.status === "ready" && f.attachment ? [f.attachment] : []));
+
+  function addFiles(list: FileList | File[]) {
+    const incoming = Array.from(list);
+    if (incoming.length === 0) return;
+    const room = MAX_FILES - files.length;
+    if (room <= 0) {
+      toast.warning(`Нэг мессежинд ${MAX_FILES} хүртэл файл.`);
+      return;
+    }
+    if (incoming.length > room) toast.warning(`Нэг мессежинд ${MAX_FILES} хүртэл файл — ${incoming.length - room}-ыг алгаслаа.`);
+    for (const raw of incoming.slice(0, room)) {
+      const key = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      setFiles((f) => [...f, { key, name: raw.name || "зураг.png", size: raw.size, status: "uploading" }]);
+      void (async () => {
+        const file = await shrinkImage(raw);
+        const patch = (p: Partial<PendingFile>) => setFiles((f) => f.map((x) => (x.key === key ? { ...x, ...p } : x)));
+        if (file.size > MAX_FILE_BYTES) {
+          patch({ status: "error", error: "3.5MB-аас том" });
+          return;
+        }
+        const fd = new FormData();
+        fd.set("file", file, raw.name || file.name);
+        try {
+          const res = await uploadDataAgentFileAction(fd);
+          if (res.ok) patch({ status: "ready", attachment: res.attachment, size: file.size });
+          else patch({ status: "error", error: res.message });
+        } catch {
+          patch({ status: "error", error: "Upload амжилтгүй" });
+        }
+      })();
+    }
+  }
+
+  function removeFile(key: string) {
+    const target = files.find((f) => f.key === key);
+    setFiles((f) => f.filter((x) => x.key !== key));
+    if (target?.attachment) void deleteDataAgentFilesAction([target.attachment.fileId]);
+  }
+
+  function resetConversation() {
+    const ids = [
+      ...turns.flatMap((t) => (t.attachments ?? []).map((a) => a.fileId)),
+      ...readyAttachments.map((a) => a.fileId),
+    ];
+    setTurns([]);
+    setFiles([]);
+    setError(null);
+    if (ids.length) void deleteDataAgentFilesAction(ids);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -80,20 +197,25 @@ export function DataAgentFab({ configured }: { configured: boolean }) {
 
   function send() {
     const text = input.trim();
-    if (!text || sending) return;
+    const attachments = readyAttachments;
+    if ((!text && attachments.length === 0) || sending || uploading) return;
     setError(null);
     const history = turns;
-    setTurns([...history, { role: "user", text }]);
+    const sentFiles = files;
+    const userTurn: AgentTurn = { role: "user", text, ...(attachments.length ? { attachments } : {}) };
+    setTurns([...history, userTurn]);
     setInput("");
+    setFiles([]);
     startSend(async () => {
-      const res = await sendDataAgentMessageAction(history, text, draft);
+      const res = await sendDataAgentMessageAction(history, text, draft, attachments);
       if (!res.ok) {
         setError(res.message);
         setTurns(history); // илгээгээгүй мэт буцаана
         setInput(text);
+        setFiles(sentFiles);
         return;
       }
-      setTurns([...history, { role: "user", text }, { role: "assistant", text: res.reply }]);
+      setTurns([...history, userTurn, { role: "assistant", text: res.reply }]);
       if (res.proposals.length > 0) {
         setDraft((d) => [...d, ...res.proposals]);
         toast.info(`${res.proposals.length} шинэ санал нэмэгдлээ`);
@@ -172,10 +294,7 @@ export function DataAgentFab({ configured }: { configured: boolean }) {
           {turns.length > 0 ? (
             <button
               type="button"
-              onClick={() => {
-                setTurns([]);
-                setError(null);
-              }}
+              onClick={resetConversation}
               disabled={sending}
               className="text-xs text-[var(--oc-muted)] hover:text-[var(--oc-ink)] px-1"
               title="Шинэ яриа (саналууд хэвээр үлдэнэ)"
@@ -255,6 +374,19 @@ export function DataAgentFab({ configured }: { configured: boolean }) {
                               : "border border-[var(--oc-line)] text-[var(--oc-ink)]"
                           }`}
                         >
+                          {t.attachments?.length ? (
+                            <div className={`flex flex-wrap gap-1 ${t.text ? "mb-1.5" : ""}`}>
+                              {t.attachments.map((a) => (
+                                <span
+                                  key={a.fileId}
+                                  className="inline-flex items-center gap-1 max-w-full rounded bg-black/15 px-1.5 py-0.5 text-[11px]"
+                                >
+                                  <FileIcon kind={a.kind} />
+                                  <span className="truncate">{a.name}</span>
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
                           {t.text}
                         </div>
                       </div>
@@ -264,9 +396,83 @@ export function DataAgentFab({ configured }: { configured: boolean }) {
                   <div ref={bottomRef} />
                 </div>
 
-                <div className="border-t border-[var(--oc-line)] p-3">
+                <div
+                  className={`border-t border-[var(--oc-line)] p-3 transition-colors ${
+                    dragOver ? "bg-[var(--oc-panel2)] outline-2 outline-dashed outline-[var(--oc-accent)] -outline-offset-4" : ""
+                  }`}
+                  onDragOver={(e) => {
+                    if (!e.dataTransfer.types.includes("Files")) return;
+                    e.preventDefault();
+                    setDragOver(true);
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOver(false);
+                  }}
+                  onDrop={(e) => {
+                    if (!e.dataTransfer.files.length) return;
+                    e.preventDefault();
+                    setDragOver(false);
+                    addFiles(e.dataTransfer.files);
+                  }}
+                >
                   {error ? <p className="mb-2 text-sm text-red-400 light:text-red-700">{error}</p> : null}
+
+                  {files.length > 0 ? (
+                    <ul className="mb-2 flex flex-wrap gap-1.5">
+                      {files.map((f) => (
+                        <li
+                          key={f.key}
+                          title={f.error ?? f.name}
+                          className={`inline-flex items-center gap-1.5 max-w-[190px] rounded-md border px-2 py-1 text-[11.5px] ${
+                            f.status === "error"
+                              ? "border-red-400/60 text-red-400 light:text-red-700"
+                              : "border-[var(--oc-line)] text-[var(--oc-ink)]"
+                          }`}
+                        >
+                          {f.status === "uploading" ? (
+                            <span className="h-3 w-3 shrink-0 rounded-full border-2 border-[var(--oc-muted)] border-t-transparent animate-spin" />
+                          ) : (
+                            <FileIcon kind={f.attachment?.kind ?? "document"} />
+                          )}
+                          <span className="truncate">{f.name}</span>
+                          <span className="shrink-0 text-[var(--oc-muted)]">{f.status === "error" ? "алдаа" : formatBytes(f.size)}</span>
+                          <button
+                            type="button"
+                            aria-label={`${f.name} хасах`}
+                            onClick={() => removeFile(f.key)}
+                            className="shrink-0 text-[var(--oc-muted)] hover:text-red-400"
+                          >
+                            ×
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+
                   <div className="flex gap-2 items-end">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept={ACCEPT}
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files) addFiles(e.target.files);
+                        e.target.value = ""; // ижил файлыг дахин сонгох боломжтой
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={sending || files.length >= MAX_FILES}
+                      aria-label="Файл хавсаргах"
+                      title="Файл хавсаргах (Excel, CSV, PDF, зураг) — чирж оруулах, Ctrl+V-ээр зураг буулгаж болно"
+                      className="h-[38px] w-[38px] shrink-0 rounded-lg border border-[var(--oc-line)] text-[var(--oc-muted)] hover:text-[var(--oc-ink)] hover:border-[var(--oc-accent)] disabled:opacity-50 flex items-center justify-center"
+                    >
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                      </svg>
+                    </button>
                     <textarea
                       ref={inputRef}
                       value={input}
@@ -277,12 +483,24 @@ export function DataAgentFab({ configured }: { configured: boolean }) {
                           send();
                         }
                       }}
+                      onPaste={(e) => {
+                        const pasted = Array.from(e.clipboardData.files);
+                        if (pasted.length === 0) return; // энгийн текст буулгалтыг хэвээр
+                        e.preventDefault();
+                        addFiles(pasted);
+                      }}
                       rows={2}
                       maxLength={20000}
-                      placeholder="Тайлбар эсвэл хүснэгтээ буулгана уу… (Ctrl+Enter)"
+                      placeholder={dragOver ? "Файлаа энд тавина уу…" : "Тайлбар бичих эсвэл файл хавсаргах… (Ctrl+Enter)"}
                       className="auth-input w-full resize-none min-h-[56px] max-h-40 text-[13px]"
                     />
-                    <button type="button" onClick={send} disabled={sending || !input.trim()} className={BTN_PRIMARY}>
+                    <button
+                      type="button"
+                      onClick={send}
+                      disabled={sending || uploading || (!input.trim() && readyAttachments.length === 0)}
+                      className={BTN_PRIMARY}
+                      title={uploading ? "Файл upload хийгдэж байна…" : undefined}
+                    >
                       {sending ? "…" : "Илгээх"}
                     </button>
                   </div>
