@@ -305,11 +305,8 @@ export async function createBranch(actor: BranchActor, formData: FormData): Prom
       });
     });
   } catch (e) {
-    return {
-      ok: false,
-      code: "UNKNOWN",
-      message: e instanceof Error ? e.message : "Үүсгэх явцад алдаа гарлаа.",
-    };
+    console.error("[createBranch]", e);
+    return { ok: false, code: "UNKNOWN", message: "Үүсгэх явцад алдаа гарлаа." };
   }
   if (!createdId) {
     return { ok: false, code: "UNKNOWN", message: "Үүсгэх явцад алдаа гарлаа." };
@@ -461,11 +458,8 @@ export async function updateBranch(
     if (e instanceof BranchRuleError) {
       return { ok: false, code: "PRIMARY_LOCKED", message: e.message };
     }
-    return {
-      ok: false,
-      code: "UNKNOWN",
-      message: e instanceof Error ? e.message : "Шинэчлэх явцад алдаа гарлаа.",
-    };
+    console.error("[updateBranch]", e);
+    return { ok: false, code: "UNKNOWN", message: "Шинэчлэх явцад алдаа гарлаа." };
   }
 
   if (updateResult.blocked) {

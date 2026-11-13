@@ -83,7 +83,8 @@ export async function createSystemCategoryAction(
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return { ok: false, fieldErrors: { name: DUPLICATE } };
     }
-    return { ok: false, message: e instanceof Error ? e.message : "Үүсгэхэд алдаа гарлаа." };
+    console.error("[createSystemCategoryAction]", e);
+    return { ok: false, message: "Үүсгэхэд алдаа гарлаа." };
   }
 
   revalidate();
@@ -112,7 +113,8 @@ export async function updateSystemCategoryAction(
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return { ok: false, fieldErrors: { name: DUPLICATE } };
     }
-    return { ok: false, message: e instanceof Error ? e.message : "Шинэчлэхэд алдаа гарлаа." };
+    console.error("[updateSystemCategoryAction]", e);
+    return { ok: false, message: "Шинэчлэхэд алдаа гарлаа." };
   }
 
   revalidate(id);
@@ -124,13 +126,22 @@ async function systemCategoryUsage(id: string): Promise<number> {
     where: { id, ...SYSTEM_GOODS },
     select: {
       _count: {
-        select: { services: true, diagnosticTemplates: true, appointments: true, appointmentLinks: true, orderLinks: true },
+        select: {
+          services: true,
+          diagnosticTemplates: true,
+          appointments: true,
+          appointmentLinks: true,
+          orderLinks: true,
+          catalogItems: true,
+        },
       },
     },
   });
   if (!c) return 0;
   const n = c._count;
-  return n.services + n.diagnosticTemplates + n.appointments + n.appointmentLinks + n.orderLinks;
+  return (
+    n.services + n.diagnosticTemplates + n.appointments + n.appointmentLinks + n.orderLinks + n.catalogItems
+  );
 }
 
 /**

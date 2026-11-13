@@ -16,7 +16,8 @@ test("web account session rejects deactivated/deleted accounts", () => {
 test("web OTP login clears self-deactivation, never an admin block", () => {
   const s = src("app/_actions/account-auth.ts");
   assert.match(s, /if \(account && !account\.isActive\)/); // admin block still first
-  assert.match(s, /deactivatedAt:\s*null/);
+  // finishAccountLogin clears deactivatedAt (and bumps tokenVersion).
+  assert.match(s, /await finishAccountLogin\(account\.id\)/);
 });
 
 test("deletion action: generic step-1 reply, ACCOUNT_CLOSE otp, libs only, rate-limited", () => {

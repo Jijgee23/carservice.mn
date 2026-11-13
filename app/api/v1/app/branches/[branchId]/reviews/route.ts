@@ -1,4 +1,4 @@
-import { jsonError, jsonOk } from "@/lib/api";
+import { enforceRateLimit, jsonError, jsonOk, PUBLIC_CATALOG_RATE_LIMIT } from "@/lib/api";
 import { getApiAccountFromRequest } from "@/lib/auth/account-api-token";
 import { ReviewError, submitBranchReview } from "@/lib/reviews";
 import { prisma } from "@/lib/prisma";
@@ -9,6 +9,8 @@ import { PUBLIC_TENANT_WHERE } from "@/lib/tenant-visibility";
 // GET /api/v1/app/branches/[branchId]/reviews?page=1 — салбарын нийтэд харагдах
 // үнэлгээ (нуугдаагүй), 20-оор. Нэвтрэх шаардлагагүй.
 export async function GET(req: Request, ctx: { params: Promise<{ branchId: string }> }) {
+  const limited = enforceRateLimit(req, "public-catalog", PUBLIC_CATALOG_RATE_LIMIT);
+  if (limited) return limited;
   setBypassContext();
   const { branchId } = await ctx.params;
   const page = Math.max(1, Number(new URL(req.url).searchParams.get("page")) || 1);

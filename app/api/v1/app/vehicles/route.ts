@@ -63,6 +63,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const account = await getApiAccountFromRequest(req);
   if (!account) return jsonError(401, "Нэвтрэх шаардлагатай.");
+  const owned = customerOwnershipFilters(account.id, account.phone);
 
   let body: unknown;
   try {
@@ -157,8 +158,9 @@ export async function POST(req: Request) {
           purpose: true,
           _count: {
             select: {
-              serviceOrders: { where: { status: "COMPLETED", isInternal: false } },
-              diagnosticReports: true,
+              // GET-тэй ижил: зөвхөн энэ эзний захиалга/оношилгоо тоологдоно.
+              serviceOrders: { where: { status: "COMPLETED", isInternal: false, OR: owned } },
+              diagnosticReports: { where: { OR: owned } },
             },
           },
         },

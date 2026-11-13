@@ -1,4 +1,5 @@
 import { enforceRateLimit, jsonError, jsonOk } from "@/lib/api";
+import { ipOrNull } from "@/lib/rate-limit";
 import { getApiAccountFromRequest } from "@/lib/auth/account-api-token";
 import { issuePhoneOtp } from "@/lib/auth/otp";
 import { maskPhone } from "@/lib/phone";
@@ -17,9 +18,7 @@ export async function POST(req: Request) {
 
   const userAgent = req.headers.get("user-agent");
   const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    null;
+    ipOrNull(req.headers);
 
   try {
     const { code } = await issuePhoneOtp({

@@ -599,8 +599,10 @@ test("API and dashboard adapters call the validated compensated lifecycle with i
   ]);
 
   assert.deepEqual(
+    // The route now funnels the item-linked, order-linked and standalone
+    // paths through ONE commitDiagnosticReportCommand call (lib/diagnostic-report-commit.ts).
     adapterLifecycleIssues(apiSource, {
-      minimumCommits: 2,
+      minimumCommits: 1,
       preserveApiStatuses: true,
     }),
     [],

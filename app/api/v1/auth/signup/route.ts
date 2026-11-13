@@ -4,6 +4,7 @@ import { parseLoginDevice } from "@/lib/auth/login-device";
 import { revokeAllOtps, verifyOtp } from "@/lib/auth/otp";
 import {
   createTenantWithOwner,
+  findTenantSignupConflicts,
   tenantSignupInputFromBody,
   validateTenantSignup,
 } from "@/lib/auth/tenant-signup";
@@ -63,7 +64,8 @@ export async function POST(req: Request) {
   const parsedDevice = parseLoginDevice(body);
   const device = parsedDevice.ok ? parsedDevice.device : null;
 
-  const otp = await verifyOtp({ email: data.adminEmail, phone: data.phone, type: "SIGNUP", code: otpCode });
+  // SIGNUP OTP утсаар түлхүүрлэгдсэн — код очсон утас л баталгаажина.
+  const otp = await verifyOtp({ phone: data.phone, type: "SIGNUP", code: otpCode });
   if (!otp.ok) {
     const msg =
       otp.reason === "expired"
@@ -72,6 +74,13 @@ export async function POST(req: Request) {
           ? "Хэт олон удаа буруу оролдсон. Шинээр код илгээнэ үү."
           : "Код буруу байна.";
     return jsonError(401, msg, { code: "OTP_INVALID", fieldErrors: { code: msg } });
+  }
+
+  // 1-р шатнаас хойш өөр хэн нэгэн ижил РД/утас/имэйлээр бүртгүүлсэн байж
+  // болох тул давхцлыг дахин шалгана (request-otp-тэй ижил 409).
+  const conflicts = await findTenantSignupConflicts(data);
+  if (conflicts) {
+    return jsonError(409, Object.values(conflicts)[0], { code: "CONFLICT", fieldErrors: conflicts });
   }
 
   const result = await createTenantWithOwner(data);
@@ -85,7 +94,7 @@ export async function POST(req: Request) {
     return jsonError(500, result.message);
   }
   const { userId, tenantId } = result.created;
-  await revokeAllOtps({ email: data.adminEmail, phone: data.phone }, "SIGNUP");
+  await revokeAllOtps({ phone: data.phone }, "SIGNUP");
 
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },

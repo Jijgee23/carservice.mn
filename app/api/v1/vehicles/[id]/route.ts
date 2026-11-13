@@ -1,6 +1,7 @@
 import { jsonError, jsonOk, requireApiUser, requirePermission } from "@/lib/api";
 import { vehicleOwnerIsOrganization } from "@/lib/vehicles/owner-kind";
 import { prisma } from "@/lib/prisma";
+import { requireActiveSubscriptionApi } from "@/lib/subscription-server";
 import {
   VehicleCommandError,
   deleteVehicleCommand,
@@ -103,6 +104,8 @@ export async function PATCH(
   if (auth.response) return auth.response;
   const denied = requirePermission(auth.user, "vehicles.edit");
   if (denied) return denied;
+  const locked = await requireActiveSubscriptionApi(auth.user);
+  if (locked) return locked;
 
   const { id } = await ctx.params;
 
@@ -183,6 +186,8 @@ export async function DELETE(
   if (auth.response) return auth.response;
   const denied = requirePermission(auth.user, "vehicles.delete");
   if (denied) return denied;
+  const locked = await requireActiveSubscriptionApi(auth.user);
+  if (locked) return locked;
 
   const { id } = await ctx.params;
 

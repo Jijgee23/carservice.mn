@@ -61,7 +61,15 @@ type RecipientKey = {
   data: { email?: string; phone?: string };
 };
 
-function recipientKey(r: OtpRecipient): RecipientKey | null {
+function recipientKey(r: OtpRecipient, type?: OtpType): RecipientKey | null {
+  // SIGNUP: код SMS-ээр явдаг тул УТСААР түлхүүрлэнэ — имэйлээр түлхүүрлэвэл
+  // 2-р шатанд баталгаажаагүй өөр утас дамжуулж болно (OTP ↔ утас холбоо).
+  if (type === "SIGNUP") {
+    const phone = r.phone ? normalizePhone(r.phone) : null;
+    return phone
+      ? { key: phone, where: { phone, email: null, accountId: null }, data: { phone } }
+      : null;
+  }
   const email = r.email ? normalizeEmail(r.email) : "";
   if (email) return { key: email, where: { email }, data: { email } };
   const phone = r.phone ? normalizePhone(r.phone) : null;
@@ -121,7 +129,7 @@ export type IssueOtpOptions = OtpRecipient & {
 export async function issueOtp(
   opts: IssueOtpOptions,
 ): Promise<{ code: string; expiresAt: Date }> {
-  const recipient = recipientKey(opts);
+  const recipient = recipientKey(opts, opts.type);
   if (!recipient) throw new Error("Имэйл эсвэл утасны дугаар хоосон байж болохгүй.");
 
   // Хэт олон код хүсэхээс сэргийлнэ (имэйл/утас+төрөл, мөн боломжтой бол IP-аар).
@@ -189,6 +197,82 @@ export type VerifyOtpResult =
   | { ok: true; otpId: string; userId: string | null }
   | { ok: false; reason: "invalid" | "expired" | "consumed" | "too_many_attempts" };
 
+type OtpFailReason = Exclude<VerifyOtpResult, { ok: true }>["reason"];
+
+/**
+ * Буруу кодын үр дүнг (attempts/expiry) тооцоолно — DB-гүй цэвэр функц
+ * (тестлэхэд). `attemptsAfter` нь атомаар нэмэгдсэний дараах утга.
+ */
+export function classifyOtpAttempt(input: {
+  claimed: boolean;
+  expired: boolean;
+  attemptsBefore: number;
+  codeMatches: boolean;
+}): "ok" | OtpFailReason {
+  if (!input.claimed) {
+    if (input.expired) return "expired";
+    if (input.attemptsBefore >= OTP_MAX_ATTEMPTS) return "too_many_attempts";
+    // Зэрэгцээ хүсэлт consume хийсэн эсвэл attempts дүүрсэн.
+    return "invalid";
+  }
+  return input.codeMatches ? "ok" : "invalid";
+}
+
+/**
+ * Нэг OTP мөр дээр атомаар оролдлого хийнэ (race-гүй):
+ *  1. `attempts`-г зөвхөн consume хийгдээгүй, хугацаа дуусаагүй, лимитэд
+ *     хүрээгүй үед л нэмнэ (`updateMany` count===1 = "оролдлогын эрх авсан").
+ *  2. Код зөв бол `consumedAt: null` нөхцөлтэй consume — count===1 л амжилт
+ *     (хоёр зэрэгцээ зөв хүсэлтээс зөвхөн нэг нь өнгөрнө).
+ */
+async function attemptOtp(
+  otp: { id: string; codeHash: string; attempts: number; expiresAt: Date },
+  codeHash: string,
+): Promise<"ok" | OtpFailReason> {
+  const now = new Date();
+  const claim = await prisma.otp.updateMany({
+    where: {
+      id: otp.id,
+      consumedAt: null,
+      attempts: { lt: OTP_MAX_ATTEMPTS },
+      expiresAt: { gt: now },
+    },
+    data: { attempts: { increment: 1 } },
+  });
+  if (claim.count !== 1) {
+    const expired = otp.expiresAt.getTime() <= now.getTime();
+    // Хугацаа дууссан / оролдлого дүүрсэн OTP-г хаана (зэрэгцээ үед аль хэдийн хаагдсан байж болно).
+    if (expired || otp.attempts >= OTP_MAX_ATTEMPTS) {
+      await prisma.otp.updateMany({
+        where: { id: otp.id, consumedAt: null },
+        data: { consumedAt: now },
+      });
+    }
+    return classifyOtpAttempt({
+      claimed: false,
+      expired,
+      attemptsBefore: otp.attempts,
+      codeMatches: false,
+    });
+  }
+
+  if (otp.codeHash !== codeHash) {
+    return classifyOtpAttempt({
+      claimed: true,
+      expired: false,
+      attemptsBefore: otp.attempts,
+      codeMatches: false,
+    });
+  }
+
+  const consumed = await prisma.otp.updateMany({
+    where: { id: otp.id, consumedAt: null },
+    data: { consumedAt: now },
+  });
+  if (consumed.count !== 1) return "invalid";
+  return "ok";
+}
+
 /**
  * OTP-г баталгаажуулна. Зөв тохиолдолд `consumedAt`-г тогтоож дахин ашиглахгүй.
  * Буруу үед `attempts` нэмнэ. OTP_MAX_ATTEMPTS-аас давсан үед OTP-г хаалт хийнэ.
@@ -196,7 +280,7 @@ export type VerifyOtpResult =
 export async function verifyOtp(
   input: OtpRecipient & { type: OtpType; code: string },
 ): Promise<VerifyOtpResult> {
-  const recipient = recipientKey(input);
+  const recipient = recipientKey(input, input.type);
   const code = (input.code ?? "").trim();
   if (!recipient || !/^\d{6}$/.test(code)) {
     return { ok: false, reason: "invalid" };
@@ -217,35 +301,8 @@ export async function verifyOtp(
   });
   if (!otp) return { ok: false, reason: "invalid" };
 
-  if (otp.expiresAt.getTime() <= Date.now()) {
-    await prisma.otp.update({
-      where: { id: otp.id },
-      data: { consumedAt: new Date() },
-    });
-    return { ok: false, reason: "expired" };
-  }
-
-  if (otp.attempts >= OTP_MAX_ATTEMPTS) {
-    await prisma.otp.update({
-      where: { id: otp.id },
-      data: { consumedAt: new Date() },
-    });
-    return { ok: false, reason: "too_many_attempts" };
-  }
-
-  if (otp.codeHash !== codeHash) {
-    await prisma.otp.update({
-      where: { id: otp.id },
-      data: { attempts: { increment: 1 } },
-    });
-    return { ok: false, reason: "invalid" };
-  }
-
-  // Зөв — consume
-  await prisma.otp.update({
-    where: { id: otp.id },
-    data: { consumedAt: new Date() },
-  });
+  const outcome = await attemptOtp(otp, codeHash);
+  if (outcome !== "ok") return { ok: false, reason: outcome };
   return { ok: true, otpId: otp.id, userId: otp.userId };
 }
 
@@ -256,7 +313,10 @@ export async function revokeAllOtps(
   recipient: string | OtpRecipient,
   type?: OtpType,
 ): Promise<number> {
-  const key = recipientKey(typeof recipient === "string" ? { email: recipient } : recipient);
+  const key = recipientKey(
+    typeof recipient === "string" ? { email: recipient } : recipient,
+    type,
+  );
   if (!key) return 0;
   const where: Prisma.OtpWhereInput = { ...key.where, consumedAt: null };
   if (type) where.type = type;
@@ -368,34 +428,8 @@ export async function verifyPhoneOtp(input: {
   });
   if (!otp) return { ok: false, reason: "invalid" };
 
-  if (otp.expiresAt.getTime() <= Date.now()) {
-    await prisma.otp.update({
-      where: { id: otp.id },
-      data: { consumedAt: new Date() },
-    });
-    return { ok: false, reason: "expired" };
-  }
-
-  if (otp.attempts >= OTP_MAX_ATTEMPTS) {
-    await prisma.otp.update({
-      where: { id: otp.id },
-      data: { consumedAt: new Date() },
-    });
-    return { ok: false, reason: "too_many_attempts" };
-  }
-
-  if (otp.codeHash !== codeHash) {
-    await prisma.otp.update({
-      where: { id: otp.id },
-      data: { attempts: { increment: 1 } },
-    });
-    return { ok: false, reason: "invalid" };
-  }
-
-  await prisma.otp.update({
-    where: { id: otp.id },
-    data: { consumedAt: new Date() },
-  });
+  const outcome = await attemptOtp(otp, codeHash);
+  if (outcome !== "ok") return { ok: false, reason: outcome };
   // accountId-г userId талбарт буцаахгүй — дуудагч accountId-р resolve хийнэ.
   return { ok: true, otpId: otp.id, userId: otp.accountId };
 }

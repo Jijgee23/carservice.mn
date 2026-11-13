@@ -11,7 +11,7 @@ import { revalidatePath } from "next/cache";
 import { requireAccount } from "@/lib/auth/account";
 import { finishAccountLogin, removeAccountPassword, setAccountPassword, verifyAccountPassword } from "@/lib/auth/account-password";
 import { issuePhoneOtp, verifyPhoneOtp } from "@/lib/auth/otp";
-import { consumeRateLimit, LOGIN_WINDOW_MS, RATE_LIMITED_MESSAGE } from "@/lib/rate-limit";
+import { consumeRateLimit, ipOrNull, LOGIN_WINDOW_MS, RATE_LIMITED_MESSAGE } from "@/lib/rate-limit";
 import { formatPhone, maskPhone, normalizePhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
 import { sendOtpSms } from "@/lib/sms";
@@ -57,10 +57,7 @@ export async function accountLoginAction(
 
   const h = await headers();
   const ua = h.get("user-agent");
-  const ip =
-    h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    h.get("x-real-ip") ||
-    null;
+  const ip = ipOrNull(h);
 
   // --- Нууц үгээр ---
   if (s(formData, "mode") === "password") {
@@ -144,7 +141,7 @@ export async function accountLoginAction(
   }
 
   // Account-ийг утсаар resolve / create. Хаагдсан бол нэвтрүүлэхгүй.
-  let account = await prisma.account.findUnique({ where: { phone } });
+  const account = await prisma.account.findUnique({ where: { phone } });
   if (account && !account.isActive) {
     return {
       ok: false,
@@ -153,23 +150,17 @@ export async function accountLoginAction(
       message: "Энэ дугаар түр хаагдсан байна.",
     };
   }
-  if (!account) {
-    account = await prisma.account.create({
-      data: { phone, lastLoginAt: new Date() },
-    });
-  } else {
-    account = await prisma.account.update({
-      where: { id: account.id },
-      data: {
-        lastLoginAt: new Date(),
-        deactivatedAt: null,
-      },
-    });
-  }
+  // Өөрөө хаасан аккаунтыг сэргээнэ — finishAccountLogin tokenVersion-г нэмж
+  // хуучин мобайл token-уудыг хүчингүй болгоно.
+  const signedIn = account
+    ? await finishAccountLogin(account.id)
+    : await prisma.account.create({
+        data: { phone, lastLoginAt: new Date() },
+      });
 
   const token = await signAccountSession({
-    accountId: account.id,
-    phone: account.phone,
+    accountId: signedIn.id,
+    phone: signedIn.phone,
   });
   await setAccountSessionCookie(token);
 
@@ -192,7 +183,7 @@ export async function requestAccountPasswordOtpAction(): Promise<{ ok: boolean; 
       type: "ACCOUNT_PASSWORD",
       accountId: account.id,
       userAgent: h.get("user-agent"),
-      ip: h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || null,
+      ip: ipOrNull(h),
     });
     const sent = await sendOtpSms(code, "ACCOUNT_PASSWORD", account.phone);
     if (!sent && process.env.NODE_ENV === "production") return { ok: false, message: "Код илгээгдсэнгүй. Дараа дахин оролдоно уу." };

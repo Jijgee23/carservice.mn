@@ -1,5 +1,6 @@
 "use server";
 
+import type { ConfirmActionResult } from "@/lib/confirm-action";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@/app/generated/prisma/client";
 import { requireSuperAdmin } from "@/lib/auth/system";
@@ -95,7 +96,7 @@ export async function createManualSubscriptionPaymentAction(
 /** PENDING төлбөрийг гар аргаар PAID болгож, багцыг идэвхжүүлнэ. */
 export async function markSubscriptionPaymentPaidAction(
   formData: FormData,
-): Promise<void> {
+): Promise<ConfirmActionResult> {
   const admin = await requireSuperAdmin();
   const id = s(formData, "id");
   if (!id) return;
@@ -103,7 +104,7 @@ export async function markSubscriptionPaymentPaidAction(
   const payment = await prisma.subscriptionPayment.findUnique({
     where: { id },
   });
-  if (!payment) throw new Error("Төлбөр олдсонгүй.");
+  if (!payment) return { error: "Төлбөр олдсонгүй." };
   if (payment.status === "PAID") return;
 
   await activateSubscriptionPayment(payment, {
@@ -121,7 +122,7 @@ export async function markSubscriptionPaymentPaidAction(
  */
 export async function markSubscriptionPaymentUnpaidAction(
   formData: FormData,
-): Promise<void> {
+): Promise<ConfirmActionResult> {
   await requireSuperAdmin();
   const id = s(formData, "id");
   if (!id) return;
@@ -129,11 +130,11 @@ export async function markSubscriptionPaymentUnpaidAction(
   const payment = await prisma.subscriptionPayment.findUnique({
     where: { id },
   });
-  if (!payment) throw new Error("Төлбөр олдсонгүй.");
+  if (!payment) return { error: "Төлбөр олдсонгүй." };
   if (payment.status === "PAID") {
-    throw new Error(
-      "Аль хэдийн баталгаажсан төлбөрийг 'төлөгдөөгүй' болгож болохгүй.",
-    );
+    return {
+      error: "Аль хэдийн баталгаажсан төлбөрийг 'төлөгдөөгүй' болгож болохгүй.",
+    };
   }
   if (payment.status === "CANCELLED") return;
 

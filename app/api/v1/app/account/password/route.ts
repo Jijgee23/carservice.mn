@@ -1,5 +1,5 @@
 import { enforceRateLimit, jsonError, jsonOk } from "@/lib/api";
-import { getApiAccountFromRequest } from "@/lib/auth/account-api-token";
+import { getApiAccountFromRequest, signAccountApiToken } from "@/lib/auth/account-api-token";
 import { removeAccountPassword, setAccountPassword } from "@/lib/auth/account-password";
 
 // Үйлчлүүлэгчийн нууц үг. PUT / DELETE нь POST /account/password/request-otp-оор авсан шинэ кодыг шаардана.
@@ -33,7 +33,10 @@ export async function PUT(req: Request) {
 
   const r = await setAccountPassword({ account, code: str(body.code), password: str(body.password) });
   if (!r.ok) return jsonError(422, r.message, { code: r.field === "code" ? "OTP_INVALID" : "PASSWORD_INVALID", fieldErrors: { [r.field]: r.message } });
-  return jsonOk({ ok: true, hasPassword: true });
+  // tokenVersion нэмэгдсэн тул энэ төхөөрөмжийн хуучин token хүчингүй — шинэ token-ыг буцаана
+  // (апп хадгалбал нэвтэрсэн хэвээр; хадгалахгүй хуучин хувилбар дахин нэвтэрнэ).
+  const accessToken = await signAccountApiToken({ accountId: account.id, phone: account.phone, tv: r.tokenVersion });
+  return jsonOk({ ok: true, hasPassword: true, accessToken });
 }
 
 /** DELETE { code } → нууц үг устгаж зөвхөн кодоор нэвтрэх горимд буцна. */
@@ -47,5 +50,6 @@ export async function DELETE(req: Request) {
 
   const r = await removeAccountPassword({ account, code: str(body.code) });
   if (!r.ok) return jsonError(422, r.message, { code: "OTP_INVALID", fieldErrors: { code: r.message } });
-  return jsonOk({ ok: true, hasPassword: false });
+  const accessToken = await signAccountApiToken({ accountId: account.id, phone: account.phone, tv: r.tokenVersion });
+  return jsonOk({ ok: true, hasPassword: false, accessToken });
 }

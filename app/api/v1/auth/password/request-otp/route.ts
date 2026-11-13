@@ -1,8 +1,8 @@
 import { enforceRateLimit, jsonError, jsonOk } from "@/lib/api";
 import { issueOtp } from "@/lib/auth/otp";
 import { IDENTIFIER_ERROR, loginIdentifierFromBody } from "@/lib/auth/login-identifier";
-import { maskPhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
+import { ipOrNull } from "@/lib/rate-limit";
 import { sendOtpSms } from "@/lib/sms";
 import { setBypassContext } from "@/lib/tenant-context";
 
@@ -16,8 +16,9 @@ import { setBypassContext } from "@/lib/tenant-context";
  * /auth/password/reset-ээр кодоо шинэ нууц үгтэй хамт илгээнэ. "Код дахин
  * илгээх" товч ч энийг дахин дуудна.
  *
- * Enumeration-safe: бүртгэлгүй нэвтрэх нэрд ч ерөнхий "илгээгдсэн" хариу
- * буцаана (maskedPhone="**"). Хэт олон хүсэлтэд issueOtp throttle 429 буцаана.
+ * Enumeration-safe: бүртгэлтэй эсэхээс үл хамааран ЯГ ИЖИЛ хариу буцаана
+ * (`maskedPhone` үргэлж "**" — staff app уг талбарыг уншдаг тул хадгалав).
+ * Хэт олон хүсэлтэд issueOtp throttle 429 буцаана.
  */
 export async function POST(req: Request) {
   // Нууц үг сэргээхээс өмнө — session/tenant хараахан байхгүй.
@@ -44,10 +45,7 @@ export async function POST(req: Request) {
   });
 
   if (user) {
-    const ip =
-      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      req.headers.get("x-real-ip") ||
-      null;
+    const ip = ipOrNull(req.headers);
     try {
       const { code } = await issueOtp({
         email: user.email,
@@ -64,14 +62,9 @@ export async function POST(req: Request) {
         e instanceof Error ? e.message : "Код илгээхэд алдаа гарлаа.",
       );
     }
-    return jsonOk({
-      sent: true,
-      maskedPhone: maskPhone(user.phone),
-      message: "Утсанд 6 оронтой код илгээлээ.",
-    });
   }
 
-  // Бүртгэлгүй — enumeration-аас сэргийлж ерөнхий хариу.
+  // Бүртгэлтэй/бүртгэлгүй аль ч үед ижил хариу — enumeration-аас сэргийлнэ.
   return jsonOk({
     sent: true,
     maskedPhone: "**",

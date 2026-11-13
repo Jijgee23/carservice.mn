@@ -60,6 +60,10 @@ export async function getScheduleOrderDetail(
   if (!canView(user, "orders")) {
     return { ok: false, message: "Танд харах эрх байхгүй." };
   }
+  // Server action-ийн аргумент client-ээс шууд ирнэ — Prisma руу object/operator дамжуулахгүй.
+  if (typeof orderId !== "string" || !orderId) {
+    return { ok: false, message: "Буруу хүсэлт." };
+  }
 
   const order = await prisma.serviceOrder.findFirst({
     where: { id: orderId, tenantId: user.tenantId },

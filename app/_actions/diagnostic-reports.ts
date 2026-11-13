@@ -20,7 +20,19 @@ import {
 import {
   collectValidatedReportData,
   commitWithReportUploadCleanup,
+  ReportDataValidationError,
 } from "@/lib/diagnostics-server";
+import {
+  commitDiagnosticReportCommand,
+  type DiagnosticReportCommitFailureCode,
+} from "@/lib/diagnostic-report-commit";
+import {
+  ACTION_GENERIC_ERROR_MESSAGE,
+  knownAuthorizationMessage,
+  logUnexpectedActionError,
+} from "@/lib/action-errors";
+import { UploadValidationError } from "@/lib/storage";
+import { assertActiveSubscription } from "@/lib/subscription-server";
 import { canFillDiagnostics, isOrderLocked, type OrderStatus } from "@/lib/orders";
 import { prisma } from "@/lib/prisma";
 import { canEditOrder } from "@/lib/auth/order-access";
@@ -55,6 +67,8 @@ export async function createReportAction(
   if (!(await isModuleEnabled(user.tenantId, "enable_diagnostics"))) {
     return { ok: false, message: moduleDisabledMessage("enable_diagnostics") };
   }
+  const inactive = await subscriptionFailure(user.tenantId);
+  if (inactive) return { ok: false, message: inactive };
 
   const templateId = s(formData, "templateId");
   const orderId = s(formData, "orderId");
@@ -64,7 +78,6 @@ export async function createReportAction(
   if (!orderId && !canCreatePerm(user, "diagnostics")) {
     return { ok: false, message: "Танд оношилгооны тайлан үүсгэх эрх байхгүй." };
   }
-  let itemStartedAt: Date | null = null;
   let customerId = s(formData, "customerId");
   let vehicleId = s(formData, "vehicleId");
   let branchId = s(formData, "branchId");
@@ -88,7 +101,9 @@ export async function createReportAction(
   // Салбараар хязгаарлагдсан ажилтан зөвхөн өөрийн салбарт оношилгоо хийнэ.
   const scope = workingBranchScopeId(user);
 
-  // orderId өгөгдсөн бол захиалгаас customer/vehicle/branch-г өвлөнө
+  // orderId өгөгдсөн бол захиалгаас customer/vehicle/branch-г өвлөнө.
+  // Энэ нь зөвхөн урьдчилсан шалгалт (файл хадгалахаас өмнө илт буруу хүсэлтийг
+  // буцаана) — бүх шалгалт захиалгын түгжээн дор commit команд дотор дахин хийгдэнэ.
   if (orderId) {
     const order = await prisma.serviceOrder.findFirst({
       where: {
@@ -136,7 +151,7 @@ export async function createReportAction(
           status: { in: ["PENDING", "IN_PROGRESS"] }, // COMPLETED мөр түгжигдсэн
           diagnosticReportId: null,
         },
-        select: { id: true, startedAt: true },
+        select: { id: true, diagnosticTemplateId: true },
       });
       if (!item) {
         return {
@@ -144,7 +159,9 @@ export async function createReportAction(
           message: "Оношилгооны мөр олдсонгүй эсвэл аль хэдийн бөглөгдсөн байна.",
         };
       }
-      itemStartedAt = item.startedAt;
+      if (item.diagnosticTemplateId !== template.id) {
+        return { ok: false, message: TEMPLATE_MISMATCH_MESSAGE };
+      }
     }
   }
 
@@ -194,10 +211,12 @@ export async function createReportAction(
   try {
     collected = await collectValidatedReportData(formData, schema);
   } catch (e) {
-    return {
-      ok: false,
-      message: e instanceof Error ? e.message : "Файл хадгалахад алдаа.",
-    };
+    if (e instanceof ReportDataValidationError || e instanceof UploadValidationError) {
+      return { ok: false, message: e.message };
+    }
+    // Файлын системийн алдаа серверийн зам агуулж болох тул харуулахгүй.
+    logUnexpectedActionError("diagnostic-report-upload", e);
+    return { ok: false, message: "Файл хадгалахад алдаа гарлаа." };
   }
 
   let validated: Record<string, ReportEntry>;
@@ -218,54 +237,43 @@ export async function createReportAction(
 
   const maxSeverity = computeReportSeverity(schema, validated);
 
-  let reportId: string;
+  let committed: Awaited<ReturnType<typeof commitDiagnosticReportCommand>>;
   try {
-    const created = await commitWithReportUploadCleanup(
+    committed = await commitWithReportUploadCleanup(
       collected.uploadedPaths,
-      async () => {
-        const report = await prisma.diagnosticReport.create({
-          data: {
-            templateVersion: template.version,
-            data: validated,
-            maxSeverity,
-            signatureUrl: collected.signatureUrl,
-            mileageAtReport: mileageVal,
-            notes: notes || null,
-            tenantId: user.tenantId,
-            templateId: template.id,
-            orderId: orderId || null,
-            customerId,
-            vehicleId,
-            branchId,
-            filledById: user.id,
-          },
-          select: { id: true },
-        });
-
-        if (itemId) {
-          const now = new Date();
-          await prisma.serviceItem.update({
-            where: { id: itemId },
-            data: {
-              diagnosticReportId: report.id,
-              status: "COMPLETED",
-              // Бөглөж эхлэхэд (startDiagnosticItemAction) тавигдсан startedAt-г
-              // хадгална; эхлэлгүйгээр шууд хадгалсан бол одоогоор тавина.
-              startedAt: itemStartedAt ?? now,
-              completedAt: now,
-            },
-          });
-        }
-        return report;
-      },
+      () =>
+        commitDiagnosticReportCommand({
+          tenantId: user.tenantId,
+          actorId: user.id,
+          actor: user,
+          workingBranchId: scope,
+          orderId: orderId || null,
+          itemId: itemId || null,
+          templateId: template.id,
+          templateVersion: template.version,
+          data: validated,
+          signatureUrl: collected.signatureUrl,
+          mileageAtReport: mileageVal,
+          notes: notes || null,
+          maxSeverity,
+          standaloneCustomerId: customerId,
+          standaloneVehicleId: vehicleId,
+          standaloneBranchId: branchId,
+        }),
+      (result) => result.ok,
     );
-    reportId = created.id;
   } catch (e) {
-    return {
-      ok: false,
-      message: e instanceof Error ? e.message : "Хадгалахад алдаа гарлаа.",
-    };
+    logUnexpectedActionError("diagnostic-report-create", e);
+    return { ok: false, message: "Хадгалахад алдаа гарлаа." };
   }
+  if (!committed.ok) {
+    return { ok: false, message: commitFailureMessage(committed.code) };
+  }
+  const reportId = committed.report.id;
+  // Түгжээн дор уншсан захиалгын утга (preflight-аас өөрчлөгдсөн байж болно).
+  customerId = committed.report.customerId;
+  vehicleId = committed.report.vehicleId;
+  branchId = committed.report.branchId;
 
   await logAudit({
     tenantId: user.tenantId,
@@ -343,6 +351,8 @@ export async function deleteReportAction(formData: FormData): Promise<ConfirmAct
   if (!(await isModuleEnabled(user.tenantId, "enable_diagnostics"))) {
     return { error: moduleDisabledMessage("enable_diagnostics") };
   }
+  const inactive = await subscriptionFailure(user.tenantId);
+  if (inactive) return { error: inactive };
   const id = s(formData, "id");
   if (!id) return;
 
@@ -374,7 +384,7 @@ export async function deleteReportAction(formData: FormData): Promise<ConfirmAct
   await prisma.$transaction(async (tx) => {
     await tx.diagnosticReport.delete({ where: { id: report.id } });
     if (linkedItem) {
-      await tx.serviceItem.update({
+      await tx.serviceItem.updateMany({
         where: { id: linkedItem.id },
         data: { status: "PENDING", startedAt: null, completedAt: null },
       });
@@ -392,4 +402,38 @@ export async function deleteReportAction(formData: FormData): Promise<ConfirmAct
 
   revalidatePath("/dashboard/diagnostics/reports");
   if (report.orderId) revalidatePath(`/dashboard/orders/${report.orderId}`);
+}
+
+const TEMPLATE_MISMATCH_MESSAGE = "Оношилгооны мөрийн загвартай тохирох загвар сонгоно уу.";
+
+/** Багц дууссан бол хэрэглэгчид харуулах мессеж, идэвхтэй бол null. */
+async function subscriptionFailure(tenantId: string): Promise<string | null> {
+  try {
+    await assertActiveSubscription(tenantId);
+    return null;
+  } catch (error) {
+    const known = knownAuthorizationMessage(error);
+    if (known) return known;
+    logUnexpectedActionError("diagnostic-report-subscription", error);
+    return ACTION_GENERIC_ERROR_MESSAGE;
+  }
+}
+
+function commitFailureMessage(code: DiagnosticReportCommitFailureCode): string {
+  switch (code) {
+    case "ORDER_NOT_FOUND":
+      return "Засварын хуудас олдсонгүй.";
+    case "ORDER_SCOPE_FORBIDDEN":
+      return "Зөвхөн өөрийн салбарт оношилгоо бүртгэх боломжтой.";
+    case "ORDER_EDIT_FORBIDDEN":
+      return "Танд энэ засварын хуудсанд оношилгоо бөглөх эрх байхгүй.";
+    case "ORDER_LOCKED":
+      return "Дууссан / цуцлагдсан засварын хуудсанд оношилгоо бөглөх боломжгүй.";
+    case "ORDER_NOT_IN_PROGRESS":
+      return "Засварын хуудас эхлээгүй байна. Эхлүүлсний дараа оношилгоо бөглөнө.";
+    case "DIAGNOSTIC_ITEM_UNAVAILABLE":
+      return "Оношилгооны мөр олдсонгүй эсвэл аль хэдийн бөглөгдсөн байна.";
+    case "DIAGNOSTIC_TEMPLATE_MISMATCH":
+      return TEMPLATE_MISMATCH_MESSAGE;
+  }
 }

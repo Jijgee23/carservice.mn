@@ -65,6 +65,12 @@ export async function issueRefreshToken(
  * Anti-reuse: хэрвээ revoke-олсон token-ыг ахин хэрэглэвэл бүх токеныг хүчингүй
  * болгож, аюулгүй байдлын эсрэг үйлдэл гэж үзнэ.
  */
+class RotationLostError extends Error {
+  constructor() {
+    super("refresh token already rotated");
+  }
+}
+
 export async function rotateRefreshToken(
   rawToken: string,
   opts: { userAgent?: string | null; ip?: string | null } = {},
@@ -101,10 +107,7 @@ export async function rotateRefreshToken(
 
   if (existing.revokedAt) {
     // Хуучин revoke-олсон token хэрэглэгдсэн — энэ хэрэглэгчийн бүх token-ыг revoke
-    await prisma.refreshToken.updateMany({
-      where: { userId: existing.userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
+    await revokeAllForUser(existing.userId);
     return { ok: false, reason: "reused" };
   }
 
@@ -118,7 +121,9 @@ export async function rotateRefreshToken(
     Date.now() + REFRESH_TOKEN_MAX_AGE_SECONDS * 1000,
   );
 
-  // Хуучнаа revoke + шинийг үүсгэх атомт
+  // Хуучнаа revoke + шинийг үүсгэх атомт. Хуучныг `revokedAt: null` нөхцөлтэй
+  // revoke хийнэ — зэрэгцээ хоёр rotate-оос зөвхөн нэг нь л амжина (нөгөө нь
+  // transaction-оо буцаана, шинэ token үүсэхгүй).
   const newId = await prisma.$transaction(async (tx) => {
     const newRow = await tx.refreshToken.create({
       data: {
@@ -136,16 +141,35 @@ export async function rotateRefreshToken(
       },
       select: { id: true },
     });
-    await tx.refreshToken.update({
-      where: { id: existing.id },
+    const revoked = await tx.refreshToken.updateMany({
+      where: { id: existing.id, revokedAt: null },
       data: {
         revokedAt: new Date(),
         lastUsedAt: new Date(),
         replacedById: newRow.id,
       },
     });
+    if (revoked.count !== 1) throw new RotationLostError();
     return newRow.id;
+  }).catch((e: unknown) => {
+    if (e instanceof RotationLostError) return null;
+    throw e;
   });
+
+  if (!newId) {
+    // Өрсөлдөгч хүсэлт энэ token-ыг аль хэдийн rotate/revoke хийсэн —
+    // одоогийн төлвөөр нь дээрх семантикийг давтана: зориуд revoke → invalid,
+    // rotate-олсон token дахин хэрэглэгдсэн → reuse (бүгдийг revoke).
+    const now = await prisma.refreshToken.findUnique({
+      where: { id: existing.id },
+      select: { replacedById: true },
+    });
+    if (now?.replacedById) {
+      await revokeAllForUser(existing.userId);
+      return { ok: false, reason: "reused" };
+    }
+    return { ok: false, reason: "invalid" };
+  }
 
   return {
     ok: true,

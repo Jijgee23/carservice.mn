@@ -34,7 +34,8 @@ export async function POST(req: Request) {
 
   const reactivated = Boolean(result.account.deactivatedAt);
   const account = await finishAccountLogin(result.account.id);
-  const accessToken = await signAccountApiToken({ accountId: account.id, phone: account.phone });
+  // Хаасан аккаунт сэргэсэн бол finishAccountLogin tokenVersion-г нэмсэн — шинэ хувилбараар олгоно.
+  const accessToken = await signAccountApiToken({ accountId: account.id, phone: account.phone, tv: account.tokenVersion });
   return jsonOk({
     accessToken,
     reactivated,

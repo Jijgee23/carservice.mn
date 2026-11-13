@@ -243,12 +243,13 @@ test("refund entry points claim before QPay; tenant route holds no transaction a
   const action = src("app/_actions/booking-revenue.ts");
   assert.ok(action.indexOf("claimAppointmentRefund(") < action.indexOf("QPayService.refundPayment"));
   assert.match(action, /releaseAppointmentRefundClaim/);
+  // The tenant staff route is platform-only now (403 PLATFORM_REFUND_ONLY):
+  // it never reaches QPay, claims nothing and opens no transaction.
   const route = src("app/api/v1/appointments/[id]/payment/refund/route.ts");
-  const qpayAt = route.indexOf("QPayService.refundPayment");
-  assert.ok(route.indexOf("claimAppointmentRefund(") < qpayAt);
+  assert.doesNotMatch(route, /QPayService/);
+  assert.doesNotMatch(route, /claimAppointmentRefund\(/);
   assert.doesNotMatch(route, /\$transaction/);
-  assert.doesNotMatch(route, /FOR UPDATE/);
-  assert.doesNotMatch(route, /\$\{qpay\.error\}/);
+  assert.match(route, /requireAppointmentRefundPermission\(auth\.user\)/);
 });
 
 // --- Subscription activation race + raw error text -------------------------
@@ -372,10 +373,11 @@ test("mark-verified action is super-admin only, audited; page lists held claims;
   const page = src("app/system/(authed)/booking-revenue/page.tsx");
   assert.match(page, /startsWith: REFUND_CLAIM_PREFIX/);
   assert.match(page, /VerifyRefundButton/);
+  // Staff route can neither claim nor reclaim: refunds are platform-only.
   const route = src("app/api/v1/appointments/[id]/payment/refund/route.ts");
-  assert.match(route, /allowReclaim: false/);
-  assert.match(route, /REFUND_STAFF_WAIT_MESSAGE/);
+  assert.doesNotMatch(route, /claimAppointmentRefund|allowReclaim/);
   assert.doesNotMatch(route, /REFUND_VERIFY_MESSAGE|REFUND_AMBIGUOUS_MESSAGE/);
+  assert.match(src("lib/appointments/refund-permission.ts"), /PLATFORM_REFUND_ONLY/);
 });
 
 test("account deletion cancels the QPay fee invoice of each cancelled appointment after the tx", () => {
@@ -401,9 +403,8 @@ test("D: staff refund messages tell staff to wait for the super admin; super-adm
   assert.match(REFUND_STAFF_WAIT_MESSAGE, /Суперадмин/);
   assert.doesNotMatch(REFUND_STAFF_WAIT_MESSAGE, /Буцаасан гэж тэмдэглэх|10 минут/);
   assert.match(REFUND_VERIFY_MESSAGE, /Буцаасан гэж тэмдэглэх/);
-  const route = src("app/api/v1/appointments/[id]/payment/refund/route.ts");
-  assert.match(route, /"QPAY_REFUND_UNCERTAIN"/);
-  assert.match(route, /IN_PROGRESS" \? REFUND_STAFF_WAIT_MESSAGE/);
+  // (The tenant staff refund route no longer refunds — it returns
+  // 403 PLATFORM_REFUND_ONLY — so it has no QPay outcome messages to check.)
 });
 
 test("1: customer cancel reports refundPending also for an already-PAID fee payment", () => {

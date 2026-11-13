@@ -357,6 +357,8 @@ export async function createTenantWithOwner(
       else fe._ = "Давхардсан утга бүртгэгдсэн байна.";
       return { ok: false, fieldErrors: mapPersonAdminErrors(fe) };
     }
-    return { ok: false, message: e instanceof Error ? e.message : "Бүртгэх явцад алдаа гарлаа." };
+    // Дотоод алдааны текстийг (SQL/Prisma) хэрэглэгчид ил гаргахгүй — логт л бичнэ.
+    console.error("[tenant-signup] createTenantWithOwner:", e);
+    return { ok: false, message: "Бүртгэх явцад алдаа гарлаа. Дахин оролдоно уу." };
   }
 }

@@ -12,6 +12,7 @@ import {
   upsertEmployeeShiftCommand,
 } from "@/lib/employee-schedule-commands";
 import { prisma } from "@/lib/prisma";
+import { assertActiveSubscription } from "@/lib/subscription-server";
 
 export type EmployeeScheduleActionState = {
   ok: boolean;
@@ -27,6 +28,7 @@ function s(fd: FormData, key: string): string {
 async function authorize(userId: string) {
   const actor = await requireUser();
   await assertModuleEnabled(actor.tenantId, "enable_staff_schedule");
+  await assertActiveSubscription(actor.tenantId);
   const result = await authorizeScheduleTarget(prisma, {
     hasSchedulePermission: hasPermission(actor, "employees.schedule"),
     tenantId: actor.tenantId,
@@ -131,6 +133,15 @@ export async function bulkUpsertEmployeeShiftAction(
   const actor = await requireUser();
   if (!hasPermission(actor, "employees.schedule")) {
     return { ok: false, message: "Танд ажлын хувиар засах эрх байхгүй." };
+  }
+  // Ганц нүд / reset-тэй (authorize()) ижил: модуль нээлттэй, багц идэвхтэй
+  // байхыг шаардана — эс бөгөөс багцаас гадуур модулийг bulk-аар ашиглах
+  // цоорхой үлдэнэ.
+  try {
+    await assertModuleEnabled(actor.tenantId, "enable_staff_schedule");
+    await assertActiveSubscription(actor.tenantId);
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
   }
 
   const scope = s(formData, "scope");

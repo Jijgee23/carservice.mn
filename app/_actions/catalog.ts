@@ -41,7 +41,13 @@ export async function searchCatalogAction(type: string, q: string): Promise<Cata
       ],
       services: { none: { tenantId: user.tenantId } },
     },
-    orderBy: [{ services: { _count: "desc" } }, { name: "asc" }],
+    // Нэрээр эрэмбэлнэ. Өмнө нь `services._count`-аар (түгээмэл нь эхэнд)
+    // эрэмбэлдэг байсан ч tenant RLS дор зөвхөн өөрийн тенантын холбоос
+    // тоологддог, дээрх `none` шүүлтүүр тэдгээрийг хасдаг тул тоо үргэлж 0 —
+    // утгагүй байсан. Бүх тенантаар тоолох нь RLS bypass шаардах тул (scoped
+    // bypass helper байхгүй, setBypassContext нь хүсэлтийн үлдсэн хэсэгт
+    // нөлөөлнө) энд хийхгүй.
+    orderBy: [{ name: "asc" }],
     take: 10,
     select: {
       id: true,

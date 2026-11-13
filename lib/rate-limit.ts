@@ -61,14 +61,35 @@ export function clientIp(req: Request): string {
   return ipFromHeaders(req.headers);
 }
 
-/** Server Action-д (`await headers()`) зориулсан хувилбар. */
+/**
+ * Server Action-д (`await headers()`) зориулсан хувилбар.
+ *
+ * Аюулгүй байдал: X-Forwarded-For-ийн ЭХНИЙ утгыг клиент өөрөө зохиож
+ * илгээж болдог (nginx `$proxy_add_x_forwarded_for` нь ирсэн утга дээр
+ * нэмдэг) тул rate limit-ийг тойрох боломжтой. Иймд:
+ *  1. `x-real-ip` — nginx `$remote_addr`-аас тавьдаг, клиент дарж чадахгүй.
+ *  2. Үгүй бол XFF-ийн СҮҮЛИЙН утга (бидний proxy-ийн нэмсэн).
+ *  3. Үгүй бол "unknown".
+ */
 export function ipFromHeaders(headers: Headers): string {
+  const realIp = headers.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
   const xff = headers.get("x-forwarded-for");
   if (xff) {
-    const first = xff.split(",")[0]?.trim();
-    if (first) return first;
+    const parts = xff
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const last = parts[parts.length - 1];
+    if (last) return last;
   }
-  return headers.get("x-real-ip")?.trim() || "unknown";
+  return "unknown";
+}
+
+/** IP лог/DB-д хадгалахад: тогтоогдоогүй бол null. */
+export function ipOrNull(headers: Headers): string | null {
+  const ip = ipFromHeaders(headers);
+  return ip === "unknown" ? null : ip;
 }
 
 /** Нэвтрэлтийн оролдлогын нийтлэг цонх — 15 минут. */

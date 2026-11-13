@@ -13,12 +13,13 @@
 //     200 → { message, applied }
 //     Errors:
 //       401 (no code)
-//       403 {error, code:"FORBIDDEN"}
+//       403 {error, code:"FORBIDDEN"} / {code:"SUBSCRIPTION_EXPIRED"}
 //       400 {error, code:"VALIDATION", fieldErrors?} — bad scope/targets/segments
 import { jsonError, jsonOk, requireApiUser, requirePermission } from "@/lib/api";
 import { logAudit } from "@/lib/audit";
 import { bulkUpsertEmployeeShiftCommand } from "@/lib/employee-schedule-commands";
 import { prisma } from "@/lib/prisma";
+import { requireActiveSubscriptionApi } from "@/lib/subscription-server";
 
 type RawTarget = { userId?: unknown; date?: unknown; weekday?: unknown };
 
@@ -27,8 +28,12 @@ type RawTarget = { userId?: unknown; date?: unknown; weekday?: unknown };
 // the field the body omits (`date` for weekday scope, `weekday` for date
 // scope) the same way the web action's hidden bulk-editor inputs always send
 // both.
-function normalizeTargets(value: unknown): string {
-  const list = Array.isArray(value) ? (value as RawTarget[]) : [];
+// Returns null when any element is not an object (e.g. `targets: [null]`) —
+// the caller answers 400 VALIDATION instead of crashing on `t.userId`.
+function normalizeTargets(value: unknown): string | null {
+  const raw: unknown[] = Array.isArray(value) ? value : [];
+  if (raw.some((t) => !t || typeof t !== "object" || Array.isArray(t))) return null;
+  const list = raw as RawTarget[];
   return JSON.stringify(
     list.map((t) => ({
       userId: typeof t.userId === "string" ? t.userId : "",
@@ -47,6 +52,8 @@ export async function POST(req: Request) {
   if (auth.response) return auth.response;
   const denied = requirePermission(auth.user, "employees.schedule");
   if (denied) return denied;
+  const locked = await requireActiveSubscriptionApi(auth.user);
+  if (locked) return locked;
 
   let body: unknown;
   try {
@@ -59,13 +66,20 @@ export async function POST(req: Request) {
   }
   const { scope, isWorking, segments, targets } = body as Record<string, unknown>;
   const scopeStr = typeof scope === "string" ? scope : "";
+  const targetsJson = normalizeTargets(targets);
+  if (targetsJson === null) {
+    return jsonError(400, "Сонголт буруу байна.", {
+      code: "VALIDATION",
+      fieldErrors: { targets: "Сонголт буруу байна." },
+    });
+  }
 
   const result = await bulkUpsertEmployeeShiftCommand(prisma, {
     tenantId: auth.user.tenantId,
     scope: scopeStr,
     isWorking: isWorking === true,
     segmentsJson: segmentsToJson(segments),
-    targetsJson: normalizeTargets(targets),
+    targetsJson,
   });
 
   if (!result.ok) {

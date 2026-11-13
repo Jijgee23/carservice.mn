@@ -89,9 +89,10 @@ export async function setSuperAdminActiveAction(
     }
   }
 
-  await prisma.superAdmin.update({
+  const res = await prisma.superAdmin.updateMany({
     where: { id },
     data: { isActive: active },
   });
+  if (res.count === 0) return { error: "Admin олдсонгүй." };
   revalidatePath("/system/admins");
 }

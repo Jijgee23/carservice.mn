@@ -156,6 +156,9 @@ export async function PATCH(
   } catch {
     return jsonError(400, "JSON body шаардлагатай.");
   }
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    return jsonError(400, "JSON object body шаардлагатай.");
+  }
   const newStatus =
     typeof (body as { status?: unknown }).status === "string"
       ? ((body as { status: string }).status as AppointmentStatus)

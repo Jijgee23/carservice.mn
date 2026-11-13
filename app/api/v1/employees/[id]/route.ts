@@ -13,7 +13,9 @@
 // DELETE permission: employees.delete; requires an active subscription.
 //        200: { employee: { id: string } }.
 //
-// Errors (every branch): 401, 403 (permission / SUBSCRIPTION_EXPIRED),
+// Errors (every branch): 401, 403 (permission / SUBSCRIPTION_EXPIRED /
+// OWNER_ONLY — incl. a non-owner changing another user's email/phone, with
+// fieldErrors / ROLE_EXCEEDS_ACTOR — role has permissions the actor lacks),
 // 404 (NOT_FOUND), 409 (OWNER_ROLE_LOCKED / LAST_OWNER / SELF_ACTION /
 // OPEN_ORDERS), 422 (VALIDATION / DUPLICATE fieldErrors) — always
 // `{error, code, fieldErrors?}`.
@@ -59,6 +61,7 @@ const ERROR_STATUS: Record<EmployeeErrorCode, number> = {
   LAST_OWNER: 409,
   FK_CONFLICT: 409,
   OPEN_ORDERS: 409,
+  ROLE_EXCEEDS_ACTOR: 403,
   UNKNOWN: 500,
 };
 

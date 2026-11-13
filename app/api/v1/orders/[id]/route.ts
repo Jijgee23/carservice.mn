@@ -200,6 +200,9 @@ export async function PATCH(
   if (hasInternal && typeof b.isInternal !== "boolean") {
     return jsonError(400, "isInternal нь boolean байна.");
   }
+  if (!hasStatus && !hasAssignment && !hasNotes && !hasPostpaid && !hasInternal) {
+    return jsonError(400, "Өөрчлөх талбар шаардлагатай.", { code: "VALIDATION" });
+  }
   if (hasStatus || hasNotes || hasPostpaid || hasInternal) {
     const editDenied = requirePermission(auth.user, "orders.edit");
     if (editDenied && !auth.user.role?.permissions.includes("orders.editOwn")) return editDenied;
@@ -265,4 +268,5 @@ export async function PATCH(
       return unexpectedOrderRouteError("PATCH", error);
     }
   }
+  return jsonError(400, "Өөрчлөх талбар шаардлагатай.", { code: "VALIDATION" });
 }

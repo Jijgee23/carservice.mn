@@ -22,7 +22,10 @@ export async function POST(
   } catch {
     return jsonError(400, "JSON body шаардлагатай.");
   }
-  const requestedRaw = (body as { requestedAt?: unknown })?.requestedAt;
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    return jsonError(400, "JSON object body шаардлагатай.");
+  }
+  const requestedRaw = (body as { requestedAt?: unknown }).requestedAt;
   if (typeof requestedRaw !== "string" || !requestedRaw) {
     return jsonError(400, "requestedAt шаардлагатай.");
   }

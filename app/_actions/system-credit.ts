@@ -53,10 +53,12 @@ export async function updateCreditAdjustmentAction(
   const tenantId = s(formData, "tenantId");
   const raw = Number(s(formData, "creditAdjustment") || "0");
   if (!Number.isFinite(raw)) return { ok: false, fieldErrors: { creditAdjustment: "Тоо оруулна уу." } };
-  await prisma.tenant.update({
+  if (!tenantId) return { ok: false, message: "Байгууллага олдсонгүй." };
+  const res = await prisma.tenant.updateMany({
     where: { id: tenantId },
     data: { creditAdjustment: clampAdjustment(raw), creditAdjustmentNote: s(formData, "creditAdjustmentNote") || null },
   });
+  if (res.count === 0) return { ok: false, message: "Байгууллага олдсонгүй." };
   const r = await recomputeTenantCredit(tenantId);
   revalidatePath(`/system/tenants/${tenantId}`);
   return { ok: true, message: r ? `Хадгалагдлаа. Шинэ оноо: ${r.score}.` : "Хадгалагдлаа (тест байгууллага — оноо тооцогдохгүй)." };
@@ -66,6 +68,7 @@ export async function updateCreditAdjustmentAction(
 export async function recomputeTenantCreditAction(formData: FormData): Promise<void> {
   await requireSuperAdmin();
   const tenantId = s(formData, "tenantId");
+  if (!tenantId) return;
   await recomputeTenantCredit(tenantId);
   revalidatePath(`/system/tenants/${tenantId}`);
 }
@@ -78,7 +81,11 @@ export async function setCreditExemptAction(formData: FormData): Promise<void> {
   await requireSuperAdmin();
   const tenantId = s(formData, "tenantId");
   const exempt = s(formData, "exempt") === "true";
-  await prisma.tenant.update({ where: { id: tenantId }, data: { creditExempt: exempt } });
+  if (!tenantId) return;
+  // update() нь мөр олдохгүй бол P2025 шидэж error хуудас руу унагана —
+  // updateMany + count-аар чимээгүй буцна (form action void).
+  const res = await prisma.tenant.updateMany({ where: { id: tenantId }, data: { creditExempt: exempt } });
+  if (res.count === 0) return;
   await recomputeTenantCredit(tenantId);
   revalidatePath(`/system/tenants/${tenantId}`);
   revalidatePath("/system/tenants");

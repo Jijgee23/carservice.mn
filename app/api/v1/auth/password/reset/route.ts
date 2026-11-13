@@ -3,6 +3,7 @@ import { IDENTIFIER_ERROR, loginIdentifierFromBody } from "@/lib/auth/login-iden
 import { revokeAllOtps, verifyOtp } from "@/lib/auth/otp";
 import { hashPassword } from "@/lib/auth/password";
 import { revokeAllForUser } from "@/lib/auth/refresh-token";
+import { revokeAllUserSessions } from "@/lib/auth/login-lockout";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { setBypassContext } from "@/lib/tenant-context";
@@ -97,8 +98,10 @@ export async function POST(req: Request) {
     action: "UPDATE",
     summary: "Нууц үг сэргээв (OTP-ээр баталгаажуулсан, mobile)",
   });
+  // Refresh token + web session (UserSession) бүгдийг цуцална — бүх төхөөрөмжөөс гаргана.
   await Promise.all([
     revokeAllForUser(user.id),
+    revokeAllUserSessions(user.id),
     revokeAllOtps({ email: user.email, phone: user.phone }, "RESET_PASSWORD"),
   ]);
 

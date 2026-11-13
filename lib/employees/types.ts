@@ -35,7 +35,7 @@ export type EmployeeRow = {
 
 export type BranchRow = { id: string; name?: string; tenantId?: string; isActive?: boolean };
 
-export type RoleRow = { id: string; name: string; isActive: boolean; tenantId?: string };
+export type RoleRow = { id: string; name: string; isActive: boolean; tenantId?: string; permissions?: string[] };
 
 // `args` is deliberately `any`, not `Record<string, unknown>`: the real
 // Prisma client's delegate methods take exact, narrowly-typed argument
@@ -83,6 +83,10 @@ export type EmployeeActor = {
   id: string;
   tenantId: string;
   isOwner: boolean;
+  // Owner биш actor-ын эрхийн багц — үүрэг оноохдоо өөрөөсөө илүү эрхтэй
+  // үүрэг өгөхөөс сэргийлэхэд хэрэглэнэ. Байхгүй бол хоосон эрхтэй гэж үзнэ
+  // (fail-closed).
+  role?: { permissions: string[] } | null;
 };
 
 export type EmployeeErrorCode =
@@ -96,6 +100,7 @@ export type EmployeeErrorCode =
   | "DUPLICATE"
   | "FK_CONFLICT"
   | "OPEN_ORDERS"
+  | "ROLE_EXCEEDS_ACTOR"
   | "UNKNOWN";
 
 export type CoreErr = {

@@ -69,6 +69,12 @@ function mockUser(fixture: UserFixture) {
     role: permissions.length || !isOwner
       ? { id: "r1", name: "Test role", permissions, isActive: true }
       : null,
+    // getApiUserFromRequest re-checks these on every request (lib/auth/api-token.ts).
+    isActive: true,
+    activeUntil: null,
+    deactivatedAt: null,
+    lockedAt: null,
+    tenant: { suspended: false, plan: "BUSINESS" },
   })) as unknown as typeof prisma.user.findUnique;
 }
 

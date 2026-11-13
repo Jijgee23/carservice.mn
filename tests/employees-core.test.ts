@@ -58,7 +58,7 @@ type FakeUser = {
   deletedAt?: Date | null;
 };
 type FakeBranch = { id: string; tenantId: string; name: string; isActive: boolean };
-type FakeRole = { id: string; tenantId: string; name: string; isActive: boolean };
+type FakeRole = { id: string; tenantId: string; name: string; isActive: boolean; permissions?: string[] };
 
 function p2002(): Error & { code: string; clientVersion: string } {
   return Object.assign(new Error("Unique constraint failed"), { code: "P2002", clientVersion: "x" });
@@ -78,7 +78,7 @@ function makeFakeDb(
 
   function roleOf(u: FakeUser) {
     const r = roles.find((x) => x.id === u.roleId);
-    return r ? { id: r.id, name: r.name } : null;
+    return r ? { id: r.id, name: r.name, permissions: r.permissions ?? [] } : null;
   }
 
   function matchWhere(u: FakeUser, where: Record<string, unknown>): boolean {
@@ -560,9 +560,11 @@ test("updateEmployee: duplicate phone/email against another user on update", asy
       },
     ],
   });
+  // Owner actor: a non-owner may not change another user's email/phone at all
+  // (OWNER_ONLY — see the account-takeover tests below).
   const result = await core.updateEmployee(
     db,
-    ACTOR,
+    OWNER_ACTOR,
     "u2",
     fd({ firstName: "C", lastName: "D", email: "a@b.com", phone: "99112233", roleId: "r1" }),
   );
@@ -795,6 +797,51 @@ test("deleteEmployee: an admin-blocked co-owner does not count toward LAST_OWNER
   if (result.ok) throw new Error("unreachable");
   assert.equal(result.code, "LAST_OWNER");
   assert.equal((users[0] as unknown as { deletedAt?: Date }).deletedAt, undefined);
+});
+
+test("toggle/delete/reset: a non-owner cannot act on a colleague whose role exceeds their own permissions", async () => {
+  const seed = () =>
+    makeFakeDb({
+      roles: [{ id: "boss", tenantId: "t1", name: "Менежер", isActive: true, permissions: ["orders.view", "cash.manage"] }],
+      users: [
+        {
+          id: "u1",
+          tenantId: "t1",
+          firstName: "A",
+          lastName: "B",
+          email: "a@b.com",
+          phone: "99112233",
+          passwordHash: "x",
+          verified: true,
+          isOwner: false,
+          roleId: "boss",
+          branchId: null,
+          assignableBranchIds: [],
+          isActive: true,
+          activeUntil: null,
+        },
+      ],
+    });
+  const limited = { ...ACTOR, role: { permissions: ["orders.view", "employees.edit", "employees.delete"] } };
+
+  for (const run of [
+    (db: ReturnType<typeof makeFakeDb>["db"]) => core.toggleEmployeeActive(db, limited, fd({ id: "u1" })),
+    (db: ReturnType<typeof makeFakeDb>["db"]) => core.deleteEmployee(db, limited, fd({ id: "u1" })),
+    (db: ReturnType<typeof makeFakeDb>["db"]) => core.resetEmployeePassword(db, limited, fd({ id: "u1" })),
+  ]) {
+    const { db, users } = seed();
+    const result = await run(db);
+    assert.equal(result.ok, false);
+    if (result.ok) throw new Error("unreachable");
+    assert.equal(result.code, "OWNER_ONLY");
+    assert.equal(users[0].isActive, true, "target must be untouched");
+    assert.equal(users[0].passwordHash, "x", "target must be untouched");
+  }
+
+  // The owner is not restricted.
+  const { db } = seed();
+  const asOwner = await core.toggleEmployeeActive(db, OWNER_ACTOR, fd({ id: "u1" }));
+  assert.equal(asOwner.ok, true);
 });
 
 test("deleteEmployee: tombstones the row instead of hard-deleting it", async () => {
@@ -1217,4 +1264,210 @@ test("importEmployees: an impossible date (2026-02-30) is rejected server-side, 
   assert.equal(result.succeeded, 0);
   assert.equal(result.results[0]!.fieldErrors?.activeUntil, "Огноо буруу.");
   assert.equal(users.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Privilege escalation: a non-owner may only assign roles whose permission set
+// is a subset of their own; may not change another user's email/phone; and
+// cannot move their own branch/active state via self-edit.
+// ---------------------------------------------------------------------------
+
+const LIMITED_ACTOR = {
+  id: "me1",
+  tenantId: "t1",
+  isOwner: false,
+  role: { permissions: ["employees.view", "employees.create", "employees.edit"] },
+};
+
+function escalationRoles(): FakeRole[] {
+  return [
+    { id: "r-low", tenantId: "t1", name: "Low", isActive: true, permissions: ["employees.view"] },
+    {
+      id: "r-high",
+      tenantId: "t1",
+      name: "High",
+      isActive: true,
+      permissions: ["employees.view", "employees.delete", "roles.edit"],
+    },
+  ];
+}
+
+function staffFixture(overrides: Partial<FakeUser> = {}): FakeUser {
+  return {
+    id: "u1",
+    tenantId: "t1",
+    firstName: "A",
+    lastName: "B",
+    email: "a@b.com",
+    phone: "99112233",
+    passwordHash: "x",
+    verified: true,
+    isOwner: false,
+    roleId: "r-low",
+    branchId: "b1",
+    assignableBranchIds: [],
+    isActive: true,
+    activeUntil: null,
+    ...overrides,
+  };
+}
+
+test("prepareCreateEmployee: non-owner cannot assign a role with permissions they lack", async () => {
+  const { db } = makeFakeDb({ roles: escalationRoles() });
+  const base = { firstName: "A", lastName: "B", email: "n@b.com", phone: "99112299" };
+
+  const high = await core.prepareCreateEmployee(db, LIMITED_ACTOR, fd({ ...base, roleId: "r-high" }));
+  assert.equal(high.ok, false);
+  if (high.ok) throw new Error("unreachable");
+  assert.equal(high.code, "ROLE_EXCEEDS_ACTOR");
+  assert.deepEqual(high.fieldErrors, { roleId: "Танд байхгүй эрхтэй үүрэг оноох боломжгүй." });
+
+  const low = await core.prepareCreateEmployee(db, LIMITED_ACTOR, fd({ ...base, roleId: "r-low" }));
+  assert.equal(low.ok, true);
+
+  // An actor with no role at all (fail-closed) can't assign any permissioned role.
+  const noRole = await core.prepareCreateEmployee(db, ACTOR, fd({ ...base, roleId: "r-low" }));
+  assert.equal(noRole.ok, false);
+
+  // Owners are unrestricted.
+  const owner = await core.prepareCreateEmployee(db, OWNER_ACTOR, fd({ ...base, roleId: "r-high" }));
+  assert.equal(owner.ok, true);
+});
+
+test("updateEmployee: non-owner cannot raise another user's role beyond their own permissions", async () => {
+  const { db, users } = makeFakeDb({ roles: escalationRoles(), users: [staffFixture()] });
+  const result = await core.updateEmployee(
+    db,
+    LIMITED_ACTOR,
+    "u1",
+    fd({ firstName: "A", lastName: "B", email: "a@b.com", phone: "99112233", roleId: "r-high" }),
+  );
+  assert.equal(result.ok, false);
+  if (result.ok) throw new Error("unreachable");
+  assert.equal(result.code, "ROLE_EXCEEDS_ACTOR");
+  assert.equal(users[0]!.roleId, "r-low");
+
+  const asOwner = await core.updateEmployee(
+    db,
+    OWNER_ACTOR,
+    "u1",
+    fd({ firstName: "A", lastName: "B", email: "a@b.com", phone: "99112233", roleId: "r-high" }),
+  );
+  assert.equal(asOwner.ok, true);
+  assert.equal(users[0]!.roleId, "r-high");
+});
+
+test("updateEmployee: an unchanged (already higher) role does not trip the subset rule", async () => {
+  const { db } = makeFakeDb({ roles: escalationRoles(), users: [staffFixture({ roleId: "r-high" })] });
+  const result = await core.updateEmployee(
+    db,
+    LIMITED_ACTOR,
+    "u1",
+    fd({ firstName: "Renamed", lastName: "B", email: "a@b.com", phone: "99112233", roleId: "r-high" }),
+  );
+  assert.equal(result.ok, true);
+});
+
+test("updateEmployee: non-owner cannot change another user's email or phone (OWNER_ONLY)", async () => {
+  const { db, users } = makeFakeDb({ roles: escalationRoles(), users: [staffFixture()] });
+  const result = await core.updateEmployee(
+    db,
+    LIMITED_ACTOR,
+    "u1",
+    fd({ firstName: "A", lastName: "B", email: "attacker@b.com", phone: "88112233", roleId: "r-low" }),
+  );
+  assert.equal(result.ok, false);
+  if (result.ok) throw new Error("unreachable");
+  assert.equal(result.code, "OWNER_ONLY");
+  assert.ok(result.fieldErrors?.email);
+  assert.ok(result.fieldErrors?.phone);
+  assert.equal(users[0]!.email, "a@b.com");
+  assert.equal(users[0]!.phone, "99112233");
+
+  // Phone only -> only the phone field is flagged.
+  const phoneOnly = await core.updateEmployee(
+    db,
+    LIMITED_ACTOR,
+    "u1",
+    fd({ firstName: "A", lastName: "B", email: "a@b.com", phone: "88112233", roleId: "r-low" }),
+  );
+  assert.equal(phoneOnly.ok, false);
+  if (phoneOnly.ok) throw new Error("unreachable");
+  assert.deepEqual(Object.keys(phoneOnly.fieldErrors ?? {}), ["phone"]);
+
+  // Owner may change contact details.
+  const asOwner = await core.updateEmployee(
+    db,
+    OWNER_ACTOR,
+    "u1",
+    fd({ firstName: "A", lastName: "B", email: "new@b.com", phone: "88112233", roleId: "r-low" }),
+  );
+  assert.equal(asOwner.ok, true);
+  assert.equal(users[0]!.phone, "88112233");
+});
+
+test("updateEmployee: non-owner self-edit keeps branch, assignable branches and active state", async () => {
+  const { db, users } = makeFakeDb({
+    roles: escalationRoles(),
+    branches: [
+      { id: "b1", tenantId: "t1", name: "Main", isActive: true },
+      { id: "b2", tenantId: "t1", name: "Other", isActive: true },
+    ],
+    users: [staffFixture({ id: "me1", email: "me@b.com", phone: "99001122" })],
+  });
+  const result = await core.updateEmployee(
+    db,
+    LIMITED_ACTOR,
+    "me1",
+    fd({
+      firstName: "Me",
+      lastName: "Self",
+      email: "me2@b.com",
+      phone: "99001123",
+      roleId: "r-low",
+      branchId: "b2",
+      assignableBranchIds: ["b1", "b2"],
+      isActive: "off",
+      activeUntil: "2030-01-01",
+    }),
+  );
+  assert.equal(result.ok, true);
+  const me = users[0]!;
+  assert.equal(me.firstName, "Me");
+  assert.equal(me.email, "me2@b.com", "own contact details remain editable");
+  assert.equal(me.branchId, "b1");
+  assert.deepEqual(me.assignableBranchIds, []);
+  assert.equal(me.isActive, true);
+  assert.equal(me.activeUntil, null);
+});
+
+test("bulkUpdateEmployeeRoleBranch: role-subset rule applies to bulk role changes", async () => {
+  const { db, users } = makeFakeDb({ roles: escalationRoles(), users: [staffFixture()] });
+  const result = await core.bulkUpdateEmployeeRoleBranch(
+    db,
+    LIMITED_ACTOR,
+    fd({ roleId: "r-high", employeeIdsJson: JSON.stringify(["u1"]) }),
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.message, "Танд байхгүй эрхтэй үүрэг оноох боломжгүй.");
+  assert.equal(users[0]!.roleId, "r-low");
+
+  const asOwner = await core.bulkUpdateEmployeeRoleBranch(
+    db,
+    OWNER_ACTOR,
+    fd({ roleId: "r-high", employeeIdsJson: JSON.stringify(["u1"]) }),
+  );
+  assert.equal(asOwner.ok, true);
+  assert.equal(users[0]!.roleId, "r-high");
+});
+
+test("importEmployees: an owner can import any role; a non-owner only within their permissions", async () => {
+  const { db, users } = makeFakeDb({ roles: escalationRoles() });
+  const owner = await core.importEmployees(db, OWNER_ACTOR, [importRow(2, { roleId: "r-high" })], {});
+  assert.equal(owner.succeeded, 1);
+  assert.equal(users[0]!.isOwner, false);
+
+  const limited = await core.importEmployees(db, LIMITED_ACTOR, [importRow(3, { roleId: "r-high" })], {});
+  assert.equal(limited.succeeded, 0);
+  assert.equal(limited.results[0]!.fieldErrors?.roleId, "Танд байхгүй эрхтэй үүрэг оноох боломжгүй.");
 });

@@ -14,9 +14,15 @@
 
 import { userTombstone } from "@/lib/account-closure/tombstone";
 import { logAudit } from "@/lib/audit";
+import { normalizePhone } from "@/lib/phone";
 import { parseIdsJson } from "@/lib/bulk-action";
 import { importRowToFormData, isCalendarDate, type ImportRow, type ImportRowResult } from "./import";
-import { duplicateUserFields, ensureRoleBelongsToTenant, filterOwnBranchIds } from "./guards";
+import {
+  duplicateUserFields,
+  ensureRoleBelongsToTenant,
+  filterOwnBranchIds,
+  roleWithinActorPermissions,
+} from "./guards";
 import type { EmployeeActor, EmployeeRow, EmployeesClient, ValidatedEmployee } from "./types";
 import { s, validateCommon } from "./validate";
 
@@ -26,6 +32,25 @@ export type Noop = { ok: true; noop: true };
 // `employees.edit` эрхтэй ажилтан админы утсыг өөрийнхөөр сольж, «нууц үг
 // сэргээх» OTP-оор админы эрхийг булааж авах боломжтой байв.
 const OWNER_ONLY_ERROR = "Тенант админы бүртгэлийг зөвхөн админ өөрчилнө.";
+/** Owner биш хэрэглэгч өөрөөсөө өндөр эрхтэй (үүрэг нь өөрийн эрхийн дэд олонлог биш) ажилтныг идэвхгүй болгох/устгах/нууц үгийг хүчингүй болгохыг хаана. */
+const SUPERIOR_TARGET_ERROR = "Танаас өндөр эрхтэй ажилтныг зөвхөн админ өөрчилнө.";
+
+// Owner биш actor өөрт байхгүй эрхтэй үүрэг оноож эрх дээшлүүлэхээс сэргийлнэ.
+const ROLE_EXCEEDS_ACTOR_ERROR = "Танд байхгүй эрхтэй үүрэг оноох боломжгүй.";
+
+// Өөр хэрэглэгчийн имэйл/утсыг зөвхөн админ солино — эс бөгөөс `employees.edit`
+// эрхтэй ажилтан бусдын утсыг өөрийнхөөр сольж «нууц үг сэргээх» OTP-оор тэр
+// бүртгэлийг булааж авах боломжтой.
+const CONTACT_OWNER_ONLY_ERROR = "Бусдын имэйл, утсыг зөвхөн админ өөрчилнө.";
+
+function roleExceedsActorErr(): FieldErr {
+  return {
+    ok: false,
+    code: "ROLE_EXCEEDS_ACTOR",
+    error: ROLE_EXCEEDS_ACTOR_ERROR,
+    fieldErrors: { roleId: ROLE_EXCEEDS_ACTOR_ERROR },
+  };
+}
 
 export type CreatePrepared = {
   ok: true;
@@ -35,7 +60,7 @@ export type CreatePrepared = {
 
 export type FieldErr = {
   ok: false;
-  code: "VALIDATION";
+  code: "VALIDATION" | "ROLE_EXCEEDS_ACTOR";
   error: string;
   fieldErrors: Record<string, string>;
 };
@@ -59,11 +84,13 @@ export async function prepareCreateEmployee(
   db: EmployeesClient,
   actor: EmployeeActor,
   formData: FormData,
+  opts: { forbidOwner?: boolean } = {},
 ): Promise<CreatePrepared | FieldErr> {
   // Зөвхөн одоо байгаа админ (isOwner) шинэ хэрэглэгчийг мөн адил бүх
   // эрхтэй админаар үүсгэж болно — энгийн ажилтан бол (canCreate эрхтэй ч)
-  // энэ flag-ийг үл тоомсорлоно, аюулгүй байдлын үүднээс.
-  const wantsOwner = actor.isOwner && s(formData, "isOwner") === "on";
+  // энэ flag-ийг үл тоомсорлоно, аюулгүй байдлын үүднээс. `forbidOwner`
+  // (Excel импорт) үед админ ч owner үүсгэхгүй.
+  const wantsOwner = !opts.forbidOwner && actor.isOwner && s(formData, "isOwner") === "on";
 
   const { data, errors } = validateCommon(formData, { requireRole: !wantsOwner });
   if (Object.keys(errors).length > 0) {
@@ -83,6 +110,7 @@ export async function prepareCreateEmployee(
         fieldErrors: { roleId: "Үүрэг олдсонгүй эсвэл идэвхгүй байна." },
       };
     }
+    if (!roleWithinActorPermissions(actor, r.permissions)) return roleExceedsActorErr();
   }
 
   if (data.branchId) {
@@ -198,17 +226,20 @@ export async function updateEmployee(
   id: string,
   formData: FormData,
 ): Promise<UpdateResult> {
-  const { data, errors } = validateCommon(formData);
-  // Админ нууц үг өөрчлөхгүй — ажилтан өөрөө "Нууц үг сэргээх" урсгалаар солино.
-  if (Object.keys(errors).length > 0) {
-    return { ok: false, code: "VALIDATION", error: "Оруулсан мэдээлэл буруу.", fieldErrors: errors };
-  }
-
+  // Target-ийг эхэлж ачаална: owner-д Role байхгүй (roleId null) тул
+  // `requireRole`-ийг owner биш target-д л шаардана — эс бөгөөс owner-ийн
+  // профайл засах бүр «Үүрэг сонгоно уу.» алдаагаар унадаг байв.
   const target = await db.user.findFirst({
     where: { id, tenantId: actor.tenantId },
     include: { role: { select: { id: true, name: true } } },
   });
   if (!target || target.deletedAt) return { ok: false, code: "NOT_FOUND", error: "Ажилтан олдсонгүй." };
+
+  const { data, errors } = validateCommon(formData, { requireRole: !target.isOwner });
+  // Админ нууц үг өөрчлөхгүй — ажилтан өөрөө "Нууц үг сэргээх" урсгалаар солино.
+  if (Object.keys(errors).length > 0) {
+    return { ok: false, code: "VALIDATION", error: "Оруулсан мэдээлэл буруу.", fieldErrors: errors };
+  }
 
   // OWNER (тенант админ)-ын үүрэг солих, эсвэл хасах боломжгүй — гэхдээ нэр,
   // утас, имэйл зэрэг профайлыг засах боломжтой. Өмнө нь ямар ч PATCH-ийг
@@ -243,6 +274,33 @@ export async function updateEmployee(
     data.activeUntil = target.activeUntil;
   }
 
+  const isSelf = target.id === actor.id;
+
+  // Бусдын имэйл/утсыг зөвхөн админ солино (account takeover-оос сэргийлнэ).
+  if (!actor.isOwner && !isSelf) {
+    const fe: Record<string, string> = {};
+    // Хуучин мөрүүд канон бус хэлбэрээр хадгалагдсан байж болох тул
+    // validateCommon-той ижил хэлбэрт оруулж харьцуулна (нэр л засахад
+    // хуурамч OWNER_ONLY гарахгүй).
+    const curEmail = (target.email ?? "").trim().toLowerCase();
+    const curPhone = normalizePhone(target.phone ?? "") ?? (target.phone ?? "");
+    if (data.email !== curEmail) fe.email = CONTACT_OWNER_ONLY_ERROR;
+    if (data.phone !== curPhone) fe.phone = CONTACT_OWNER_ONLY_ERROR;
+    if (Object.keys(fe).length > 0) {
+      return { ok: false, code: "OWNER_ONLY", error: CONTACT_OWNER_ONLY_ERROR, fieldErrors: fe };
+    }
+  }
+
+  // Owner биш хүн өөрийгөө засахдаа салбар, идэвхтэй төлөв, хугацаагаа
+  // өөрчилж чадахгүй — илгээсэн утгыг үл тоомсорлож одоогийнхыг үлдээнэ.
+  const keepSelfScope = isSelf && !actor.isOwner;
+  if (keepSelfScope) {
+    data.branchId = target.branchId ?? null;
+    data.assignableBranchIds = target.assignableBranchIds ?? [];
+    data.isActive = target.isActive;
+    data.activeUntil = target.activeUntil ?? null;
+  }
+
   if (data.roleId) {
     const r = await ensureRoleBelongsToTenant(db, actor.tenantId, data.roleId);
     if (!r.ok) {
@@ -253,9 +311,12 @@ export async function updateEmployee(
         fieldErrors: { roleId: "Үүрэг олдсонгүй эсвэл идэвхгүй байна." },
       };
     }
+    if (data.roleId !== target.roleId && !roleWithinActorPermissions(actor, r.permissions)) {
+      return roleExceedsActorErr();
+    }
   }
 
-  if (data.branchId) {
+  if (data.branchId && !keepSelfScope) {
     const branch = await db.branch.findFirst({
       where: { id: data.branchId, tenantId: actor.tenantId },
       select: { id: true },
@@ -269,7 +330,9 @@ export async function updateEmployee(
       };
     }
   }
-  data.assignableBranchIds = await filterOwnBranchIds(db, actor.tenantId, data.assignableBranchIds);
+  if (!keepSelfScope) {
+    data.assignableBranchIds = await filterOwnBranchIds(db, actor.tenantId, data.assignableBranchIds);
+  }
 
   let updated;
   try {
@@ -357,7 +420,7 @@ export async function importEmployees(
       results.push({ key: row.key, ok: false, error: "Оруулсан мэдээлэл буруу.", fieldErrors: { activeUntil: "Огноо буруу." } });
       continue;
     }
-    const prep = await prepareCreateEmployee(db, { ...actor, isOwner: false }, importRowToFormData(row));
+    const prep = await prepareCreateEmployee(db, actor, importRowToFormData(row), { forbidOwner: true });
     if (!prep.ok) {
       results.push({ key: row.key, ok: false, error: prep.error, fieldErrors: prep.fieldErrors });
       continue;
@@ -408,6 +471,9 @@ export async function bulkUpdateEmployeeRoleBranch(
   if (roleId) {
     const r = await ensureRoleBelongsToTenant(db, actor.tenantId, roleId);
     if (!r.ok) return { ok: false, message: "Сонгосон үүрэг олдсонгүй эсвэл идэвхгүй байна." };
+    if (!roleWithinActorPermissions(actor, r.permissions)) {
+      return { ok: false, message: ROLE_EXCEEDS_ACTOR_ERROR };
+    }
     roleName = r.name ?? "";
   }
 
@@ -526,11 +592,14 @@ export async function toggleEmployeeActive(
 
   const target = await db.user.findFirst({
     where: { id, tenantId: actor.tenantId },
-    select: { isOwner: true, isActive: true, firstName: true, lastName: true, deletedAt: true },
+    select: { isOwner: true, isActive: true, firstName: true, lastName: true, deletedAt: true, role: { select: { permissions: true } } },
   });
   if (!target || target.deletedAt) return { ok: true, noop: true };
   if (target.isOwner && !actor.isOwner) {
     return { ok: false, code: "OWNER_ONLY", error: OWNER_ONLY_ERROR };
+  }
+  if (!roleWithinActorPermissions(actor, target.role?.permissions)) {
+    return { ok: false, code: "OWNER_ONLY", error: SUPERIOR_TARGET_ERROR };
   }
   if (target.isOwner && !next) {
     const activeOwners = await db.user.count({
@@ -572,12 +641,15 @@ export async function deleteEmployee(
 
   const target = await db.user.findFirst({
     where: { id, tenantId: actor.tenantId },
-    include: { role: { select: { name: true } } },
+    include: { role: { select: { name: true, permissions: true } } },
   });
   if (!target || target.deletedAt) return { ok: true, noop: true };
 
   if (target.isOwner && !actor.isOwner) {
     return { ok: false, code: "OWNER_ONLY", error: OWNER_ONLY_ERROR };
+  }
+  if (!roleWithinActorPermissions(actor, target.role?.permissions)) {
+    return { ok: false, code: "OWNER_ONLY", error: SUPERIOR_TARGET_ERROR };
   }
   if (target.isOwner) {
     const ownerCount = await db.user.count({
@@ -640,11 +712,14 @@ export async function resetEmployeePassword(
 
   const target = await db.user.findFirst({
     where: { id, tenantId: actor.tenantId },
-    select: { firstName: true, lastName: true, deletedAt: true, isOwner: true },
+    select: { firstName: true, lastName: true, deletedAt: true, isOwner: true, role: { select: { permissions: true } } },
   });
   if (!target || target.deletedAt) return { ok: true, noop: true };
   if (target.isOwner && !actor.isOwner) {
     return { ok: false, code: "OWNER_ONLY", error: OWNER_ONLY_ERROR };
+  }
+  if (!roleWithinActorPermissions(actor, target.role?.permissions)) {
+    return { ok: false, code: "OWNER_ONLY", error: SUPERIOR_TARGET_ERROR };
   }
 
   // Нууц үгийг сервер огт үүсгэдэггүй — зөвхөн хүчингүй болгоод OTP

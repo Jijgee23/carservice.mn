@@ -3,6 +3,7 @@ import { issuePhoneOtp } from "@/lib/auth/otp";
 import { normalizePhone } from "@/lib/phone";
 import { sendOtpSms } from "@/lib/sms";
 import { setBypassContext } from "@/lib/tenant-context";
+import { ipOrNull } from "@/lib/rate-limit";
 
 // POST /api/v1/app/auth/request-otp  { phone }
 // Эцсийн хэрэглэгчийн утсанд нэвтрэх OTP илгээнэ.
@@ -30,10 +31,7 @@ export async function POST(req: Request) {
   if (!phone) return jsonError(400, "Утасны дугаар буруу.");
 
   const userAgent = req.headers.get("user-agent");
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    null;
+  const ip = ipOrNull(req.headers);
 
   try {
     const { code } = await issuePhoneOtp({

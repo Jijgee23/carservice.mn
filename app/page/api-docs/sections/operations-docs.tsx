@@ -189,15 +189,9 @@ Res:  200 { "ok": true, "appointmentId": "...", "orderId": "..." | null, "linked
 404 { "error": "Цаг захиалга олдсонгүй." }`}</Code>
         </Endpoint>
 
-        <Endpoint method="POST" path="/api/v1/appointments/[id]/payment/refund" auth="bearer" bearerLabel={BEARER} tags={["Эрх: payments.delete", SUB, "branch-scoped"]} title="Төлөгдсөн захиалгын хураамжийг буцаах. Картаар төлсөн бол QPay-ээр, бусад үед гараар (MANUAL) буцаасан гэж бүртгэнэ.">
-          <Code>{`Req:  { "note": "Буцаах шалтгаан" }   // заавал
-Res:  200 { "ok": true, "paymentId": "...", "refundedVia": "QPAY" | "MANUAL", "amount": "5000", "currency": "MNT" }
-422 { "error": "Буцаах шалтгаан/тэмдэглэл заавал бөглөнө үү.", "code": "REFUND_NOTE_REQUIRED", "fieldErrors": { "note": "..." } }
-404 { "error": "Цаг захиалга олдсонгүй." } | { "error": "Төлбөр олдсонгүй." }
-409 { "code": "PAYMENT_REFUND_IN_PROGRESS" }
-422 { "code": "PAYMENT_ALREADY_REFUNDED" | "PAYMENT_NOT_PAID" | "APPOINTMENT_REFUND_REJECTED" }
-502 { "code": "QPAY_ERROR" | "QPAY_REFUND_UNCERTAIN" }   // UNCERTAIN: буцаалт хийгдсэн байж магадгүй — дахин бүү оролд
-500 { "code": "REFUND_FINALIZE_FAILED" }`}</Code>
+        <Endpoint method="POST" path="/api/v1/appointments/[id]/payment/refund" auth="bearer" bearerLabel={BEARER} tags={["Хаалттай — зөвхөн платформын админ"]} title="Захиалгын хураамж нь платформын орлого (платформын QPay merchant) тул байгууллагын ажилтан буцаах боломжгүй. Буцаалтыг платформын админ вэбээс (/system/booking-revenue) хийнэ. Хуучин апп тодорхой хариу авахын тулд endpoint хэвээр байгаа ч үргэлж 403 буцаана.">
+          <Code>{`Res:  403 { "error": "Захиалгын хураамжийг зөвхөн платформын админ буцаана.", "code": "PLATFORM_REFUND_ONLY" }   // ямар ч эрхтэй ажилтан, эзэнд ч
+401   // token буруу`}</Code>
         </Endpoint>
 
         <Endpoint method="POST" path="/api/v1/appointments/[id]/payment/retry" auth="bearer" bearerLabel={BEARER} tags={["Эрх: payments.edit", SUB, "branch-scoped"]} title="Захиалгын хураамжийн QPay нэхэмжлэхийг дахин үүсгэх/татах.">

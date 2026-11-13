@@ -91,7 +91,7 @@ test("search covers number, customer, phone, plate, make and model", () => {
       OR: [
         { number: { contains: "Jane Doe", mode: "insensitive" } },
         { customer: { fullName: { contains: "Jane Doe", mode: "insensitive" } } },
-        { customer: { phone: { contains: "Jane Doe", mode: "insensitive" } } },
+        { customer: { phone: { contains: "Jane Doe" } } },
         { plateSnapshot: { contains: "Jane Doe", mode: "insensitive" } },
         { vehicle: { plate: { contains: "Jane Doe", mode: "insensitive" } } },
         { vehicle: { make: { contains: "Jane Doe", mode: "insensitive" } } },
@@ -101,6 +101,20 @@ test("search covers number, customer, phone, plate, make and model", () => {
       ],
     },
   ]);
+});
+
+test("customer search delegates to the shared helper: plain phone contains, regnum prefix for 1-7 digits", () => {
+  const where = buildOrderListWhere(query("q=1234567"), {
+    tenantId: "tenant-a",
+    readWhere: {},
+  });
+  const or = ((where.AND as unknown[])[1] as { OR: unknown[] }).OR;
+  assert.ok(or.some((c) => JSON.stringify(c) === JSON.stringify({ customer: { phone: { contains: "1234567" } } })));
+  assert.ok(or.some((c) => JSON.stringify(c) === JSON.stringify({ customer: { orgRegnum: { startsWith: "1234567" } } })));
+  // An 8-digit phone is not a regnum.
+  const phoneWhere = buildOrderListWhere(query("q=99112233"), { tenantId: "tenant-a", readWhere: {} });
+  const phoneOr = ((phoneWhere.AND as unknown[])[1] as { OR: unknown[] }).OR;
+  assert.ok(!phoneOr.some((c) => JSON.stringify(c).includes("orgRegnum")));
 });
 
 test("plate filter matches the snapshot or the vehicle plate, conjunctive with search", () => {
@@ -182,7 +196,7 @@ test("empty access remains conjunctive with all client filters", () => {
       OR: [
         { number: { contains: "secret", mode: "insensitive" } },
         { customer: { fullName: { contains: "secret", mode: "insensitive" } } },
-        { customer: { phone: { contains: "secret", mode: "insensitive" } } },
+        { customer: { phone: { contains: "secret" } } },
         { plateSnapshot: { contains: "secret", mode: "insensitive" } },
         { vehicle: { plate: { contains: "secret", mode: "insensitive" } } },
         { vehicle: { make: { contains: "secret", mode: "insensitive" } } },

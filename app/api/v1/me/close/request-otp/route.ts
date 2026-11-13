@@ -1,4 +1,5 @@
 import { assertNoOpenOrders, ClosureError } from "@/lib/account-closure/staff";
+import { ipOrNull } from "@/lib/rate-limit";
 import { enforceRateLimit, jsonError, jsonOk, requireApiUser } from "@/lib/api";
 import { issueOtp } from "@/lib/auth/otp";
 import { maskPhone } from "@/lib/phone";
@@ -43,9 +44,7 @@ export async function POST(req: Request) {
 
   const userAgent = req.headers.get("user-agent");
   const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    null;
+    ipOrNull(req.headers);
 
   try {
     const { code } = await issueOtp({

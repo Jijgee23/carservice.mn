@@ -10,6 +10,7 @@ import { maskPhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
 import { sendOtpSms } from "@/lib/sms";
 import { setBypassContext } from "@/lib/tenant-context";
+import { ipOrNull } from "@/lib/rate-limit";
 
 /**
  * POST /api/v1/auth/check-email  { identifier } → нэвтрэлтийн дараагийн алхам
@@ -74,10 +75,7 @@ export async function POST(req: Request) {
 
   // Идэвхжээгүй — анхны нэвтрэлт: утсанд OTP илгээж нууц үг үүсгүүлнэ.
   const maskedPhone = maskPhone(user.phone);
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    null;
+  const ip = ipOrNull(req.headers);
   try {
     const { code } = await issueOtp({
       email: user.email,

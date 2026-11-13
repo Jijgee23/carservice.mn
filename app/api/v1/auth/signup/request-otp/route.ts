@@ -6,6 +6,7 @@ import {
   validateTenantSignup,
 } from "@/lib/auth/tenant-signup";
 import { maskPhone } from "@/lib/phone";
+import { ipOrNull } from "@/lib/rate-limit";
 import { sendOtpSms } from "@/lib/sms";
 import { setBypassContext } from "@/lib/tenant-context";
 
@@ -51,14 +52,11 @@ export async function POST(req: Request) {
     return jsonError(409, Object.values(conflicts)[0], { code: "CONFLICT", fieldErrors: conflicts });
   }
 
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    null;
+  const ip = ipOrNull(req.headers);
   let code: string;
   try {
+    // SIGNUP OTP нь утсаар түлхүүрлэгдэнэ (lib/auth/otp.ts) — код очсон утас л 2-р шатанд баталгаажина.
     ({ code } = await issueOtp({
-      email: data.adminEmail,
       phone: data.phone,
       type: "SIGNUP",
       userAgent: req.headers.get("user-agent"),

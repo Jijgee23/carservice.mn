@@ -55,18 +55,34 @@ export async function verifyAccountPassword(input: { phone: string; password: st
   return { ok: true, account: { id: account.id, phone: account.phone, name: account.name, deactivatedAt: account.deactivatedAt } };
 }
 
-/** Same bookkeeping as an OTP login: last login, and a self-deactivated account comes back. */
-export async function finishAccountLogin(accountId: string) {
+/**
+ * Same bookkeeping as an OTP login: last login, and a self-deactivated account comes back. Reactivation bumps
+ * `tokenVersion` (atomically, only if it was deactivated) so API tokens issued before the closure stay dead; the
+ * returned `tokenVersion` is the NEW one — sign the login token with it. `name` is set only when given.
+ */
+export async function finishAccountLogin(accountId: string, extra?: { name?: string | null }) {
+  await prisma.account.updateMany({
+    where: { id: accountId, deactivatedAt: { not: null } },
+    data: { deactivatedAt: null, tokenVersion: { increment: 1 } },
+  });
   return await prisma.account.update({
     where: { id: accountId },
-    data: { lastLoginAt: new Date(), deactivatedAt: null },
-    select: { id: true, phone: true, name: true, passwordHash: true },
+    data: { lastLoginAt: new Date(), deactivatedAt: null, ...(extra?.name ? { name: extra.name } : {}) },
+    select: { id: true, phone: true, name: true, passwordHash: true, tokenVersion: true },
   });
 }
 
-export type PasswordChangeResult = { ok: true } | { ok: false; field: "code" | "password" | "confirm"; message: string };
+/**
+ * `ok: true` carries the account's new `tokenVersion`: every API token issued before the change is now rejected,
+ * so a caller that wants to keep the current device signed in re-signs a token with it.
+ */
+export type PasswordChangeResult =
+  | { ok: true; tokenVersion: number }
+  | { ok: false; field: "code" | "password" | "confirm"; message: string };
 
-async function checkCode(phone: string, code: string): Promise<PasswordChangeResult | null> {
+type CodeCheckError = Extract<PasswordChangeResult, { ok: false }>;
+
+async function checkCode(phone: string, code: string): Promise<CodeCheckError | null> {
   if (!/^\d{6}$/.test(code)) return { ok: false, field: "code", message: "6 оронтой код оруулна уу." };
   const r = await verifyPhoneOtp({ phone, type: "ACCOUNT_PASSWORD", code });
   if (r.ok) return null;
@@ -87,17 +103,22 @@ export async function setAccountPassword(input: {
   if (input.confirm !== undefined && input.confirm !== input.password) return { ok: false, field: "confirm", message: "Нууц үг таарахгүй байна." };
   const codeError = await checkCode(input.account.phone, input.code.trim());
   if (codeError) return codeError;
-  await prisma.account.update({
+  const updated = await prisma.account.update({
     where: { id: input.account.id },
-    data: { passwordHash: await hashPassword(input.password), passwordUpdatedAt: new Date() },
+    data: { passwordHash: await hashPassword(input.password), passwordUpdatedAt: new Date(), tokenVersion: { increment: 1 } },
+    select: { tokenVersion: true },
   });
-  return { ok: true };
+  return { ok: true, tokenVersion: updated.tokenVersion };
 }
 
 /** Removes the password (back to OTP-only). Also requires a fresh ACCOUNT_PASSWORD code. */
 export async function removeAccountPassword(input: { account: { id: string; phone: string }; code: string }): Promise<PasswordChangeResult> {
   const codeError = await checkCode(input.account.phone, input.code.trim());
   if (codeError) return codeError;
-  await prisma.account.update({ where: { id: input.account.id }, data: { passwordHash: null, passwordUpdatedAt: new Date() } });
-  return { ok: true };
+  const updated = await prisma.account.update({
+    where: { id: input.account.id },
+    data: { passwordHash: null, passwordUpdatedAt: new Date(), tokenVersion: { increment: 1 } },
+    select: { tokenVersion: true },
+  });
+  return { ok: true, tokenVersion: updated.tokenVersion };
 }

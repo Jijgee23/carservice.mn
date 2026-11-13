@@ -187,7 +187,11 @@ export async function sendCustomerBroadcastAction(
   if (!hasPermission(user, "customers.notify")) {
     return { ok: false, message: "Танд үйлчлүүлэгчид зар илгээх эрх байхгүй." };
   }
-  await assertActiveSubscription(user.tenantId);
+  try {
+    await assertActiveSubscription(user.tenantId);
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Алдаа гарлаа." };
+  }
 
   const title = s(formData, "title");
   const body = s(formData, "body");

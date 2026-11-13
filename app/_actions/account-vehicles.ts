@@ -40,9 +40,11 @@ export async function quickCreateAccountVehicle(input: {
 }): Promise<QuickCreateAccountVehicleResult> {
   const account = await requireAccount();
 
-  const plate = (input.plate ?? "").trim();
-  const make = (input.make ?? "").trim();
-  const model = (input.model ?? "").trim();
+  // Server action — client-аас ирэх утгыг итгэлгүй гэж үзэж төрлийг шалгана.
+  const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  const plate = str(input.plate);
+  const make = str(input.make);
+  const model = str(input.model);
   const yearRaw = (input.year ?? "").toString().trim();
   const vin = (input.vin ?? "").toString().trim();
   const fuelType = (input.fuelType ?? "").toString().trim();
@@ -117,10 +119,8 @@ export async function quickCreateAccountVehicle(input: {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return { ok: false, fieldErrors: { plate: "Энэ машин таны жагсаалтад аль хэдийн байна." } };
     }
-    return {
-      ok: false,
-      message: e instanceof Error ? e.message : "Алдаа гарлаа.",
-    };
+    console.error("[quickCreateAccountVehicle]", e);
+    return { ok: false, message: "Алдаа гарлаа." };
   }
 }
 

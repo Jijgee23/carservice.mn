@@ -362,7 +362,7 @@ export async function attachOwnerToUnownedVehicle(
   });
   if (!customer) return null;
 
-  return prisma.$transaction(async (tx) => {
+  return await prisma.$transaction(async (tx) => {
     const res = await ensureTenantVehicle(tx, { tenantId: actor.tenantId, vehicleId, customerId });
     // Зэрэгцээ хүсэлт өөр эзэн тавьчихсан бол audit бичихгүй.
     if (res.customerId === customerId) {

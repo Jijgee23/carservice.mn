@@ -9,6 +9,7 @@ import { requireUser } from "@/lib/auth";
 import { type BulkActionState, parseIdsJson } from "@/lib/bulk-action";
 import { parseDurationInput } from "@/lib/category-duration";
 import { prisma } from "@/lib/prisma";
+import { assertActiveSubscription } from "@/lib/subscription-server";
 import { CATEGORY_KINDS, categoryKindLabel, type CategoryKind } from "@/lib/categories";
 
 export type CategoryActionState = {
@@ -27,6 +28,8 @@ async function authorizeOwner() {
   if (!user.isOwner) {
     throw new Error("Зөвхөн админ ангилал удирдана.");
   }
+  // Багц дууссан бол шиднэ — дуудагч бүр try/catch-аар state болгож буцаана.
+  await assertActiveSubscription(user.tenantId);
   return user;
 }
 
@@ -223,10 +226,8 @@ export async function createCategoryAction(
         fieldErrors: { name: "Энэ нэртэй ангилал бүртгэгдсэн байна." },
       };
     }
-    return {
-      ok: false,
-      message: e instanceof Error ? e.message : "Үүсгэх явцад алдаа гарлаа.",
-    };
+    console.error("[createCategoryAction]", e);
+    return { ok: false, message: "Үүсгэх явцад алдаа гарлаа." };
   }
 
   await logAudit({
@@ -300,10 +301,8 @@ export async function updateCategoryAction(
         fieldErrors: { name: "Энэ нэртэй ангилал бүртгэгдсэн байна." },
       };
     }
-    return {
-      ok: false,
-      message: e instanceof Error ? e.message : "Шинэчлэх явцад алдаа гарлаа.",
-    };
+    console.error("[updateCategoryAction]", e);
+    return { ok: false, message: "Шинэчлэх явцад алдаа гарлаа." };
   }
 
   await logAudit({
@@ -322,7 +321,12 @@ export async function updateCategoryAction(
 }
 
 export async function deleteCategoryAction(formData: FormData): Promise<ConfirmActionResult> {
-  const user = await authorizeOwner();
+  let user;
+  try {
+    user = await authorizeOwner();
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Алдаа" };
+  }
   const id = s(formData, "id");
   if (!id) return;
 
@@ -330,21 +334,46 @@ export async function deleteCategoryAction(formData: FormData): Promise<ConfirmA
     where: { id, tenantId: user.tenantId },
     select: { name: true },
   });
+  if (!target) return { error: "Ангилал олдсонгүй." };
 
-  const usedCount = await prisma.service.count({
-    where: { tenantId: user.tenantId, categoryId: id },
-  });
+  // Ангиллыг лавласан бүх мөрийг тоолно. AppointmentCategory /
+  // ServiceOrderCategory нь onDelete: Restrict тул тэдгээр байвал устгах нь
+  // P2003 өгнө; бусад (SetNull) нь түүхийн холбоосоо алдах тул мөн архивлана.
+  const [services, appointmentLinks, orderLinks, diagnosticTemplates, appointments] =
+    await Promise.all([
+      prisma.service.count({ where: { tenantId: user.tenantId, categoryId: id } }),
+      prisma.appointmentCategory.count({ where: { categoryId: id } }),
+      prisma.serviceOrderCategory.count({ where: { tenantId: user.tenantId, categoryId: id } }),
+      prisma.diagnosticTemplate.count({ where: { tenantId: user.tenantId, categoryId: id } }),
+      prisma.appointment.count({ where: { tenantId: user.tenantId, categoryId: id } }),
+    ]);
+  const usedCount = services + appointmentLinks + orderLinks + diagnosticTemplates + appointments;
 
-  if (usedCount > 0) {
-    // Үйлчилгээнд ашиглагдсан бол устгахгүй — архивлана.
-    await prisma.category.updateMany({
-      where: { id, tenantId: user.tenantId },
-      data: { isActive: false },
-    });
-  } else {
-    await prisma.category.deleteMany({
-      where: { id, tenantId: user.tenantId },
-    });
+  let archived = usedCount > 0;
+  try {
+    if (archived) {
+      // Ашиглагдсан бол устгахгүй — архивлана.
+      await prisma.category.updateMany({
+        where: { id, tenantId: user.tenantId },
+        data: { isActive: false },
+      });
+    } else {
+      await prisma.category.deleteMany({
+        where: { id, tenantId: user.tenantId },
+      });
+    }
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2003") {
+      // Тоолсны дараа шинэ холбоос үүссэн (race) — архивлаад өнгөрнө.
+      await prisma.category.updateMany({
+        where: { id, tenantId: user.tenantId },
+        data: { isActive: false },
+      });
+      archived = true;
+    } else {
+      console.error("[deleteCategoryAction]", e);
+      return { error: "Ангилал устгах явцад алдаа гарлаа." };
+    }
   }
 
   await logAudit({
@@ -352,8 +381,8 @@ export async function deleteCategoryAction(formData: FormData): Promise<ConfirmA
     userId: user.id,
     entity: "Category",
     entityId: id,
-    action: usedCount > 0 ? "UPDATE" : "DELETE",
-    summary: target ? `${target.name}${usedCount > 0 ? " (архивлав)" : ""}` : null,
+    action: archived ? "UPDATE" : "DELETE",
+    summary: `${target.name}${archived ? " (архивлав)" : ""}`,
   });
 
   revalidatePath("/dashboard/services/categories");

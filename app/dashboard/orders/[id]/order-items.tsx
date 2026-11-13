@@ -15,6 +15,7 @@ import {
   changeOrderItemStatusAction,
 } from "@/app/_actions/orders";
 import { ConfirmForm } from "@/app/_components/confirm-form";
+import { useOptionalToast } from "@/app/_components/toast";
 import {
   ITEM_KIND_LABEL,
   SERVICE_ITEM_STATUSES,
@@ -441,6 +442,7 @@ function ItemStatusSelect({
 }) {
   const [optimisticStatus, setOptimisticStatus] = useOptimistic(status);
   const [pending, startTransition] = useTransition();
+  const toast = useOptionalToast();
 
   return (
     <select
@@ -455,7 +457,8 @@ function ItemStatusSelect({
           const fd = new FormData();
           fd.set("itemId", itemId);
           fd.set("status", next);
-          await changeOrderItemStatusAction(fd);
+          const result = await changeOrderItemStatusAction(fd);
+          if (result?.error) toast?.error(result.error);
         });
       }}
       className="compact-input !py-1 !px-1.5 !text-[11px] !rounded-lg !w-[9.5rem] disabled:opacity-50 disabled:cursor-not-allowed"
@@ -479,6 +482,7 @@ function PriceCell({
   editable: boolean;
 }) {
   const [value, setValue] = useState(() => formatPriceInput(unitPrice));
+  const toast = useOptionalToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(false);
 
@@ -504,7 +508,15 @@ function PriceCell({
   if (!editable) return <>{formatTugrik(unitPrice)}</>;
 
   return (
-    <form action={changeOrderItemPriceAction}>
+    <form
+      action={async (fd) => {
+        const result = await changeOrderItemPriceAction(fd);
+        if (result?.error) {
+          toast?.error(result.error);
+          setValue(formatPriceInput(unitPrice));
+        }
+      }}
+    >
       <input type="hidden" name="itemId" value={itemId} />
       <div className="flex items-center justify-end">
         <input

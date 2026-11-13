@@ -73,6 +73,26 @@ function assertOrderItemAccess(
 }
 
 /**
+ * Lock-гүй, хямд урьдчилсан шалгалт: захиалга байгаа, салбарын хүрээнд,
+ * засах эрхтэй, түгжигдээгүй эсэх. Мөр нэмэхээс ӨМНӨ DB-д бичдэг алхам
+ * (жишээ нь нэгдсэн сангийн мөрийг тенантад adopt хийх) хийхээс өмнө дуудна.
+ * addOrderItemCommand өөрөө lock дор дахин шалгадаг тул энэ нь зөвхөн
+ * "шалгалтаас өмнө бичихгүй" гэсэн баталгаа.
+ */
+export async function assertOrderItemAddPrecheck(
+  actor: OrderCommandActor,
+  orderId: string,
+  scope?: string | null,
+): Promise<void> {
+  const order = await prisma.serviceOrder.findFirst({
+    where: { id: orderId, tenantId: actor.tenantId },
+    select: { id: true, branchId: true, status: true, assignedToId: true },
+  });
+  if (!order) throw new OrderCommandError("Засварын хуудас олдсонгүй.", 404, "ORDER_NOT_FOUND");
+  assertOrderItemAccess(actor, order, scope);
+}
+
+/**
  * Төлөгдсөн (PAID) төлбөртэй захиалгын мөнгөн дүнг (үнэ/тоо/төрөл, мөр цуцлах)
  * өөрчлөхгүй — эс бөгөөс төлсөн дүн ба нийт дүн зөрнө. Эхлээд төлбөрийг буцаана.
  * Шинэ мөр нэмэх, тайлбар засах, ажлын явц өөрчлөхийг зөвшөөрнө.

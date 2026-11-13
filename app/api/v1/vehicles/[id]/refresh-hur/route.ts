@@ -1,5 +1,6 @@
 import { jsonError, jsonOk, requireApiUser, requirePermission } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { requireActiveSubscriptionApi } from "@/lib/subscription-server";
 import { refreshVehicleFieldsFromHur } from "@/lib/vehicle-hur-refresh";
 
 // POST /api/v1/vehicles/[id]/refresh-hur — first staff-side HUR refresh
@@ -38,6 +39,8 @@ export async function POST(
   if (auth.response) return auth.response;
   const denied = requirePermission(auth.user, "vehicles.edit");
   if (denied) return denied;
+  const locked = await requireActiveSubscriptionApi(auth.user);
+  if (locked) return locked;
 
   const { id } = await ctx.params;
 

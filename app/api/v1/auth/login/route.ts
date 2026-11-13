@@ -2,12 +2,11 @@ import { enforceRateLimit, jsonError, jsonOk } from "@/lib/api";
 import { checkUserActive } from "@/lib/auth/active";
 import { buildApiLoginResponse } from "@/lib/auth/api-login";
 import { parseLoginDevice } from "@/lib/auth/login-device";
+import { MAX_LOGIN_ATTEMPTS, recordFailedLogin } from "@/lib/auth/login-lockout";
 import { IDENTIFIER_ERROR, loginIdentifierFromBody } from "@/lib/auth/login-identifier";
 import { verifyPassword } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
 import { setBypassContext } from "@/lib/tenant-context";
-
-const MAX_LOGIN_ATTEMPTS = 5;
 
 /**
  * POST /api/v1/auth/login
@@ -76,16 +75,9 @@ export async function POST(req: Request) {
 
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) {
-    const nextAttempts = user.failedLoginAttempts + 1;
-    const willLock = nextAttempts >= MAX_LOGIN_ATTEMPTS;
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        failedLoginAttempts: nextAttempts,
-        lockedAt: willLock ? new Date() : undefined,
-      },
-    });
-    if (willLock) {
+    // Атомаар нэмнэ — зэрэгцээ оролдлогууд тоологчийг дарахгүй.
+    const { locked } = await recordFailedLogin(user.id, MAX_LOGIN_ATTEMPTS);
+    if (locked) {
       return jsonError(
         423,
         "Хэт олон удаа буруу оролдсон тул аккаунт түгжигдсэн. Нууц үгээ сэргээнэ үү.",

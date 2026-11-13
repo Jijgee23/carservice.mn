@@ -116,8 +116,11 @@ export type SettlementListFilters = { from?: string; to?: string; branchId?: str
 export async function listSettlementsAction(filters: SettlementListFilters = {}): Promise<SettlementReadResult<Awaited<ReturnType<typeof listSettlements>> & { page: number; pageSize: number }>> {
   try {
     const user = await requireUser();
-    const pageSize = Math.min(200, Math.max(1, Math.trunc(filters.pageSize ?? 50)));
-    const page = Math.max(1, Math.trunc(filters.page ?? 1));
+    // Client-аас NaN/Infinity ирж болзошгүй — skip/take NaN болохоос хамгаална.
+    const rawSize = Number(filters.pageSize);
+    const rawPage = Number(filters.page);
+    const pageSize = Number.isFinite(rawSize) ? Math.min(200, Math.max(1, Math.trunc(rawSize))) : 50;
+    const page = Number.isFinite(rawPage) ? Math.max(1, Math.trunc(rawPage)) : 1;
     const result = await listSettlements({
       actor: user,
       filters: { from: filters.from || null, to: filters.to || null, branchId: filters.branchId || null, customerId: filters.customerId || null, includeVoided: filters.includeVoided },

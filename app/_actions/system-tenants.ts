@@ -14,15 +14,17 @@ function s(fd: FormData, key: string): string {
   return typeof v === "string" ? v.trim() : "";
 }
 
-export async function suspendTenantAction(formData: FormData): Promise<void> {
+export async function suspendTenantAction(formData: FormData): Promise<ConfirmActionResult> {
   await requireSuperAdmin();
   const id = s(formData, "id");
   if (!id) return;
   // Гараар зогсоосон — credit-ийн автомат нээлт хамаарахгүй (creditSuspended=false).
-  await prisma.tenant.update({
+  // update() нь олдохгүй id дээр P2025 шиддэг тул updateMany + count.
+  const res = await prisma.tenant.updateMany({
     where: { id },
     data: { suspended: true, creditSuspended: false },
   });
+  if (res.count === 0) return { error: "Байгууллага олдсонгүй." };
   revalidatePath("/system/tenants");
   revalidatePath(`/system/tenants/${id}`);
   revalidatePath("/system");
@@ -35,12 +37,13 @@ export async function activateTenantAction(formData: FormData): Promise<void> {
   // Credit-ээр зогсоосон байгууллагыг гараар сэргээвэл админы шийдвэр давуу:
   // автомат блокоос чөлөөлнө (creditExempt), эс бөгөөс маргаашийн cron дахин зогсооно.
   const current = await prisma.tenant.findUnique({ where: { id }, select: { creditSuspended: true } });
+  if (!current) return; // энгийн form action (void) — олдохгүй бол чимээгүй буцна
   await prisma.tenant.update({
     where: { id },
     data: {
       suspended: false,
       creditSuspended: false,
-      ...(current?.creditSuspended ? { creditExempt: true } : {}),
+      ...(current.creditSuspended ? { creditExempt: true } : {}),
     },
   });
   revalidatePath("/system/tenants");
@@ -76,18 +79,19 @@ export async function setTenantTestAction(formData: FormData): Promise<void> {
   revalidatePath("/discover");
 }
 
-export async function changeTenantPlanAction(formData: FormData): Promise<void> {
+export async function changeTenantPlanAction(formData: FormData): Promise<ConfirmActionResult> {
   await requireSuperAdmin();
   const id = s(formData, "id");
   const plan = s(formData, "plan");
   if (!id) return;
   if (!["FREE", "BUSINESS", "ENTERPRISE"].includes(plan)) {
-    throw new Error("Багц буруу.");
+    return { error: "Багц буруу." };
   }
-  await prisma.tenant.update({
+  const res = await prisma.tenant.updateMany({
     where: { id },
     data: { plan: plan as "FREE" | "BUSINESS" | "ENTERPRISE" },
   });
+  if (res.count === 0) return { error: "Байгууллага олдсонгүй." };
   revalidatePath("/system/tenants");
   revalidatePath(`/system/tenants/${id}`);
   revalidatePath("/system");

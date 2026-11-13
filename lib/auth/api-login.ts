@@ -9,6 +9,7 @@ import {
   ACCESS_TOKEN_MAX_AGE_SECONDS,
   signApiToken,
 } from "@/lib/auth/api-token";
+import { ipOrNull } from "@/lib/rate-limit";
 import { createHash } from "node:crypto";
 import type { LoginDevice } from "@/lib/auth/login-device";
 import {
@@ -53,9 +54,7 @@ function requestMeta(req: Request): {
 } {
   const userAgent = req.headers.get("user-agent");
   const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    null;
+    ipOrNull(req.headers);
   return { userAgent, ip };
 }
 

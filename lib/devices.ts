@@ -55,10 +55,22 @@ export function parseDeviceInput(
   };
 }
 
+/** Хоёр мөрийн эзэн (User / Account / SuperAdmin) яг адил эсэх. */
+export function sameDeviceOwner(
+  a: { userId: string | null; accountId: string | null; superAdminId: string | null },
+  b: { userId: string | null; accountId: string | null; superAdminId: string | null },
+): boolean {
+  return a.userId === b.userId && a.accountId === b.accountId && a.superAdminId === b.superAdminId;
+}
+
 /**
- * Төхөөрөмжийг бүртгэх/шинэчлэх. `deviceId`-аар upsert хийж, эзнийг (User эсвэл
- * Account) одоогийн нэвтэрсэн этгээдээр тогтооно (нэг install дээр өөр хүн
- * нэвтэрвэл эзэн дамжина).
+ * Төхөөрөмжийг бүртгэх/шинэчлэх. `deviceId` нь клиентийн өгсөн утга тул өөр
+ * эзний мөрийг шууд дарж бичихгүй:
+ *  - ижил эзний мөр байвал л шинэчилнэ;
+ *  - өөр эзний мөр байвал (нэг install дээр өөр хүн нэвтэрсэн, эсвэл хуурамч
+ *    deviceId) тэр хуучин мөрийг зориуд устгаж, одоогийн эзэнд ШИНЭ мөр
+ *    үүсгэнэ — хуучин эзний refresh token-ий pushDeviceId SetNull болж,
+ *    шинэ эзний push хэвийн ажиллана.
  */
 export async function registerDevice(
   owner: DeviceOwner,
@@ -84,6 +96,25 @@ export async function registerDevice(
       data: { firebaseToken: null },
     });
   }
+  const existing = await prisma.device.findUnique({
+    where: { deviceId: input.deviceId },
+    select: { id: true, userId: true, accountId: true, superAdminId: true },
+  });
+  if (existing) {
+    if (sameDeviceOwner(existing, data)) {
+      return await prisma.device.update({ where: { id: existing.id }, data });
+    }
+    // Өөр эзний мөр — зөвхөн тэр хэвээр байвал (зэрэгцээ өөрчлөлтийг дарахгүй) устгана.
+    await prisma.device.deleteMany({
+      where: {
+        id: existing.id,
+        userId: existing.userId,
+        accountId: existing.accountId,
+        superAdminId: existing.superAdminId,
+      },
+    });
+  }
+  // Устгасны дараа (эсвэл анх) — зэрэгцээ ижил эзний бүртгэлтэй таарвал upsert шинэчилнэ.
   return await prisma.device.upsert({
     where: { deviceId: input.deviceId },
     create: { deviceId: input.deviceId, ...data },

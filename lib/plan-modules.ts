@@ -63,6 +63,7 @@ export const API_MODULE_PATHS: readonly (readonly [string, PlanModuleCode])[] = 
   ["/api/v1/cash/types", "enable_finance"],
   ["/api/v1/cash/report", "enable_finance"],
   ["/api/v1/employee-schedules", "enable_staff_schedule"],
+  ["/api/v1/me/schedule", "enable_staff_schedule"],
   ["/api/v1/customers/notify", "enable_customer_broadcast"],
   ["/api/v1/reports/stock", "enable_inventory"],
   ["/api/v1/reports", "enable_reports"],

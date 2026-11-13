@@ -22,6 +22,11 @@ import {
 import { getSession } from "@/lib/auth";
 import { issueOtp, revokeAllOtps, verifyOtp } from "@/lib/auth/otp";
 import { revokeAllForUser } from "@/lib/auth/refresh-token";
+import {
+  MAX_LOGIN_ATTEMPTS,
+  recordFailedLogin,
+  revokeAllUserSessions,
+} from "@/lib/auth/login-lockout";
 import { resolveInitialWorkingBranchId } from "@/lib/auth/initial-working-branch";
 import { ALL_BRANCHES, signSession } from "@/lib/auth/session";
 import { resolveTodayLockedBranch } from "@/lib/employee-branch-lock";
@@ -41,6 +46,7 @@ import { prisma } from "@/lib/prisma";
 import {
   consumeRateLimit,
   ipFromHeaders,
+  ipOrNull,
   LOGIN_WINDOW_MS,
   RATE_LIMITED_MESSAGE,
 } from "@/lib/rate-limit";
@@ -150,13 +156,11 @@ export async function signUpAction(
 
     const h = await headers();
     const ua = h.get("user-agent");
-    const ip =
-      h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      h.get("x-real-ip") ||
-      null;
+    const ip = ipOrNull(h);
 
+    // SIGNUP OTP нь утсаар түлхүүрлэгдэнэ (lib/auth/otp.ts) — код очсон утас
+    // л 2-р шатанд баталгаажина.
     const { code } = await issueOtp({
-      email: data.adminEmail,
       phone: data.phone,
       type: "SIGNUP",
       userAgent: ua,
@@ -190,7 +194,6 @@ export async function signUpAction(
     };
   }
   const otpResult = await verifyOtp({
-    email: data.adminEmail,
     phone: data.phone,
     type: "SIGNUP",
     code: otpCode,
@@ -210,6 +213,11 @@ export async function signUpAction(
     };
   }
 
+  // 1-р шатнаас хойш өөр хэн нэгэн ижил РД/утас/имэйлээр бүртгүүлсэн байж
+  // болох тул давхцлыг дахин шалгана (1-р шаттай ижил fieldErrors).
+  const lateConflicts = await findTenantSignupConflicts(data);
+  if (lateConflicts) return { ok: false, fieldErrors: lateConflicts, values };
+
   // Transaction: Tenant + салбар + OWNER User
   const result = await createTenantWithOwner(data);
   if (!result.ok) {
@@ -224,7 +232,7 @@ export async function signUpAction(
   const userSession = await createUserSession({
     userId: session.userId,
     userAgent: h.get("user-agent"),
-    ip: h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || null,
+    ip: ipOrNull(h),
   });
   const token = await signSession({ ...session, sid: userSession.id });
   await setSessionCookie(token);
@@ -295,10 +303,7 @@ export async function checkLoginEmailAction(
   try {
     const h = await headers();
     const ua = h.get("user-agent");
-    const ip =
-      h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      h.get("x-real-ip") ||
-      null;
+    const ip = ipOrNull(h);
     const { code } = await issueOtp({
       email: user.email,
       phone: user.phone,
@@ -323,8 +328,6 @@ export async function checkLoginEmailAction(
 }
 
 // ---- SIGN IN --------------------------------------------------------------
-
-const MAX_LOGIN_ATTEMPTS = 5;
 
 export async function signInAction(
   _prev: ActionState,
@@ -375,23 +378,15 @@ export async function signInAction(
 
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) {
-    const nextAttempts = user.failedLoginAttempts + 1;
-    const willLock = nextAttempts >= MAX_LOGIN_ATTEMPTS;
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        failedLoginAttempts: nextAttempts,
-        lockedAt: willLock ? new Date() : undefined,
-      },
-    });
-    if (willLock) {
+    // Атомаар нэмнэ — зэрэгцээ оролдлогууд тоологчийг дарахгүй.
+    const { locked, remaining } = await recordFailedLogin(user.id, MAX_LOGIN_ATTEMPTS);
+    if (locked) {
       return {
         ok: false,
         message:
           "Хэт олон удаа буруу оролдсон тул аккаунт түгжигдсэн. Нууц үгээ сэргээнэ үү.",
       };
     }
-    const remaining = MAX_LOGIN_ATTEMPTS - nextAttempts;
     return {
       ok: false,
       message: `Нэвтрэх нэр эсвэл нууц үг буруу байна. Үлдсэн оролдлого: ${remaining}.`,
@@ -435,10 +430,7 @@ export async function signInAction(
   // Web session-ийг DB-д бүртгэж (төхөөрөмж/түүх), JWT-д sid шигтгэнэ.
   const h = await headers();
   const ua = h.get("user-agent");
-  const ip =
-    h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    h.get("x-real-ip") ||
-    null;
+  const ip = ipOrNull(h);
   const session = await createUserSession({ userId: user.id, userAgent: ua, ip });
 
   // Өнөөдрийн ажлын хувиараар тодорхой салбар "түгжигдсэн" бол (харах:
@@ -553,10 +545,7 @@ export async function requestPasswordResetAction(
   if (user) {
     const h = await headers();
     const ua = h.get("user-agent");
-    const ip =
-      h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      h.get("x-real-ip") ||
-      null;
+    const ip = ipOrNull(h);
     const { code } = await issueOtp({
       email: user.email,
       phone: user.phone,
@@ -658,9 +647,10 @@ export async function resetPasswordAction(
     action: "UPDATE",
     summary: "Нууц үг сэргээв (OTP-ээр баталгаажуулсан)",
   });
-  // Бүх идэвхтэй refresh token-уудыг хүчингүй болгож, бусад OTP-уудыг ч revoke
+  // Бүх идэвхтэй refresh token + web session-уудыг хүчингүй болгож, бусад OTP-уудыг ч revoke
   await Promise.all([
     revokeAllForUser(user.id),
+    revokeAllUserSessions(user.id),
     revokeAllOtps({ email, phone: user.phone }, "RESET_PASSWORD"),
   ]);
 
@@ -724,10 +714,7 @@ export async function requestActivationAction(
   if (user && !user.verified) {
     const h = await headers();
     const ua = h.get("user-agent");
-    const ip =
-      h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      h.get("x-real-ip") ||
-      null;
+    const ip = ipOrNull(h);
     const { code } = await issueOtp({
       email: user.email,
       phone: user.phone,
@@ -854,10 +841,7 @@ export async function activateAccountAction(
   // Web session-ийг DB-д бүртгэж, шууд нэвтрүүлнэ.
   const h = await headers();
   const ua = h.get("user-agent");
-  const ip =
-    h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    h.get("x-real-ip") ||
-    null;
+  const ip = ipOrNull(h);
   const session = await createUserSession({ userId: user.id, userAgent: ua, ip });
   // Сонгох салбар ганцхан бол (хувиараар түгжигдсэн, 1 eligible, эсвэл
   // байгууллага 1 салбартай) choose-branch-ийг алгасна.

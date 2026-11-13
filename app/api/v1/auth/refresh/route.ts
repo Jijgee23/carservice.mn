@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth/refresh-token";
 import { prisma } from "@/lib/prisma";
 import { setBypassContext } from "@/lib/tenant-context";
+import { ipOrNull } from "@/lib/rate-limit";
 
 /**
  * POST /api/v1/auth/refresh
@@ -44,10 +45,7 @@ export async function POST(req: Request) {
   }
 
   const userAgent = req.headers.get("user-agent");
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    null;
+  const ip = ipOrNull(req.headers);
 
   const result = await rotateRefreshToken(refreshToken.trim(), {
     userAgent,

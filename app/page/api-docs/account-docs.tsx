@@ -71,14 +71,15 @@ Res:  200 { "ok": true, "maskedPhone": "******33" }
 
         <Endpoint method="PUT" path="/api/v1/app/account/password" auth="bearer" tags={["Rate limit: 10/10 мин"]} title="Нууц үг тохируулах эсвэл солих (request-otp-оор авсан код заавал).">
           <Code>{`Req:  { "code": "123456", "password": "Shine2026" }   // 8–128 тэмдэгт, үсэг + тоо
-Res:  200 { "ok": true, "hasPassword": true }
+Res:  200 { "ok": true, "hasPassword": true, "accessToken": "<шинэ token>" }
+// Нууц үг солигдоход бусад бүх төхөөрөмжийн token хүчингүй болно; энэ төхөөрөмж accessToken-ыг хадгалж нэвтэрсэн хэвээр үлдэнэ.
 422  { "error": "...", "code": "PASSWORD_INVALID", "fieldErrors": { "password": "..." } }
 422  { "error": "Код буруу байна.", "code": "OTP_INVALID", "fieldErrors": { "code": "..." } }`}</Code>
         </Endpoint>
 
         <Endpoint method="DELETE" path="/api/v1/app/account/password" auth="bearer" tags={["Rate limit: 10/10 мин"]} title="Нууц үг устгах — цаашид зөвхөн кодоор нэвтэрнэ.">
           <Code>{`Req:  { "code": "123456" }
-Res:  200 { "ok": true, "hasPassword": false }
+Res:  200 { "ok": true, "hasPassword": false, "accessToken": "<шинэ token>" }   // бусад төхөөрөмж гарна; энэ төхөөрөмж шинэ token-ыг хадгална
 422  { "error": "Код буруу байна.", "code": "OTP_INVALID", "fieldErrors": { "code": "..." } }
 // Нууц үгээ мартсан: кодоор нэвтэрч (verify-otp), дараа нь PUT-оор шинийг тохируулна.`}</Code>
         </Endpoint>

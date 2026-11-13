@@ -2,7 +2,7 @@ import { jsonError, jsonOk, requireApiUser, requirePermission } from "@/lib/api"
 import { resolveWorkingBranch } from "@/lib/auth/api-branch";
 import { requireActiveSubscriptionApi } from "@/lib/subscription-server";
 import { ItemKind } from "@/app/generated/prisma/client";
-import { addOrderItemCommand, parseOrderItemDecimal } from "@/lib/orders/order-item-commands";
+import { addOrderItemCommand, assertOrderItemAddPrecheck, parseOrderItemDecimal } from "@/lib/orders/order-item-commands";
 import { adoptCatalogItemForTenant } from "@/lib/services/catalog-adopt";
 import { CATALOG_OPTION_PREFIX } from "@/lib/catalog/catalog-option";
 import { OrderCommandError } from "@/lib/orders/order-commands";
@@ -45,7 +45,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   try {
     // Нэгдсэн сангаас сонгосон бол эхлээд тенантын ажил/сэлбэг болгон холбоно.
+    // Захиалгын хүрээ/эрх/түгжээг adopt (тенантад Service үүсгэх) хийхээс өмнө шалгана.
     if (!serviceId && catalogItemId && !diagnosticTemplateId) {
+      await assertOrderItemAddPrecheck(auth.user, id, scopeResult.branchId);
       const adopted = await adoptCatalogItemForTenant(auth.user, catalogItemId);
       if (!adopted.ok) return jsonError(422, adopted.message, { fieldErrors: { serviceId: adopted.message } });
       serviceId = adopted.serviceId;

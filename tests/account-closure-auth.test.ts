@@ -26,7 +26,9 @@ test("admin block still wins and is not cleared by login", () => {
 test("customer bearer rejects deactivated/deleted; verify-otp reactivates", () => {
   assert.match(src("lib/auth/account-api-token.ts"), /account\.deactivatedAt\s*\|\|\s*account\.deletedAt/);
   const v = src("app/api/v1/app/auth/verify-otp/route.ts");
-  assert.match(v, /deactivatedAt:\s*null/);
+  // Reactivation goes through finishAccountLogin (clears deactivatedAt + bumps tokenVersion).
+  assert.match(v, /finishAccountLogin\(found\.id/);
+  assert.match(src("lib/auth/account-password.ts"), /deactivatedAt:\s*null/);
   assert.match(v, /reactivated/);
 });
 

@@ -187,12 +187,23 @@ test("STRUCTURAL: registerVehicleFromPlate asks for details when nothing is foun
   assert.match(fn, /if \(!input\.customerId\) \{\s*\n\s*const unowned = await registerPlateVehicle\(/);
 });
 
-test("STRUCTURAL: createOrderAction attaches the picked customer to an ownerless vehicle before creating", () => {
+test("STRUCTURAL: createOrderAction attaches the picked customer to an ownerless vehicle inside the create command, after validation", () => {
   const src = readSource("../app/_actions/orders.ts");
   const body = src.slice(src.indexOf("export async function createOrderAction("));
-  const attachIdx = body.indexOf("attachOwnerToUnownedVehicle(user, data.vehicleId, data.customerId)");
-  const commandIdx = body.indexOf("createOrderCommand({");
-  assert.ok(attachIdx !== -1 && attachIdx < commandIdx);
+  // No pre-validation write: the attach is delegated to the command.
+  assert.doesNotMatch(body.slice(0, body.indexOf("createOrderCommand({")), /attachOwnerToUnownedVehicle\(/);
+  assert.match(body, /attachUnownedVehicleOwner: !plateIntake && !plateLink/);
+  const api = readSource("../app/api/v1/orders/route.ts");
+  assert.doesNotMatch(api, /attachOwnerToUnownedVehicle\(/);
+  assert.match(api, /attachUnownedVehicleOwner: true/);
+
+  const cmd = readSource("../lib/orders/order-create-command.ts");
+  const validateIdx = cmd.indexOf("validateOrderReferences({");
+  const assigneeIdx = cmd.indexOf("await validateOrderAssignee(scopedTx");
+  const attachIdx = cmd.indexOf("if (claimUnownedVehicle && vehicle) {");
+  assert.ok(validateIdx !== -1 && assigneeIdx > validateIdx && attachIdx > assigneeIdx, "attach must follow every check");
+  // Conditional write: never overwrites an owner set concurrently.
+  assert.match(cmd, /where: \{ id: vehicle\.id, tenantId: input\.tenantId, customerId: null \}/);
 });
 
 test("STRUCTURAL: step actions require order-create and vehicle-create rights", () => {

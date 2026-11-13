@@ -16,8 +16,13 @@ import {
 import { buildMeta, getApiPageInfo } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
 import { canEditOrder, orderReadWhere } from "@/lib/auth/order-access";
-import { withOrderTransaction } from "@/lib/order-time-booking";
-import { canFillDiagnostics, isOrderLocked, serviceItemTimingPatch, type OrderStatus } from "@/lib/orders";
+import {
+  commitDiagnosticReportCommand,
+  type DiagnosticReportCommitFailureCode,
+} from "@/lib/diagnostic-report-commit";
+import { canFillDiagnostics, isOrderLocked, type OrderStatus } from "@/lib/orders";
+import { UploadValidationError } from "@/lib/storage";
+import { requireActiveSubscriptionApi } from "@/lib/subscription-server";
 
 export async function GET(req: Request) {
   const auth = await requireApiUser(req);
@@ -82,6 +87,8 @@ export async function POST(req: Request) {
   if (auth.response) return auth.response;
   const denied = requirePermission(auth.user, "diagnostics.create");
   if (denied) return denied;
+  const locked = await requireActiveSubscriptionApi(auth.user);
+  if (locked) return locked;
 
   // Multipart form-data — зураг хавсаргахын тулд
   let formData: FormData;
@@ -129,12 +136,15 @@ export async function POST(req: Request) {
   if (itemId) {
     // This preflight read only infers the parent order and avoids doing
     // upload work for an obviously invalid request. The authoritative item
-    // and order checks happen again under the parent order lock below.
+    // and order checks happen again under the parent order lock in the
+    // shared commit command.
     const item = await prisma.serviceItem.findFirst({
       where: {
         id: itemId,
         ...(orderId ? { orderId } : {}),
         kind: "DIAGNOSTIC",
+        status: { in: ["PENDING", "IN_PROGRESS"] }, // COMPLETED мөр түгжигдсэн
+        diagnosticReportId: null,
         order: {
           tenantId: auth.user.tenantId,
           ...(scope ? { branchId: scope } : {}),
@@ -181,6 +191,8 @@ export async function POST(req: Request) {
     finalVehicleId = item.order.vehicleId;
     finalBranchId = item.order.branchId;
   } else if (orderId) {
+    // Preflight only (avoids upload work); the same checks are repeated
+    // against the locked order row before the report is written.
     const order = await prisma.serviceOrder.findFirst({
       where: {
         id: orderId,
@@ -255,10 +267,12 @@ export async function POST(req: Request) {
     if (e instanceof ReportDataValidationError) {
       return jsonError(422, e.message);
     }
-    return jsonError(
-      400,
-      e instanceof Error ? e.message : "Файл хадгалахад алдаа.",
-    );
+    if (e instanceof UploadValidationError) {
+      return jsonError(400, e.message);
+    }
+    // Filesystem/driver errors can carry server paths — log, never echo.
+    console.error("[diagnostics/reports] upload failed", e);
+    return jsonError(500, "Файл хадгалахад алдаа гарлаа.");
   }
 
   let validated: Record<string, ReportEntry>;
@@ -274,144 +288,61 @@ export async function POST(req: Request) {
       ? Math.floor(mileage)
       : null;
 
-  if (itemId) {
-    // The upload deliberately happened before this transaction. Everything
-    // that decides whether an item can be completed, and both writes that
-    // complete it, must be serialized by the parent order lock.
-    return commitWithReportUploadCleanup(
-      collected.uploadedPaths,
-      () =>
-        withOrderTransaction(
-          auth.user.tenantId,
-          linkedOrderId!,
-          {
-            id: true,
-            customerId: true,
-            vehicleId: true,
-            branchId: true,
-            status: true,
-            assignedToId: true,
-          },
-          async (tx, rawOrder) => {
-        const order = rawOrder as {
-          id: string;
-          customerId: string;
-          vehicleId: string;
-          branchId: string;
-          status: string;
-          assignedToId: string | null;
-        } | null;
-        if (!order) return jsonError(404, "Засварын хуудас олдсонгүй.");
-        if (scope && order.branchId !== scope) {
-          return jsonError(403, "Зөвхөн өөрийн салбарт оношилгоо бүртгэх боломжтой.");
-        }
-        if (!canEditOrder(auth.user, order)) {
-          return jsonError(403, "Танд энэ засварын хуудсанд оношилгоо бөглөх эрх байхгүй.");
-        }
-        const txOrderStatus = order.status as OrderStatus;
-        if (isOrderLocked(txOrderStatus)) {
-          return jsonError(422, "Дууссан / цуцлагдсан захиалгад оношилгоо бөглөх боломжгүй.", {
-            code: "ORDER_LOCKED",
-          });
-        }
-        if (!canFillDiagnostics(txOrderStatus)) {
-          return jsonError(422, "Оношилгооны тайланг зөвхөн ажиллаж буй захиалгад бүртгэнэ үү.", {
-            code: "ORDER_STATUS_INVALID",
-          });
-        }
-
-        const item = await tx.serviceItem.findFirst({
-          where: {
-            id: itemId,
-            orderId: order.id,
-            kind: "DIAGNOSTIC",
-            status: { in: ["PENDING", "IN_PROGRESS"] }, // COMPLETED мөр түгжигдсэн
-            diagnosticReportId: null,
-          },
-          select: { id: true, diagnosticTemplateId: true, startedAt: true },
-        });
-        if (!item) {
-          return jsonError(422, "Оношилгооны мөр олдсонгүй эсвэл аль хэдийн бөглөгдсөн байна.");
-        }
-        if (item.diagnosticTemplateId !== template.id) {
-          return jsonError(422, "Оношилгооны мөрийн загвартай тохирох загвар сонгоно уу.", {
-            code: "DIAGNOSTIC_TEMPLATE_MISMATCH",
-          });
-        }
-
-        const report = await tx.diagnosticReport.create({
-          data: {
-            templateVersion: template.version,
-            data: validated,
-            maxSeverity: computeReportSeverity(schema, validated),
-            signatureUrl: collected.signatureUrl,
-            mileageAtReport: mileageVal,
-            notes: notes || null,
-            tenantId: auth.user.tenantId,
-            templateId: template.id,
-            orderId: order.id,
-            customerId: order.customerId,
-            vehicleId: order.vehicleId,
-            branchId: order.branchId,
-            filledById: auth.user.id,
-          },
-          select: {
-            id: true,
-            createdAt: true,
-            templateVersion: true,
-            orderId: true,
-            customerId: true,
-            vehicleId: true,
-            branchId: true,
-          },
-        });
-        await tx.serviceItem.update({
-          where: { id: item.id },
-          data: {
-            diagnosticReportId: report.id,
-            status: "COMPLETED",
-            ...serviceItemTimingPatch("COMPLETED", item.startedAt),
-          },
-        });
-        return jsonOk({ report }, { status: 201 });
-          },
-        ),
-      (result) => result instanceof Response ? result.ok : true,
-    );
-  }
-
-  const report = await commitWithReportUploadCleanup(
+  // The upload deliberately happened before this commit. Everything that
+  // decides whether a linked report may be written (order, branch, edit right,
+  // status, item, template) is re-validated under the parent order lock inside
+  // the shared command; the preflight checks above only avoid upload work.
+  const committed = await commitWithReportUploadCleanup(
     collected.uploadedPaths,
     () =>
-      prisma.diagnosticReport.create({
-        data: {
-          templateVersion: template.version,
-          data: validated,
-          maxSeverity: computeReportSeverity(schema, validated),
-          signatureUrl: collected.signatureUrl,
-          mileageAtReport: mileageVal,
-          notes: notes || null,
-          tenantId: auth.user.tenantId,
-          templateId: template.id,
-          orderId: linkedOrderId,
-          customerId: finalCustomerId,
-          vehicleId: finalVehicleId,
-          branchId: finalBranchId,
-          filledById: auth.user.id,
-        },
-        select: {
-          id: true,
-          createdAt: true,
-          templateVersion: true,
-          orderId: true,
-          customerId: true,
-          vehicleId: true,
-          branchId: true,
-        },
+      commitDiagnosticReportCommand({
+        tenantId: auth.user.tenantId,
+        actorId: auth.user.id,
+        actor: auth.user,
+        workingBranchId: scope,
+        orderId: linkedOrderId,
+        itemId: itemId || null,
+        templateId: template.id,
+        templateVersion: template.version,
+        data: validated,
+        signatureUrl: collected.signatureUrl,
+        mileageAtReport: mileageVal,
+        notes: notes || null,
+        maxSeverity: computeReportSeverity(schema, validated),
+        standaloneCustomerId: finalCustomerId,
+        standaloneVehicleId: finalVehicleId,
+        standaloneBranchId: finalBranchId,
       }),
+    (result) => result.ok,
   );
+  if (!committed.ok) return commitFailureResponse(committed.code);
 
-  return jsonOk({ report }, { status: 201 });
+  return jsonOk({ report: committed.report }, { status: 201 });
+}
+
+function commitFailureResponse(code: DiagnosticReportCommitFailureCode): Response {
+  switch (code) {
+    case "ORDER_NOT_FOUND":
+      return jsonError(404, "Засварын хуудас олдсонгүй.");
+    case "ORDER_SCOPE_FORBIDDEN":
+      return jsonError(403, "Зөвхөн өөрийн салбарт оношилгоо бүртгэх боломжтой.");
+    case "ORDER_EDIT_FORBIDDEN":
+      return jsonError(403, "Танд энэ засварын хуудсанд оношилгоо бөглөх эрх байхгүй.");
+    case "ORDER_LOCKED":
+      return jsonError(422, "Дууссан / цуцлагдсан захиалгад оношилгоо бөглөх боломжгүй.", {
+        code: "ORDER_LOCKED",
+      });
+    case "ORDER_NOT_IN_PROGRESS":
+      return jsonError(422, "Оношилгооны тайланг зөвхөн ажиллаж буй захиалгад бүртгэнэ үү.", {
+        code: "ORDER_STATUS_INVALID",
+      });
+    case "DIAGNOSTIC_ITEM_UNAVAILABLE":
+      return jsonError(422, "Оношилгооны мөр олдсонгүй эсвэл аль хэдийн бөглөгдсөн байна.");
+    case "DIAGNOSTIC_TEMPLATE_MISMATCH":
+      return jsonError(422, "Оношилгооны мөрийн загвартай тохирох загвар сонгоно уу.", {
+        code: "DIAGNOSTIC_TEMPLATE_MISMATCH",
+      });
+  }
 }
 
 function str(fd: FormData, key: string): string {

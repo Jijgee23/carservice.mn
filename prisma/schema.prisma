@@ -1747,6 +1747,8 @@ model Account {
   // Тохируулах/солих/устгахад шинэ ACCOUNT_PASSWORD OTP шаардана (lib/auth/account-password.ts).
   passwordHash      String?
   passwordUpdatedAt DateTime?
+  // Мобайл API token-ийн хувилбар (JWT `tv`). Нууц үг солих/устгах, сэргээх үед нэмэгдэж хуучин token-ууд хүчингүй.
+  tokenVersion      Int       @default(0)
   isActive          Boolean   @default(true) // false бол нэвтрэлт блоклогдоно
   // Хэрэглэгч өөрөө түр хаасан. Дахин нэвтрэхэд null болно (isActive-аас тусдаа —
   // isActive=false бол админ блоклосон, нэвтрэлтээр сэргэхгүй).

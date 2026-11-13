@@ -200,9 +200,13 @@ test("POST /api/v1/diagnostics/reports gates on diagnostics.create before parsin
 
 test("POST /api/v1/diagnostics/reports computes and stores maxSeverity on both diagnosticReport.create calls", () => {
   const { post, full } = reportsRouteSections();
+  // The route computes severity once and hands it to commitDiagnosticReportCommand,
+  // which writes it on both the linked (locked tx) and standalone create paths.
   const occurrences = post.match(/maxSeverity:\s*computeReportSeverity\(schema,\s*validated\)/g) ?? [];
-  assert.equal(occurrences.length, 2, "both the itemId-transaction path and the plain path must set maxSeverity");
+  assert.equal(occurrences.length, 1, "the route must compute maxSeverity for the shared commit command");
   assert.match(full, /import\s*\{[^}]*computeReportSeverity[^}]*\}\s*from\s*"@\/lib\/diagnostics"/);
+  const commit = readFileSync(new URL("../lib/diagnostic-report-commit.ts", import.meta.url), "utf8");
+  assert.equal((commit.match(/maxSeverity:\s*baseWrite\.maxSeverity/g) ?? []).length, 2, "both create paths must store maxSeverity");
 });
 
 // --- Source-pattern: isOrderLocked/canFillDiagnostics replace the old inline check
@@ -290,7 +294,12 @@ test("GET /api/v1/diagnostics/templates/[id] gates on diagnostics.view before th
   const findFirst = source.indexOf("prisma.diagnosticTemplate.findFirst");
   assert.ok(permCheck >= 0, "GET must call requirePermission(auth.user, \"diagnostics.view\")");
   assert.ok(findFirst > permCheck, "permission check must precede the Prisma read");
-  assert.match(source, /where:\s*\{\s*id,\s*tenantId:\s*auth\.user\.tenantId\s*\}/);
+  // Tenant-scoped via tenantVisibleTemplateWhere (own templates + system
+  // defaults readable by every tenant), combined with the id in an AND.
+  assert.match(
+    source,
+    /where:\s*\{\s*AND:\s*\[\s*\{\s*id\s*\},\s*tenantVisibleTemplateWhere\(auth\.user\.tenantId\)\s*\]\s*\}/,
+  );
 });
 
 // --- Wiring sanity: every touched handler authenticates before authorizing

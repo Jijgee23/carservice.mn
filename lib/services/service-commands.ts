@@ -544,16 +544,52 @@ export async function adjustServiceStockCommand(input: {
     throw new ServiceCommandError("Бараа олдсонгүй.", 404, "SERVICE_NOT_FOUND");
   }
 
+  // Fast-path validation with the value just read (friendly message); the
+  // authoritative check is the conditional atomic update below.
   const current = svc.stock ?? new Prisma.Decimal(0);
-  const result = computeStockAdjustment(current, data.direction, data.amount);
-  if (!result.ok) {
-    throw new ServiceCommandError("Хүсэлт буруу.", 422, "VALIDATION_FAILED", result.fieldErrors);
+  const precheck = computeStockAdjustment(current, data.direction, data.amount);
+  if (!precheck.ok) {
+    throw new ServiceCommandError("Хүсэлт буруу.", 422, "VALIDATION_FAILED", precheck.fieldErrors);
   }
 
-  await prisma.service.update({
-    where: { id: svc.id },
-    data: { stock: result.next },
+  // NULL + x = NULL in SQL, so normalise a never-set stock to 0 first.
+  if (svc.stock == null) {
+    await prisma.service.updateMany({
+      where: { id: svc.id, tenantId: actor.tenantId, stock: null },
+      data: { stock: 0 },
+    });
+  }
+
+  // Atomic increment/decrement — concurrent adjustments (or order consumption)
+  // can't overwrite each other, and `out` never drives the balance negative.
+  const isOut = data.direction === "out";
+  const updated = await prisma.service.updateMany({
+    where: {
+      id: svc.id,
+      tenantId: actor.tenantId,
+      type: "GOODS",
+      ...(isOut ? { stock: { gte: data.amount } } : {}),
+    },
+    data: { stock: isOut ? { decrement: data.amount } : { increment: data.amount } },
   });
+
+  const after = await prisma.service.findFirst({
+    where: { id: svc.id, tenantId: actor.tenantId, type: "GOODS" },
+    select: { stock: true },
+  });
+  if (!after) {
+    throw new ServiceCommandError("Бараа олдсонгүй.", 404, "SERVICE_NOT_FOUND");
+  }
+  const next = after.stock ?? new Prisma.Decimal(0);
+  if (updated.count === 0) {
+    // Lost a race: the balance changed after our read and no longer covers `out`.
+    throw new ServiceCommandError("Хүсэлт буруу.", 422, "VALIDATION_FAILED", {
+      amount: `Үлдэгдэл сөрөг болж байна. Одоо: ${next.toString()}`,
+    });
+  }
+  // Derive `before` from the post-update value so the audit pair is consistent
+  // even if another writer touched the row between our read and the update.
+  const before = isOut ? next.plus(data.amount) : next.minus(data.amount);
 
   await logAudit({
     tenantId: actor.tenantId,
@@ -561,12 +597,12 @@ export async function adjustServiceStockCommand(input: {
     entity: "Service",
     entityId: svc.id,
     action: "STOCK_CHANGE",
-    summary: `${data.direction === "in" ? "+" : "−"}${data.amount.toString()} (гар тохируулга)`,
-    before: { stock: current.toString() },
-    after: { stock: result.next.toString(), reason: "MANUAL_ADJUST" },
+    summary: `${isOut ? "−" : "+"}${data.amount.toString()} (гар тохируулга)`,
+    before: { stock: before.toString() },
+    after: { stock: next.toString(), reason: "MANUAL_ADJUST" },
   });
 
-  return { id: svc.id, stock: result.next };
+  return { id: svc.id, stock: next };
 }
 
 // --- bulk category re-assignment -------------------------------------------

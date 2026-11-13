@@ -1,4 +1,11 @@
-import { jsonError, jsonOk } from "@/lib/api";
+import { enforceRateLimit, jsonError, jsonOk } from "@/lib/api";
+import {
+  ACCOUNT_BOOKING_RATE_BUCKET,
+  ACCOUNT_BOOKING_RATE_LIMIT,
+  OPEN_APPOINTMENTS_LIMIT_MESSAGE,
+  countOpenAccountAppointments,
+  hasReachedOpenAppointmentLimit,
+} from "@/lib/appointments/account-booking-limits";
 import {
   ensureAppointmentFeeCheckout,
   serializeAppointmentFee,
@@ -267,12 +274,18 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const account = await getApiAccountFromRequest(req);
   if (!account) return jsonError(401, "Нэвтрэх шаардлагатай.");
+  // Дансаар (IP биш) хязгаарлана — нэг данс олон салбарыг хуурамч захиалгаар дүүргэхгүй.
+  const limited = enforceRateLimit(req, ACCOUNT_BOOKING_RATE_BUCKET, ACCOUNT_BOOKING_RATE_LIMIT, account.id);
+  if (limited) return limited;
 
   let body: unknown;
   try {
     body = await req.json();
   } catch {
     return jsonError(400, "JSON body шаардлагатай.");
+  }
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    return jsonError(400, "JSON object body шаардлагатай.");
   }
   const b = body as {
     branchId?: unknown;
@@ -306,6 +319,9 @@ export async function POST(req: Request) {
   }
   if (when.getTime() < Date.now()) {
     return jsonError(400, "Өнгөрсөн цаг сонгох боломжгүй.");
+  }
+  if (hasReachedOpenAppointmentLimit(await countOpenAccountAppointments(account.id))) {
+    return jsonError(409, OPEN_APPOINTMENTS_LIMIT_MESSAGE, { code: "TOO_MANY_OPEN_APPOINTMENTS" });
   }
 
   const branch = await prisma.branch.findUnique({

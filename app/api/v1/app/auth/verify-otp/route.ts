@@ -1,6 +1,7 @@
 import { enforceRateLimit, jsonError, jsonOk } from "@/lib/api";
 import { LOGIN_WINDOW_MS } from "@/lib/rate-limit";
 import { signAccountApiToken } from "@/lib/auth/account-api-token";
+import { finishAccountLogin } from "@/lib/auth/account-password";
 import { verifyPhoneOtp } from "@/lib/auth/otp";
 import { normalizePhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
@@ -39,30 +40,26 @@ export async function POST(req: Request) {
     return jsonError(401, msg);
   }
 
-  let account = await prisma.account.findUnique({ where: { phone } });
-  if (account && !account.isActive) {
+  const found = await prisma.account.findUnique({ where: { phone } });
+  if (found && !found.isActive) {
     return jsonError(403, "Энэ дугаар түр хаагдсан байна.");
   }
   let reactivated = false;
-  if (!account) {
+  let account: { id: string; phone: string; name: string | null; passwordHash: string | null; tokenVersion: number };
+  if (!found) {
     account = await prisma.account.create({
       data: { phone, name: name || null, lastLoginAt: new Date() },
     });
   } else {
-    reactivated = Boolean(account.deactivatedAt);
-    account = await prisma.account.update({
-      where: { id: account.id },
-      data: {
-        lastLoginAt: new Date(),
-        deactivatedAt: null,
-        ...(name && !account.name ? { name } : {}),
-      },
-    });
+    reactivated = Boolean(found.deactivatedAt);
+    // Сэргээх үед tokenVersion нэмэгдэнэ (хуучин token-ууд хүчингүй) — шинэ хувилбараар олгоно.
+    account = await finishAccountLogin(found.id, { name: name && !found.name ? name : null });
   }
 
   const accessToken = await signAccountApiToken({
     accountId: account.id,
     phone: account.phone,
+    tv: account.tokenVersion,
   });
 
   return jsonOk({

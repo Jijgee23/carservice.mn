@@ -177,7 +177,10 @@ export async function POST(req: Request) {
 
   const prep = await prepareCreateEmployee(prisma, actor, formData);
   if (!prep.ok) {
-    return jsonError(422, prep.error, { code: prep.code, fieldErrors: prep.fieldErrors });
+    return jsonError(prep.code === "ROLE_EXCEEDS_ACTOR" ? 403 : 422, prep.error, {
+      code: prep.code,
+      fieldErrors: prep.fieldErrors,
+    });
   }
 
   const result = await createEmployee(prisma, actor, prep.data, prep.wantsOwner);

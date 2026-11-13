@@ -1,4 +1,5 @@
 import { enforceRateLimit, jsonError, jsonOk } from "@/lib/api";
+import { ipOrNull } from "@/lib/rate-limit";
 import { getApiAccountFromRequest } from "@/lib/auth/account-api-token";
 import { issuePhoneOtp } from "@/lib/auth/otp";
 import { maskPhone } from "@/lib/phone";
@@ -18,7 +19,7 @@ export async function POST(req: Request) {
       type: "ACCOUNT_PASSWORD",
       accountId: account.id,
       userAgent: req.headers.get("user-agent"),
-      ip: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || null,
+      ip: ipOrNull(req.headers),
     });
     await sendOtpSms(code, "ACCOUNT_PASSWORD", account.phone);
   } catch (e) {

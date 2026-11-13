@@ -31,6 +31,7 @@ import {
 } from "@/lib/employee-schedule-commands";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
+import { requireActiveSubscriptionApi } from "@/lib/subscription-server";
 
 // Body carries `segments` as a structured array; the core still takes a JSON
 // string (`segmentsJson`) — matching the web action's FormData contract
@@ -47,6 +48,8 @@ export async function PUT(
   if (auth.response) return auth.response;
   const denied = requirePermission(auth.user, "employees.schedule");
   if (denied) return denied;
+  const locked = await requireActiveSubscriptionApi(auth.user);
+  if (locked) return locked;
 
   const { userId } = await ctx.params;
 
@@ -112,6 +115,8 @@ export async function DELETE(
   if (auth.response) return auth.response;
   const denied = requirePermission(auth.user, "employees.schedule");
   if (denied) return denied;
+  const locked = await requireActiveSubscriptionApi(auth.user);
+  if (locked) return locked;
 
   const { userId } = await ctx.params;
 

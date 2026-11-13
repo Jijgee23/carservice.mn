@@ -36,6 +36,7 @@ import { setBypassContext } from "@/lib/tenant-context";
 import {
   AppointmentCommandError,
   STAFF_SCOPE_MESSAGES,
+  assertStaffScope,
   cancelAppointmentByAccountCommand,
   confirmAppointmentCommand,
   markAppointmentArrivedCommand,
@@ -46,6 +47,14 @@ import {
   type AppointmentCommandActor,
 } from "@/lib/appointments/appointment-commands";
 import { registerAppointmentByStaffCommand } from "@/lib/appointments/appointment-create-command";
+import {
+  ACCOUNT_BOOKING_RATE_BUCKET,
+  ACCOUNT_BOOKING_RATE_LIMIT,
+  OPEN_APPOINTMENTS_LIMIT_MESSAGE,
+  countOpenAccountAppointments,
+  hasReachedOpenAppointmentLimit,
+} from "@/lib/appointments/account-booking-limits";
+import { consumeRateLimit } from "@/lib/rate-limit";
 import { rescheduleAppointmentByAccountCore } from "@/lib/appointments/account-reschedule";
 import {
   bulkChangeAppointmentCategoryCommand,
@@ -111,6 +120,10 @@ export async function createAppointment(
   formData: FormData,
 ): Promise<AppointmentActionState> {
   const account = await requireAccount();
+  // Mobile POST /api/v1/app/appointments-тэй нэг дансны хязгаарыг хуваалцана.
+  if (!consumeRateLimit(`${ACCOUNT_BOOKING_RATE_BUCKET}:${account.id}`, ACCOUNT_BOOKING_RATE_LIMIT).ok) {
+    return { ok: false, message: "Хэт олон хүсэлт илгээлээ. Түр хүлээгээд дахин оролдоно уу." };
+  }
 
   const branchId = s(formData, "branchId");
   const requestedRaw = s(formData, "requestedAt");
@@ -136,6 +149,9 @@ export async function createAppointment(
 
   if (Object.keys(fieldErrors).length > 0) {
     return { ok: false, fieldErrors };
+  }
+  if (hasReachedOpenAppointmentLimit(await countOpenAccountAppointments(account.id))) {
+    return { ok: false, message: OPEN_APPOINTMENTS_LIMIT_MESSAGE };
   }
 
   const branch = await prisma.branch.findUnique({
@@ -431,6 +447,17 @@ export async function repairAppointmentOrderLinkAction(
   }
   if (user.tenantId !== appointment.tenantId || !canEdit(user, "orders")) {
     return { ok: false, message: "Танд энэ холбоосыг засах эрх байхгүй." };
+  }
+  // Бусад staff үйлдэлтэй адил: ажиллаж буй салбарын хүрээ + идэвхтэй багц
+  // (assertStaffScope нь appointments.edit, scope && branchId !== scope, багц
+  // түгжигдсэн эсэхийг шалгана).
+  try {
+    await assertStaffScope(actorFrom(user), appointment.branchId);
+  } catch (e) {
+    const known = knownAuthorizationMessage(e, STAFF_SCOPE_MESSAGES);
+    if (known) return { ok: false, message: known };
+    logUnexpectedActionError("repairAppointmentOrderLinkAction", e);
+    return { ok: false, message: ACTION_GENERIC_ERROR_MESSAGE };
   }
   if (appointment.status !== "PENDING" && appointment.status !== "CONFIRMED") {
     return { ok: false, message: "Энэ цагийн захиалга одоо идэвхгүй байна." };

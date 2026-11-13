@@ -54,6 +54,7 @@ import {
   validateOrderAssignee,
 } from "@/lib/orders/order-commands";
 import { createOrderCommand } from "@/lib/orders/order-create-command";
+import { MAX_BULK_ORDER_IDS } from "@/lib/orders/order-bulk-commands";
 import {
   type PlateIntakeInput,
   type PlateLookupResult,
@@ -66,7 +67,6 @@ import {
 import {
   PlateIntakeError,
   type RegisteredListVehicle,
-  attachOwnerToUnownedVehicle,
   findOrCreateCustomerByPhone,
   linkPlateCustomer,
   registerVehicleFromPlate,
@@ -80,6 +80,7 @@ import { adoptCatalogItemForTenant } from "@/lib/services/catalog-adopt";
 import { CATALOG_OPTION_PREFIX } from "@/lib/catalog/catalog-option";
 import {
   addOrderItemCommand,
+  assertOrderItemAddPrecheck,
   cancelOrderItemCommand,
   changeOrderItemPriceCommand,
   changeOrderItemStatusCommand,
@@ -91,6 +92,7 @@ import {
   OrderScheduleCommandError,
 } from "@/lib/orders/order-schedule-commands";
 import { parseNonNegativeDecimal } from "@/lib/decimal-input";
+import type { ConfirmActionResult } from "@/lib/confirm-action";
 
 export type OrderActionState = {
   ok: boolean;
@@ -449,15 +451,8 @@ export async function createOrderAction(
 
   // Жагсаалтын хайлтаас эзэмшигчгүй бүртгэсэн машиныг сонгосон үйлчлүүлэгчид
   // холбоно (эзэнтэй машинд хөндөхгүй — тааралгүй бол команд өөрөө татгалзана).
-  if (!plateIntake && !plateLink && data.vehicleId && data.customerId) {
-    try {
-      await attachOwnerToUnownedVehicle(user, data.vehicleId, data.customerId);
-    } catch (e) {
-      logUnexpectedOrderActionError("create", e);
-      return { ok: false, message: "Серверийн алдаа гарлаа. Дахин оролдоно уу." };
-    }
-  }
-
+  // Холболтыг createOrderCommand бүх шалгалтын (салбар/үйлчлүүлэгч/мастер/
+  // цаг) дараа нэг transaction-д бичнэ — татгалзсан хүсэлт эзэмшлийг өөрчлөхгүй.
   try {
     const created = await createOrderCommand({
       tenantId: user.tenantId,
@@ -474,6 +469,7 @@ export async function createOrderAction(
       workingBranchId: scope,
       isPostpaid: parseIsPostpaid(formData),
       isInternal: parseIsInternal(formData),
+      attachUnownedVehicleOwner: !plateIntake && !plateLink,
     });
 
     if (appointmentId) {
@@ -507,7 +503,7 @@ export async function lookupPlateForOrderAction(
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
   }
-  if (!plate.trim()) return { ok: false, message: "Улсын дугаар шаардлагатай." };
+  if (typeof plate !== "string" || !plate.trim()) return { ok: false, message: "Улсын дугаар шаардлагатай." };
   try {
     return { ok: true, result: await lookupPlateForOrder(user, plate) };
   } catch (e) {
@@ -519,6 +515,17 @@ export async function lookupPlateForOrderAction(
 type PlateStepResult<T> =
   | { ok: true; value: T }
   | { ok: false; message: string; fieldErrors?: Record<string, string> };
+
+// Server action-ийн аргумент client-ээс шууд ирдэг (TS төрөл баталгаа биш).
+const INVALID_REQUEST = { ok: false, message: "Буруу хүсэлт." } as const;
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+function isOptString(v: unknown): v is string | null | undefined {
+  return v == null || typeof v === "string";
+}
 
 /**
  * «Улсын дугаар» 1-р алхам: бүртгэлгүй дугаарыг эзэмшигчгүйгээр шууд tenant-д
@@ -537,6 +544,16 @@ export async function registerPlateVehicleAction(input: {
   }
   if (!canCreate(user, "vehicles")) {
     return { ok: false, message: "Танд машин бүртгэх эрх байхгүй — жагсаалтаас сонгоно уу." };
+  }
+  if (
+    !isRecord(input) ||
+    typeof input.plate !== "string" ||
+    typeof input.fromLookup !== "boolean" ||
+    !isRecord(input.vehicle) ||
+    typeof input.vehicle.make !== "string" ||
+    typeof input.vehicle.model !== "string"
+  ) {
+    return INVALID_REQUEST;
   }
   try {
     const value = await registerPlateVehicle(user, input);
@@ -570,7 +587,16 @@ export async function registerVehicleFromPlateAction(input: {
   if (!canCreate(user, "vehicles")) {
     return { ok: false, message: "Танд машин бүртгэх эрх байхгүй." };
   }
-  if (!input.plate.trim()) return { ok: false, message: "Улсын дугаар шаардлагатай." };
+  if (
+    !isRecord(input) ||
+    !isOptString(input.plate) ||
+    !isOptString(input.customerId) ||
+    !isOptString(input.make) ||
+    !isOptString(input.model)
+  ) {
+    return INVALID_REQUEST;
+  }
+  if (!input.plate?.trim()) return { ok: false, message: "Улсын дугаар шаардлагатай." };
   try {
     const value = await registerVehicleFromPlate(user, {
       plate: input.plate,
@@ -615,7 +641,10 @@ export async function registerCustomerFromSearchAction(input: {
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
   }
-  const phone = normalizePhone(input.phone);
+  if (!isRecord(input) || !isOptString(input.phone) || !isOptString(input.fullName)) {
+    return INVALID_REQUEST;
+  }
+  const phone = normalizePhone(input.phone ?? "");
   if (!phone) {
     const msg = "Утасны дугаар 8 оронтой тоо байх ёстой.";
     return { ok: false, message: msg, fieldErrors: { phone: msg } };
@@ -623,7 +652,7 @@ export async function registerCustomerFromSearchAction(input: {
   try {
     const id = await findOrCreateCustomerByPhone(
       user,
-      { phone, fullName: input.fullName.trim() },
+      { phone, fullName: (input.fullName ?? "").trim() },
       canCreate(user, "customers"),
     );
     const customer = await prisma.customer.findFirst({
@@ -657,7 +686,16 @@ export async function linkPlateCustomerAction(input: {
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
   }
-  const phone = normalizePhone(input.phone);
+  if (
+    !isRecord(input) ||
+    typeof input.vehicleId !== "string" ||
+    !input.vehicleId ||
+    !isOptString(input.phone) ||
+    !isOptString(input.fullName)
+  ) {
+    return INVALID_REQUEST;
+  }
+  const phone = normalizePhone(input.phone ?? "");
   if (!phone) {
     const msg = "Утасны дугаар 8 оронтой тоо байх ёстой.";
     return { ok: false, message: msg, fieldErrors: { phone: msg } };
@@ -665,7 +703,7 @@ export async function linkPlateCustomerAction(input: {
   try {
     const value = await linkPlateCustomer(
       user,
-      { vehicleId: input.vehicleId, phone, fullName: input.fullName.trim() },
+      { vehicleId: input.vehicleId, phone, fullName: (input.fullName ?? "").trim() },
       { canCreateCustomer: canCreate(user, "customers") },
     );
     revalidatePath("/dashboard/customers");
@@ -857,6 +895,16 @@ export async function updateOrderAction(
               : {}),
           },
         });
+        // Салбар солигдоход нээлттэй (closedAt=null) цагийн эзэмшлийг шинэ
+        // салбар руу хамт шилжүүлнэ — эс бөгөөс хуучин салбарын багтаамжийг
+        // эзэлсээр, шинэ салбарын календарт харагдахгүй. Хаагдсан мөрүүд
+        // түүхэн снапшот хэвээр үлдэнэ.
+        if (result.count > 0 && fresh.branchId !== data.branchId) {
+          await tx.orderTimeBooking.updateMany({
+            where: { orderId: id, tenantId: user.tenantId, closedAt: null },
+            data: { branchId: data.branchId },
+          });
+        }
         // D-068 dual-write: scheduledAt only actually drives the SCHEDULED-phase
         // booking (resolveOrderEffectiveInterval ignores it once work has
         // started, using startedAt instead) — only update the open booking here
@@ -987,8 +1035,11 @@ export async function bulkChangeOrderStatusAction(
   if (!next || !(ORDER_STATUSES as readonly string[]).includes(next)) {
     return { ok: false, message: "Статус сонгоно уу." };
   }
-  const ids = parseIdsJson(s(formData, "orderIdsJson"));
+  const ids = [...new Set(parseIdsJson(s(formData, "orderIdsJson")))];
   if (ids.length === 0) return { ok: false, message: "Дор хаяж нэг захиалга сонгоно уу." };
+  if (ids.length > MAX_BULK_ORDER_IDS) {
+    return { ok: false, message: `Нэг хүсэлтэд хамгийн ихдээ ${MAX_BULK_ORDER_IDS} захиалга сонгоно уу.` };
+  }
 
   const orders = await prisma.serviceOrder.findMany({
     where: { id: { in: ids }, tenantId: user.tenantId },
@@ -1055,8 +1106,11 @@ export async function bulkAssignOrderAction(
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
   }
-  const ids = parseIdsJson(s(formData, "orderIdsJson"));
+  const ids = [...new Set(parseIdsJson(s(formData, "orderIdsJson")))];
   if (ids.length === 0) return { ok: false, message: "Дор хаяж нэг захиалга сонгоно уу." };
+  if (ids.length > MAX_BULK_ORDER_IDS) {
+    return { ok: false, message: `Нэг хүсэлтэд хамгийн ихдээ ${MAX_BULK_ORDER_IDS} захиалга сонгоно уу.` };
+  }
 
   const assignedToId: string | null = s(formData, "assignedToId") || null;
 
@@ -1230,11 +1284,25 @@ export async function rescheduleOrderAction(
 
 }
 
-export async function deleteOrderAction(formData: FormData): Promise<void> {
+/**
+ * ConfirmForm/inline үйлдлүүдийн хүлээгдэж буй алдааг (OrderCommandError,
+ * багц түгжээ г.м.) `{ error }` болгоно — error.tsx руу унахгүй, toast-оор
+ * харагдана. Танигдаагүй алдааны мессежийг задруулахгүй.
+ */
+function orderConfirmError(e: unknown): { error: string } {
+  const r = orderActionErrorResult(e);
+  return { error: r?.message || ACTION_GENERIC_ERROR_MESSAGE };
+}
+
+export async function deleteOrderAction(formData: FormData): Promise<ConfirmActionResult> {
   const user = await authorize("delete");
   const id = s(formData, "id");
   if (!id) return;
-  await deleteOrderCommand({ actor: user, orderId: id });
+  try {
+    await deleteOrderCommand({ actor: user, orderId: id });
+  } catch (e) {
+    return orderConfirmError(e);
+  }
   revalidatePath("/dashboard/orders");
   revalidatePath("/dashboard");
   redirect("/dashboard/orders");
@@ -1266,7 +1334,9 @@ export async function addOrderItemAction(orderId: string, _prev: OrderActionStat
   if (unitPriceRaw && !unitPrice) return { ok: false, fieldErrors: { unitPrice: "Үнэ буруу." } };
   try {
     // Нэгдсэн сангаас сонгосон бол эхлээд тенантын ажил/сэлбэг болгон холбоно.
+    // Захиалгын хүрээ/эрх/түгжээг adopt (тенантад Service үүсгэх) хийхээс өмнө шалгана.
     if (!serviceId && catalogItemId && !diagnosticTemplateId) {
+      await assertOrderItemAddPrecheck(user, orderId);
       const adopted = await adoptCatalogItemForTenant(user, catalogItemId);
       if (!adopted.ok) return { ok: false, fieldErrors: { serviceId: adopted.message } };
       serviceId = adopted.serviceId;
@@ -1283,28 +1353,36 @@ export async function addOrderItemAction(orderId: string, _prev: OrderActionStat
   } catch (e) { return orderActionErrorResult(e); }
 }
 
-export async function cancelOrderItemAction(formData: FormData): Promise<void> {
+export async function cancelOrderItemAction(formData: FormData): Promise<ConfirmActionResult> {
   const user = await authorize("edit");
   const itemId = s(formData, "itemId");
   if (!itemId) return;
   const orderId = s(formData, "orderId") || await resolveOrderIdForItem(user, itemId);
   if (!orderId) return;
-  const cancelled = await cancelOrderItemCommand({ actor: user, orderId, itemId });
-  revalidatePath(`/dashboard/orders/${orderId}`);
-  if (cancelled.serviceId) {
-    revalidatePath("/dashboard/services", "layout");
-    revalidatePath(`/dashboard/services/${cancelled.serviceId}`);
+  try {
+    const cancelled = await cancelOrderItemCommand({ actor: user, orderId, itemId });
+    revalidatePath(`/dashboard/orders/${orderId}`);
+    if (cancelled.serviceId) {
+      revalidatePath("/dashboard/services", "layout");
+      revalidatePath(`/dashboard/services/${cancelled.serviceId}`);
+    }
+  } catch (e) {
+    return orderConfirmError(e);
   }
 }
 
-export async function changeOrderItemStatusAction(formData: FormData): Promise<void> {
+export async function changeOrderItemStatusAction(formData: FormData): Promise<ConfirmActionResult> {
   const user = await authorizeItemStatus();
   const itemId = s(formData, "itemId");
   const next = s(formData, "status") as ServiceItemStatus;
   if (!itemId || !next || next === "CANCELLED" || !(SERVICE_ITEM_STATUSES as readonly string[]).includes(next)) return;
   const orderId = s(formData, "orderId") || await resolveOrderIdForItem(user, itemId);
   if (!orderId) return;
-  await changeOrderItemStatusCommand({ actor: user, orderId, itemId, nextStatus: next as Exclude<ServiceItemStatus, "CANCELLED"> });
+  try {
+    await changeOrderItemStatusCommand({ actor: user, orderId, itemId, nextStatus: next as Exclude<ServiceItemStatus, "CANCELLED"> });
+  } catch (e) {
+    return orderConfirmError(e);
+  }
   revalidatePath(`/dashboard/orders/${orderId}`);
 }
 
@@ -1332,13 +1410,17 @@ export async function completeAllOrderItemsAction(orderId: string): Promise<Comp
   }
 }
 
-export async function changeOrderItemPriceAction(formData: FormData): Promise<void> {
+export async function changeOrderItemPriceAction(formData: FormData): Promise<ConfirmActionResult> {
   const user = await authorizeItemPrice();
   const itemId = s(formData, "itemId");
   const unitPrice = parseDecimal(s(formData, "unitPrice"));
   if (!itemId || !unitPrice || unitPrice.lte(0)) return;
   const orderId = s(formData, "orderId") || await resolveOrderIdForItem(user, itemId);
   if (!orderId) return;
-  await changeOrderItemPriceCommand({ actor: user, orderId, itemId, unitPrice });
+  try {
+    await changeOrderItemPriceCommand({ actor: user, orderId, itemId, unitPrice });
+  } catch (e) {
+    return orderConfirmError(e);
+  }
   revalidatePath(`/dashboard/orders/${orderId}`);
 }

@@ -1,7 +1,7 @@
 // Framework-free tenant/role/branch guards — moved verbatim from
 // `app/_actions/employees.ts`.
 
-import type { BranchRow, EmployeesClient } from "./types";
+import type { BranchRow, EmployeeActor, EmployeesClient, RoleRow } from "./types";
 
 /**
  * P2002 (давхцал) гарсан үед ЯГ аль unique талбар давхцсаныг тогтооно.
@@ -48,11 +48,26 @@ export async function ensureRoleBelongsToTenant(
   db: EmployeesClient,
   tenantId: string,
   roleId: string,
-): Promise<{ ok: boolean; name?: string }> {
-  const role = await db.role.findFirst({
+): Promise<{ ok: boolean; name?: string; permissions?: string[] }> {
+  const role: RoleRow | null = await db.role.findFirst({
     where: { id: roleId, tenantId },
-    select: { id: true, name: true, isActive: true },
+    select: { id: true, name: true, isActive: true, permissions: true },
   });
   if (!role || !role.isActive) return { ok: false };
-  return { ok: true, name: role.name };
+  return { ok: true, name: role.name, permissions: role.permissions ?? [] };
+}
+
+/**
+ * Owner биш actor зөвхөн өөрт байгаа эрхүүдийн дэд олонлог болох үүргийг л
+ * оноож болно — эс бөгөөс `employees.edit` эрхтэй ажилтан өөр ажилтанд (эсвэл
+ * хамсаатандаа) бүх эрхтэй үүрэг өгч эрхээ дээшлүүлэх боломжтой. Owner
+ * хязгааргүй.
+ */
+export function roleWithinActorPermissions(
+  actor: EmployeeActor,
+  rolePermissions: readonly string[] | undefined,
+): boolean {
+  if (actor.isOwner) return true;
+  const own = new Set(actor.role?.permissions ?? []);
+  return (rolePermissions ?? []).every((p) => own.has(p));
 }

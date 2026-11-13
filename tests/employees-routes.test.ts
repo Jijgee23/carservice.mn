@@ -107,7 +107,7 @@ test("POST /api/v1/employees gates employees.create, then subscription, before c
   assert.ok(prep > sub, "prepareCreateEmployee must run after the subscription gate");
   assert.ok(create > prep, "createEmployee must run after prepare");
   assert.doesNotMatch(POST, /enforceCountLimit|PLAN_LIMIT_REACHED|DAILY_LIMIT_REACHED|PLAN_LIMIT_CODES\.(MAX_|DAILY_)/, "no employee count quota");
-  assert.match(POST, /code: prep\.code, fieldErrors: prep\.fieldErrors/, "prepare errors must carry code");
+  assert.match(POST, /code: prep\.code,\s*fieldErrors: prep\.fieldErrors/, "prepare errors must carry code");
   assert.match(POST, /code: result\.code/, "create errors must carry code");
 });
 

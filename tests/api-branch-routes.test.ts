@@ -82,7 +82,8 @@ test("diagnostic report creation guards linked orders before report creation", a
   const source = await readFile(new URL("../app/api/v1/diagnostics/reports/route.ts", import.meta.url), "utf8");
   const orderRead = source.indexOf("status: true");
   const statusGuard = source.indexOf("canFillDiagnostics(orderStatus)");
-  const reportCreate = source.indexOf("prisma.diagnosticReport.create");
+  // Report creation moved into the shared atomic command (lib/diagnostic-report-commit.ts).
+  const reportCreate = source.indexOf("commitDiagnosticReportCommand(");
   assert.ok(orderRead >= 0, "linked order read must include status");
   assert.ok(statusGuard > orderRead, "status guard must use the linked order status");
   assert.ok(reportCreate > statusGuard, "status guard must run before report creation");
@@ -91,15 +92,17 @@ test("diagnostic report creation guards linked orders before report creation", a
   assert.match(source, /tenantVisibleTemplateWhere\(auth\.user\.tenantId\)/);
   assert.match(source, /DIAGNOSTIC_TEMPLATE_MISMATCH/);
 
+  // The locked transaction now lives in lib/diagnostic-report-commit.ts: the route
+  // finishes file work first, then hands everything to commitDiagnosticReportCommand.
   const upload = source.indexOf("collectValidatedReportData(formData, schema)");
-  const itemTransaction = source.indexOf("withOrderTransaction(");
-  const lockedCreate = source.indexOf("tx.diagnosticReport.create");
-  const lockedLink = source.indexOf("tx.serviceItem.update");
-  assert.ok(upload >= 0 && upload < itemTransaction, "file work must finish before the item transaction");
-  assert.ok(itemTransaction < lockedCreate, "item report creation must be inside the order transaction");
-  assert.ok(lockedCreate < lockedLink, "item link must follow report creation in the same transaction");
+  assert.ok(upload >= 0 && upload < reportCreate, "file work must finish before the commit command");
   assert.doesNotMatch(source, /prisma\.serviceItem\.update/);
-  assert.match(source, /serviceItemTimingPatch\("COMPLETED", item\.startedAt\)/);
+  const commit = await readFile(new URL("../lib/diagnostic-report-commit.ts", import.meta.url), "utf8");
+  assert.match(commit, /withOrderTransaction\(/, "linked commits run under the order lock");
+  const lockedCreate = commit.indexOf("tx.diagnosticReport.create");
+  const lockedLink = commit.indexOf("tx.serviceItem.update");
+  assert.ok(lockedCreate >= 0 && lockedCreate < lockedLink, "item link must follow report creation on the same tx");
+  assert.match(commit, /status: "COMPLETED",[\s\S]*?startedAt: startedAt \?\? completedAt,[\s\S]*?completedAt,/, "item completion keeps startedAt and sets completedAt");
 });
 
 test("diagnostics/reports/[id]/route.ts exports GET and DELETE", () => {

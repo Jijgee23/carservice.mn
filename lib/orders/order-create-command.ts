@@ -37,6 +37,11 @@ export type CreateOrderCommandInput = {
   isPostpaid?: boolean;
   // Дотоод засвар: төлбөргүй, isPostpaid-тэй зэрэг байж болохгүй.
   isInternal?: boolean;
+  // Жагсаалтын хайлтаас эзэмшигчгүй бүртгэсэн (TenantVehicle.customerId=null)
+  // машиныг сонгосон үйлчлүүлэгчид холбох. Холболт нь энэ transaction дотор,
+  // салбар/үйлчлүүлэгч/мастер/цагийн шалгалт бүгд амжилттай болсны ДАРАА л
+  // бичигдэнэ — татгалзсан хүсэлт машины эзэмшлийг өөрчлөхгүй.
+  attachUnownedVehicleOwner?: boolean;
 };
 
 export type CreateOrderCommandResult = {
@@ -95,7 +100,7 @@ export async function createOrderCommand(
             where: {
               tenantId_vehicleId: { tenantId: input.tenantId, vehicleId: input.vehicleId },
             },
-            select: { vehicleId: true, customerId: true, isPostpaid: true, vehicle: { select: { plate: true, vin: true } } },
+            select: { id: true, vehicleId: true, customerId: true, isPostpaid: true, vehicle: { select: { plate: true, vin: true } } },
           }),
           input.appointmentId
             ? tx.appointment.findFirst({
@@ -146,6 +151,11 @@ export async function createOrderCommand(
           accountVehicleToLink = Boolean(accountVehicle);
         }
 
+        // Эзэмшигчгүй машиныг энэ үйлчлүүлэгчийнх гэж үзэж шалгана; бодит
+        // холболтыг бүх шалгалтын дараа (доор) бичнэ.
+        const claimUnownedVehicle = Boolean(
+          input.attachUnownedVehicleOwner && vehicle && vehicle.customerId == null && customer,
+        );
         const fieldErrors = validateOrderReferences({
           branchId: input.branchId,
           customerId: input.customerId,
@@ -153,7 +163,7 @@ export async function createOrderCommand(
           appointmentId: input.appointmentId,
           branch,
           customer,
-          vehicle,
+          vehicle: claimUnownedVehicle && vehicle ? { ...vehicle, customerId: input.customerId } : vehicle,
           appointment,
           accountVehicleToLink,
         });
@@ -197,6 +207,31 @@ export async function createOrderCommand(
           }
           throw assigneeError;
         });
+        if (claimUnownedVehicle && vehicle) {
+          // Нөхцөлт update: зэрэгцээ хүсэлт өөр эзэн тавьчихсан бол дарж бичихгүй.
+          const attached = await tx.tenantVehicle.updateMany({
+            where: { id: vehicle.id, tenantId: input.tenantId, customerId: null },
+            data: { customerId: input.customerId },
+          });
+          if (attached.count !== 1) {
+            throw new OrderCommandError("Хүсэлт буруу.", 422, "ORDER_CREATE_INVALID", {
+              vehicleId: "Энэ машин сонгосон үйлчлүүлэгчийнх биш.",
+            });
+          }
+          await logAudit(
+            {
+              tenantId: input.tenantId,
+              userId: input.actorId,
+              entity: "Vehicle",
+              entityId: vehicle.id,
+              action: "UPDATE",
+              summary: "Эзэмшигч холбосон (засварын хуудаснаас дугаараар)",
+              before: { customerId: null },
+              after: { customerId: input.customerId },
+            },
+            scopedTx,
+          );
+        }
         if (accountVehicleToLink) {
           await ensureTenantVehicle(scopedTx, {
             tenantId: input.tenantId,
