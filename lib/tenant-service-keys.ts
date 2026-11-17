@@ -1,5 +1,6 @@
 import "server-only";
 
+import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 
 // Байгууллагын «танайх ямар үйлчилгээ үзүүлдэг вэ?» сонголт (Tenant.serviceKeys,
@@ -37,4 +38,44 @@ export async function tenantNeedsServiceKeys(tenantId: string): Promise<boolean>
     select: { serviceKeysConfirmedAt: true },
   });
   return tenant != null && tenant.serviceKeysConfirmedAt == null;
+}
+
+const MAX_KEYS = 100;
+
+/**
+ * Байгууллагын үзүүлдэг үйлчилгээг хадгалж serviceKeysConfirmedAt тавина —
+ * вэб action (app/_actions/tenant-service-keys.ts) ба PUT /api/v1/tenant/service-keys.
+ * Эзэн эсэхийг дуудагч шалгана.
+ */
+export async function saveTenantServiceKeys(
+  actor: { tenantId: string; userId: string },
+  rawIds: unknown,
+): Promise<{ ok: true; selectedIds: string[] } | { ok: false; message: string }> {
+  const requested = Array.isArray(rawIds)
+    ? [...new Set(rawIds.filter((v): v is string => typeof v === "string" && v.length > 0))].slice(0, MAX_KEYS)
+    : [];
+  if (requested.length === 0) return { ok: false, message: "Дор хаяж нэг үйлчилгээ сонгоно уу." };
+  // Зөвхөн идэвхтэй системийн төрөл (хуурамч/идэвхгүй id-г алгасна).
+  const valid = await prisma.systemServiceKey.findMany({
+    where: { id: { in: requested }, isActive: true },
+    select: { id: true, name: true },
+  });
+  if (valid.length === 0) return { ok: false, message: "Дор хаяж нэг үйлчилгээ сонгоно уу." };
+
+  await prisma.tenant.update({
+    where: { id: actor.tenantId },
+    data: {
+      serviceKeys: { set: valid.map((k) => ({ id: k.id })) },
+      serviceKeysConfirmedAt: new Date(),
+    },
+  });
+  await logAudit({
+    tenantId: actor.tenantId,
+    userId: actor.userId,
+    entity: "Tenant",
+    entityId: actor.tenantId,
+    action: "UPDATE",
+    summary: `Үзүүлдэг үйлчилгээ: ${valid.map((k) => k.name).join(", ")}`,
+  });
+  return { ok: true, selectedIds: valid.map((k) => k.id) };
 }

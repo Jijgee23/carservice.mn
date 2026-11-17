@@ -6,7 +6,13 @@
 //   permission code байхгүй, мэдээлэл нь (нэр, регистр, холбоо барих, лого)
 //   нэхэмжлэх/баримт дээр ч харагддаг тул уншихыг бүх ажилтанд зөвшөөрнө;
 //   засах эрхийг `canEdit` (= isOwner)-аар мэдэгдэнэ.
-//   200: { tenant: TenantDto, modules: { onlineBooking, appointments }, canEdit }
+//   200: { tenant: TenantDto, modules: { onlineBooking, appointments }, canEdit,
+//          onboarding: { needsShopName, needsServiceKeys } }
+//   onboarding — эзэмшигчид (isOwner) заавал бөглүүлэх алхмууд (вэбийн dashboard
+//   dialog-уудтай адил; эзэн биш бол үргэлж false):
+//     needsShopName — хувь хүний регистрээр бүртгүүлсэн, засварын нэрээ
+//       баталгаажуулаагүй (нэр = эзний овог нэр). PATCH { name } → баталгаажна.
+//     needsServiceKeys — үйлчилгээгээ сонгоогүй → PUT /api/v1/tenant/service-keys.
 //
 // PATCH /api/v1/tenant
 //   Зөвхөн эзэмшигч (`auth.user.isOwner`) — app/_actions/tenant.ts-ийн
@@ -57,6 +63,8 @@ const TENANT_SELECT = {
   creditUpdatedAt: true,
   creditHidden: true,
   creditSuspended: true,
+  shopNameConfirmedAt: true,
+  serviceKeysConfirmedAt: true,
 } as const;
 
 async function loadTenant(tenantId: string) {
@@ -70,7 +78,7 @@ async function buildResponse(user: ApiUser) {
   const t = await loadTenant(user.tenantId);
   if (!t) return jsonError(404, "Байгууллага олдсонгүй.", { code: "NOT_FOUND" });
   const modules = await getEnabledModules(user.tenantPlan);
-  const { creditHidden, creditSuspended, ...rest } = t;
+  const { creditHidden, creditSuspended, shopNameConfirmedAt, serviceKeysConfirmedAt, ...rest } = t;
   return jsonOk({
     tenant: {
       ...rest,
@@ -83,6 +91,11 @@ async function buildResponse(user: ApiUser) {
       appointments: modules.has("enable_appointments"),
     },
     canEdit: user.isOwner,
+    // Вэбийн dashboard-ын заавал бөглөх dialog-уудтай адил (зөвхөн эзэнд).
+    onboarding: {
+      needsShopName: user.isOwner && shopNameConfirmedAt == null,
+      needsServiceKeys: user.isOwner && serviceKeysConfirmedAt == null,
+    },
   });
 }
 

@@ -29,10 +29,24 @@ test("owner must pick services: blocking gate in dashboard layout, editable in s
 
   const action = read("app/_actions/tenant-service-keys.ts");
   assert.match(action, /if \(!user\.isOwner\) return \{ ok: false/);
-  assert.match(action, /Дор хаяж нэг үйлчилгээ сонгоно уу\./);
-  assert.match(action, /where: \{ id: \{ in: requested \}, isActive: true \}/);
-  assert.match(action, /serviceKeys: \{ set: valid\.map/);
-  assert.match(action, /serviceKeysConfirmedAt: new Date\(\)/);
+  assert.match(action, /saveTenantServiceKeys\(/);
+  // Хадгалах логик нэг газар — вэб action ба mobile PUT хоёул ашиглана.
+  const lib = read("lib/tenant-service-keys.ts");
+  assert.match(lib, /Дор хаяж нэг үйлчилгээ сонгоно уу\./);
+  assert.match(lib, /where: \{ id: \{ in: requested \}, isActive: true \}/);
+  assert.match(lib, /serviceKeys: \{ set: valid\.map/);
+  assert.match(lib, /serviceKeysConfirmedAt: new Date\(\)/);
+});
+
+test("mobile APIs: tenant service keys (owner PUT), onboarding flags, public booking fee", () => {
+  const route = read("app/api/v1/tenant/service-keys/route.ts");
+  assert.match(route, /export async function GET/);
+  assert.match(route, /if \(!auth\.user\.isOwner\) return jsonForbidden/);
+  assert.match(route, /saveTenantServiceKeys\(\{ tenantId: auth\.user\.tenantId, userId: auth\.user\.id \}, ids\)/);
+  const tenant = read("app/api/v1/tenant/route.ts");
+  assert.match(tenant, /needsShopName: user\.isOwner && shopNameConfirmedAt == null,/);
+  assert.match(tenant, /needsServiceKeys: user\.isOwner && serviceKeysConfirmedAt == null,/);
+  assert.match(read("app/api/v1/app/booking-fee/route.ts"), /jsonOk\(\{ fee: await getBookingFeeNotice\(\) \}\)/);
 });
 
 test("/book lists every active system service type and matches all public shops", () => {

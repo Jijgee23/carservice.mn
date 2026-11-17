@@ -2371,3 +2371,9 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - Tenant.shopNameConfirmedAt (migration 20261117150000_tenant_shop_name_confirmed): хувь хүн биш бүртгэлд backfill; хувь хүн null. Бүртгэлд байгууллага → шууд тавина, хувь хүн → null. Тохиргооноос үндсэн мэдээлэл хадгалахад тавина. Fixture seed баталгаажсан.
 - Эзэнд хааж болохгүй dialog «Засварын газрынхаа нэрийг оруулна уу» (app/dashboard/_components/shop-name-gate.tsx, action app/_actions/tenant-shop-name.ts: эзэн, 2–100 тэмдэгт, давхцалгүй, slug өөрчлөхгүй, audit) — үйлчилгээний dialog-оос өмнө.
 - Тест: tests/tenant-shop-name.test.ts (3).
+
+[2026-11-17] Mobile-д зориулсан API: үйлчилгээний сонголт, onboarding, хураамж
+- GET/PUT /api/v1/tenant/service-keys (GET бүх ажилтан, PUT эзэн; lib/tenant-service-keys.ts saveTenantServiceKeys — вэб action-тай нэг логик).
+- GET /api/v1/tenant: `onboarding: { needsShopName, needsServiceKeys }` (эзэнд; вэбийн dialog-уудтай адил). PATCH { name } нэрийг баталгаажуулна.
+- GET /api/v1/app/booking-fee (нийтийн): { fee: { amount, ttlMinutes } | null } — захиалгаас өмнө харуулах.
+- API docs шинэчлэгдэв; тест tests/tenant-service-keys.test.ts.

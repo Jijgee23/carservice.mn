@@ -106,8 +106,12 @@ Res:  201 { same shape as /auth/login }   // accessToken, refreshToken, user { i
     "appointmentReminderLeadMinutes": 1440, "slug", "plan": "FREE" | "BUSINESS" | "ENTERPRISE", "createdAt",
     "creditScore": ... | null, "creditBreakdown": {...} | null, "creditUpdatedAt": "ISO" | null,
     "creditBlocked": "suspended" | "hidden" | null },
-  "modules": { "onlineBooking": true, "appointments": true },   // багцад нээлттэй эсэх
-  "canEdit": true }
+  "modules": { "onlineBooking": true, "appointments": true },   // багцад нээлттэй эсэх (online_booking нь enable_appointments-д нэгдсэн)
+  "canEdit": true,
+  "onboarding": { "needsShopName": false, "needsServiceKeys": true } }
+  // onboarding — зөвхөн эзэнд true байж болно (вэбийн dashboard dialog-уудтай адил), апп заавал бөглүүлнэ:
+  //   needsShopName: хувь хүний регистрээр бүртгүүлсэн, нэр = эзний овог нэр → PATCH { "name": "..." } хийхэд баталгаажна.
+  //   needsServiceKeys: үйлчилгээгээ сонгоогүй → PUT /api/v1/tenant/service-keys.
 404 { "error": "Байгууллага олдсонгүй.", "code": "NOT_FOUND" }`}</Code>
         </Endpoint>
 
@@ -219,6 +223,18 @@ Res:  200 { GET-тэй ижил хэлбэр }
 Res:  200 { GET-тэй ижил }
 400 { "error": "...", "code": "VALIDATION", "fieldErrors": { "<талбар>": "..." } }
 403 { "error": "Зөвхөн админ тохиргоог өөрчилнө." }`}</Code>
+        </Endpoint>
+
+        <Endpoint method="GET" path="/api/v1/tenant/service-keys" auth="bearer" bearerLabel={BEARER} title="Байгууллагын үзүүлдэг үйлчилгээ (системийн ангилал) — жолооч /book, газрын зураг дээр ажлаараа хайхад эдгээрээр гарна. Нэвтэрсэн бүх ажилтан.">
+          <Code>{`Res: 200 { "keys": [{ "id": "...", "name": "Тос солих", "description": "..." | null }],   // бүх идэвхтэй төрөл (нэрээр)
+  "selectedIds": ["..."], "confirmed": false, "canEdit": true }   // confirmed=false ба эзэн → заавал сонгуулна`}</Code>
+        </Endpoint>
+
+        <Endpoint method="PUT" path="/api/v1/tenant/service-keys" auth="bearer" bearerLabel={BEARER} tags={["Зөвхөн эзэн"]} title="Үзүүлдэг үйлчилгээг бүхэлд нь солих (дор хаяж 1). confirmed=true болно.">
+          <Code>{`Req:  { "serviceKeyIds": ["...", "..."] }   // идэвхгүй/хуурамч id алгасагдана
+Res:  200 { GET-тэй ижил }
+400 { "error": "Дор хаяж нэг үйлчилгээ сонгоно уу.", "code": "VALIDATION", "fieldErrors": { "serviceKeyIds": "..." } }
+403 { "error": "Зөвхөн байгууллагын эзэн өөрчилнө." }`}</Code>
         </Endpoint>
       </Section>
 
