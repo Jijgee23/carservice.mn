@@ -8,6 +8,8 @@ import { getCreditSettings } from "@/lib/credit-score-server";
 import { AppointmentReminderForm } from "./appointment-reminder-form";
 import { LogoForm } from "./logo-form";
 import { TenantForm } from "./tenant-form";
+import { ServiceKeysPicker } from "../_components/service-keys-picker";
+import { loadServiceKeyChoices } from "@/lib/tenant-service-keys";
 
 export const metadata = {
   title: "Байгууллагын тохиргоо",
@@ -52,7 +54,10 @@ export default async function SettingsPage() {
     where: { id: user.tenantId },
   });
   if (!tenant) redirect("/dashboard");
-  const creditSettings = await getCreditSettings();
+  const [creditSettings, serviceKeyChoices] = await Promise.all([
+    getCreditSettings(),
+    user.isOwner ? loadServiceKeyChoices(user.tenantId) : Promise.resolve(null),
+  ]);
 
   return (
     <div className="p-4 sm:p-6 max-w-full flex-1 flex flex-col min-h-0 w-full">
@@ -66,7 +71,7 @@ export default async function SettingsPage() {
       <div className="grid gap-6">
         <SectionPanel
           index={1}
-          total={5}
+          total={6}
           title="Лого"
           description="Платформ дотор болон нэхэмжлэхэд харагдана."
         >
@@ -75,7 +80,7 @@ export default async function SettingsPage() {
 
         <SectionPanel
           index={2}
-          total={5}
+          total={6}
           title="Үндсэн мэдээлэл"
           description="Нэр, регистр, харилцагч мэдээлэл."
         >
@@ -93,10 +98,24 @@ export default async function SettingsPage() {
           />
         </SectionPanel>
 
-        {modules.has("enable_appointments") ? (
+        {serviceKeyChoices && serviceKeyChoices.keys.length > 0 ? (
           <SectionPanel
             index={3}
-            total={5}
+            total={6}
+            title="Үзүүлдэг үйлчилгээ"
+            description="Жолооч нар хийлгэх ажлаараа хайхад (carservice.mn/book, газрын зураг) танай байгууллага эдгээрээр гарна. Онлайн цаг захиалгад ашиглагдана."
+          >
+            <ServiceKeysPicker
+              keys={serviceKeyChoices.keys}
+              initialSelected={serviceKeyChoices.selectedIds}
+            />
+          </SectionPanel>
+        ) : null}
+
+        {modules.has("enable_appointments") ? (
+          <SectionPanel
+            index={4}
+            total={6}
             title="Цаг захиалгын сануулга"
             description="Товлосон цагаас хэдэн хугацааны өмнө үйлчлүүлэгчид сануулга илгээхийг тохируулна."
           >
@@ -107,8 +126,8 @@ export default async function SettingsPage() {
         ) : null}
 
         <SectionPanel
-          index={4}
-          total={5}
+          index={5}
+          total={6}
           title="Credit score"
           description="Үйлчлүүлэгчийн үнэлгээ, цаг захиалга баталсан, засвар дуусгасан, хугацаандаа дуусгасан хувиас өдөр бүр тооцогдоно."
         >
@@ -121,7 +140,7 @@ export default async function SettingsPage() {
           />
         </SectionPanel>
 
-        <SectionPanel index={5} total={5} title="Бусад">
+        <SectionPanel index={6} total={6} title="Бусад">
           <dl className="grid gap-3 text-sm sm:grid-cols-3">
             <Row label="Slug">
               <span className="font-plex-mono text-[var(--oc-ink2)]">{tenant.slug}</span>

@@ -181,7 +181,7 @@ export function BookingFlow({
               {results.map((r) => (
                 <Link
                   key={r.id}
-                  href={`/book/branch/${r.id}${selectedIds.length > 0 ? `?keys=${selectedIds.map(encodeURIComponent).join(",")}` : ""}`}
+                  href={r.href}
                   className="group rounded-2xl border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 flex flex-col gap-3 shadow-sm hover:shadow-lg hover:border-[var(--oc-accent)]/50 transition-all"
                 >
                   <div className="flex items-center gap-3">
@@ -200,10 +200,20 @@ export function BookingFlow({
                     </svg>
                     <span className="min-w-0 truncate">{r.address}</span>
                   </div>
+                  {!r.bookable ? (
+                    <div className="text-xs text-[var(--oc-muted3)]">
+                      Онлайн захиалга авдаггүй
+                      {r.phone ? (
+                        <>
+                          {" "}· утас <span className="font-plex-mono text-[var(--oc-ink2)]">{r.phone}</span>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div className="flex items-center justify-between gap-2">
                     <OpenStatusBadge open={r.open} hours={r.hours} />
                     <span className="inline-flex items-center gap-1 rounded-lg border border-[var(--oc-accent)]/40 px-3 py-1.5 text-xs font-semibold text-[var(--oc-accent)] transition-colors group-hover:bg-[var(--oc-accent)] group-hover:text-[var(--oc-on-accent)] group-hover:border-[var(--oc-accent)]">
-                      Цаг авах <span aria-hidden>→</span>
+                      {r.bookable ? "Цаг авах" : "Дэлгэрэнгүй"} <span aria-hidden>→</span>
                     </span>
                   </div>
                 </Link>

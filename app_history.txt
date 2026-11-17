@@ -2358,3 +2358,10 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - /book ба mobile /api/v1/app/service-keys: ажлын төрөл зөвхөн онлайн захиалга авдаг (acceptsOnlineBooking + «Цаг захиалга» багц + нийтийн, идэвхтэй салбартай) газрын захиалж болох ангилалтай бол (lib/bookable-service-keys.ts) — сонгоход «салбар олдсонгүй» гарахаа болив; огт байхгүй бол газрын зураг руу чиглүүлнэ.
 - Хураамжгүй захиалсны дараа /account биш /account/appointments/[id]?created=1 — «✓ Цаг захиалга илгээгдлээ» баталгаажуулалт.
 - Тест: tests/driver-booking-usability.test.ts (6).
+
+[2026-11-17] Байгууллагын «үзүүлдэг үйлчилгээ» + /book системийн бүх ангилал
+- Tenant ↔ SystemServiceKey (implicit "_TenantServiceKeys") + Tenant.serviceKeysConfirmedAt (migration 20261117140000_tenant_service_keys; ангиллын systemServiceKeyId-аас backfill, баталгаажуулалт null хэвээр).
+- Эзэн dashboard-д нэвтрэхэд баталгаажуулаагүй бол хааж болохгүй dialog «Танайх ямар үйлчилгээ үзүүлдэг вэ?» (app/dashboard/_components/service-keys-gate.tsx + service-keys-picker.tsx, layout). Шинэ бүртгэл ч, хуучин байгууллага ч. Тохиргоо → «Үзүүлдэг үйлчилгээ» хэсгээс засна. Action app/_actions/tenant-service-keys.ts (эзэн, ≥1, идэвхтэй төрөл, audit).
+- /book: системийн бүх идэвхтэй ангилал (21). Сонгоход тухайн ажлыг хийдэг БҮХ нийтийн газар (Tenant.serviceKeys ЭСВЭЛ Category.systemServiceKeyId) — захиалга авдагт «Цаг авах» (ангиллаар бүрэн таарвал /book/branch?keys, үгүй бол /org?branch), бусдад «Онлайн захиалга авдаггүй · утас» + «Дэлгэрэнгүй»; захиалга авдаг эхэнд.
+- Discovery (web /discover, mobile orgs): serviceKey шүүлт ба чөлөөт текст хайлт байгууллагын сонгосон үйлчилгээг тооцно. Mobile service-keys захиалга авдаг газраар шүүсэн хэвээр (tenants OR categories).
+- Тест: tests/tenant-service-keys.test.ts (4); driver-booking тест mobile-д тааруулав.

@@ -1,5 +1,4 @@
 import { getBookingBranchResults } from "@/app/_actions/book";
-import { bookableServiceKeyWhere } from "@/lib/bookable-service-keys";
 import { prisma } from "@/lib/prisma";
 import { setBypassContext } from "@/lib/tenant-context";
 import { BookingFlow } from "./booking-flow";
@@ -26,11 +25,11 @@ export default async function BookStartPage({
 }) {
   setBypassContext();
   const { keys: keysParam } = await searchParams;
-  // Онлайн захиалга авдаг газарт байхгүй түлхүүрийг ШҮҮНЭ ГАРГАНА — сонговол
-  // баталгаатай хоосон салбарын жагсаалт буцаах сонголтыг цэсэнд харуулахгүй
-  // (харах: app/(app)/discover/page.tsx-ийн ижил шийдвэр).
+  // Системийн бүх идэвхтэй ажлын төрөл. Сонгоход тухайн ажлыг хийдэг БҮХ газар
+  // гарна — онлайн захиалга авдагт «Цаг авах», бусдад «Дэлгэрэнгүй» + утас
+  // (app/_actions/book.ts). Байгууллагууд үйлчилгээгээ dashboard-д сонгодог.
   const serviceKeys = await prisma.systemServiceKey.findMany({
-    where: await bookableServiceKeyWhere(),
+    where: { isActive: true },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });

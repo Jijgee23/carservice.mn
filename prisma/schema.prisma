@@ -51,8 +51,15 @@ model Tenant {
   appointmentReminderLeadMinutes Int       @default(1440)
   // Идэвхтэй банкны кодууд (lib/banks.ts). Хоосон = бүх банк идэвхтэй.
   enabledBanks                   String[]  @default([])
+  // Эзэн «танайх ямар үйлчилгээ үзүүлдэг вэ?» сонголтоо хадгалсан огноо — null бол
+  // эзэн dashboard-д нэвтрэхэд заавал сонгуулна (/dashboard/onboarding/services).
+  serviceKeysConfirmedAt         DateTime?
   createdAt                      DateTime  @default(now())
   updatedAt                      DateTime  @updatedAt
+
+  // Байгууллагын үзүүлдэг үйлчилгээний төрлүүд (системийн ангилал) — /book,
+  // /discover-ийн «ямар ажил хийлгэх вэ?» хайлтад (lib/tenant-service-keys.ts).
+  serviceKeys              SystemServiceKey[] @relation("TenantServiceKeys")
 
   users                    User[]
   branches                 Branch[]
@@ -1098,6 +1105,7 @@ model SystemServiceKey {
   updatedAt DateTime @updatedAt
 
   categories Category[]
+  tenants    Tenant[]   @relation("TenantServiceKeys")
 
   @@index([isActive])
 }

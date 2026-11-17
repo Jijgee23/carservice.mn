@@ -140,6 +140,8 @@ type DiscoveryTenant = {
     systemServiceKeyId: string | null;
     branches: Array<{ id: string }>;
   }>;
+  /** Байгууллагын сонгосон үйлчилгээний төрлүүд — бүх салбарт хамаарна. */
+  serviceKeys: Array<{ id: string; name: string }>;
 };
 
 export type DiscoveryOrganization = {
@@ -256,6 +258,8 @@ export async function getDiscoveryCatalog(
               { name: { contains: filters.query, mode: "insensitive" as const } },
               { branches: { some: searchBranchWhere } },
               { categories: { some: { isActive: true, ...BOOKABLE_CATEGORY_WHERE, name: { contains: filters.query, mode: "insensitive" as const } } } },
+              // Байгууллагын сонгосон үйлчилгээний төрөл («Тос солих» г.м.).
+              { serviceKeys: { some: { isActive: true, name: { contains: filters.query, mode: "insensitive" as const } } } },
             ],
           }
         : {}),
@@ -292,6 +296,11 @@ export async function getDiscoveryCatalog(
         orderBy: { name: "asc" },
         select: { name: true, systemServiceKeyId: true, branches: { select: { id: true } } },
       },
+      serviceKeys: {
+        where: { isActive: true },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      },
     },
   })) as unknown as DiscoveryTenant[];
 
@@ -310,13 +319,21 @@ export async function getDiscoveryCatalog(
       tenant.categories.filter(
         (category) => category.branches.length === 0 || category.branches.some((b) => b.id === branchId),
       );
-    const servicesFor = (branchId: string) => categoriesFor(branchId).map((category) => category.name);
+    // Ангиллын нэр + байгууллагын сонгосон үйлчилгээний нэр (давхардалгүй) —
+    // чип болон чөлөөт текст хайлтад.
+    const servicesFor = (branchId: string) => [
+      ...new Set([
+        ...categoriesFor(branchId).map((category) => category.name),
+        ...tenant.serviceKeys.map((key) => key.name),
+      ]),
+    ];
     const serviceKeyIdsFor = (branchId: string) => [
-      ...new Set(
-        categoriesFor(branchId)
+      ...new Set([
+        ...categoriesFor(branchId)
           .map((category) => category.systemServiceKeyId)
           .filter((id): id is string => Boolean(id)),
-      ),
+        ...tenant.serviceKeys.map((key) => key.id),
+      ]),
     ];
     const visible: DiscoveryOrganization["branches"] = [];
     let nearest = Number.POSITIVE_INFINITY;

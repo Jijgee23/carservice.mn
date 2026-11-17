@@ -74,6 +74,12 @@ export default async function DiscoverPage() {
           branches: { select: { id: true } },
         },
       },
+      // Байгууллагын сонгосон үйлчилгээний төрлүүд — бүх салбарт (catalog-тэй ижил).
+      serviceKeys: {
+        where: { isActive: true },
+        orderBy: { name: "asc" },
+        select: { name: true },
+      },
     },
   });
 
@@ -113,7 +119,9 @@ export default async function DiscoverPage() {
       const matchingCategories = t.categories.filter(
         (c) => c.branches.length === 0 || c.branches.some((x) => x.id === b.id),
       );
-      const services = matchingCategories.map((c) => c.name);
+      const services = [
+        ...new Set([...matchingCategories.map((c) => c.name), ...t.serviceKeys.map((k) => k.name)]),
+      ];
       return {
         id: b.id,
         name: b.name,

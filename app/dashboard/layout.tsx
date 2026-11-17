@@ -19,6 +19,8 @@ import { getEnabledModules } from "@/lib/plan-modules-server";
 import { prisma } from "@/lib/prisma";
 import { getSubscriptionState } from "@/lib/subscription-server";
 import { setTenantContext } from "@/lib/tenant-context";
+import { loadServiceKeyChoices } from "@/lib/tenant-service-keys";
+import { ServiceKeysGate } from "./_components/service-keys-gate";
 
 // Ops Console дизайны фонт — landing/auth хуудсуудтай ижил механизм, зөвхөн
 // dashboard route-д scoped (бусад апп — account/system — Geist хэвээр).
@@ -88,6 +90,11 @@ export default async function DashboardLayout({
     }
     : null;
   const lockedModules = MODULE_LIMIT_CODES.filter((m) => !enabledModules.has(m));
+  // Эзэн «үзүүлдэг үйлчилгээ»-гээ баталгаажуулаагүй бол (шинэ бүртгэл эсвэл
+  // хуучин байгууллага) хааж болохгүй dialog — /book, /discover хайлтад хэрэгтэй.
+  const serviceKeyChoices = user.isOwner ? await loadServiceKeyChoices(user.tenantId) : null;
+  const showServiceKeysGate =
+    serviceKeyChoices != null && !serviceKeyChoices.confirmed && serviceKeyChoices.keys.length > 0;
 
   return (
     <ToastProvider>
@@ -166,6 +173,12 @@ export default async function DashboardLayout({
 
 
           <main className="flex-1 flex flex-col min-w-0">{children}</main>
+          {showServiceKeysGate ? (
+            <ServiceKeysGate
+              keys={serviceKeyChoices.keys}
+              initialSelected={serviceKeyChoices.selectedIds}
+            />
+          ) : null}
         </div>
       </div>
     </ToastProvider>

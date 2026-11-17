@@ -11,6 +11,7 @@ import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
 import { plansWithFeature } from "@/lib/plan-limits-server";
 import { prisma } from "@/lib/prisma";
 import { setBypassContext } from "@/lib/tenant-context";
+import { isTenantBookable, PUBLIC_TENANT_WHERE } from "@/lib/tenant-visibility";
 
 export type BookingBranchResult = {
   id: string;
@@ -20,11 +21,20 @@ export type BookingBranchResult = {
   address: string;
   open: boolean;
   hours: string | null;
+  /** Онлайн цаг захиалга авдаг эсэх — false бол «Дэлгэрэнгүй» + утас. */
+  bookable: boolean;
+  phone: string | null;
+  /** Картын холбоос: захиалга (ангилалтай бол /book/branch, үгүй бол /org) эсвэл дэлгэрэнгүй. */
+  href: string;
 };
 
 /**
  * Booking v2 нэгтгэсэн хуудас (`app/(app)/book`) — сонгосон ажлын
  * түлхүүрүүдийг (`selectedIds`) БҮГДийг нь гүйцэтгэдэг салбаруудыг олно.
+ * Олон нийтэд харагдах БҮХ газар (онлайн захиалга авдаггүй ч) — ажлыг
+ * байгууллагын сонгосон үйлчилгээ (Tenant.serviceKeys, бүх салбарт) эсвэл
+ * ангиллын холбоос (Category.systemServiceKeyId, салбараар) гүйцэтгэнэ.
+ * Захиалга авдаг (bookable) газар эхэнд.
  * `selectedIds` хоосон бол ХООСОН массив буцаана (шүүлтгүй бүх салбарыг
  * ЖАГСААХГҮЙ) — ажлын төрөл сонгуулахыг урамшуулах зорилготой,
  * `booking-flow.tsx` үүнийг "ажлын төрлөө сонгоно уу" гэсэн зөвлөмж болгож
@@ -50,25 +60,33 @@ export async function getBookingBranchResults(
   const now = new Date();
   const tenants = await prisma.tenant.findMany({
     where: {
-      acceptsOnlineBooking: true,
-      suspended: false,
-      isTest: false, // тест/демо тенант олон нийтэд харагдахгүй (lib/tenant-visibility.ts)
-      creditHidden: false, // credit score бага тул нуугдсан (lib/credit-score.ts)
-      plan: { in: allowedPlans },
-      // Сонгосон үйлчилгээ бүрийн идэвхтэй ангилалтай tenant-уудыг л DB-ээс
-      // авна (салбар түвшний шалгалт доор хэвээр) — бүх tenant-ийг ачаалахгүй.
-      AND: ids.map((id) => ({ categories: { some: { isActive: true, ...BOOKABLE_CATEGORY_WHERE, systemServiceKeyId: id } } })),
+      ...PUBLIC_TENANT_WHERE,
+      branches: { some: { isActive: true } },
+      // Сонгосон үйлчилгээ бүрийг (байгууллагын сонголт эсвэл ангилал) хийдэг
+      // tenant-уудыг л DB-ээс авна (салбар түвшний шалгалт доор).
+      AND: ids.map((id) => ({
+        OR: [
+          { serviceKeys: { some: { id } } },
+          { categories: { some: { isActive: true, ...BOOKABLE_CATEGORY_WHERE, systemServiceKeyId: id } } },
+        ],
+      })),
     },
     orderBy: { name: "asc" },
     select: {
+      slug: true,
       name: true,
       logoUrl: true,
+      phone1: true,
+      acceptsOnlineBooking: true,
+      plan: true,
+      serviceKeys: { where: { id: { in: ids } }, select: { id: true } },
       branches: {
         where: { isActive: true },
         orderBy: { isPrimary: "desc" },
         select: {
           id: true,
           name: true,
+          phone: true,
           city: true,
           district: true,
           khoroo: true,
@@ -87,16 +105,27 @@ export async function getBookingBranchResults(
     },
   });
 
+  const keysParam = ids.map(encodeURIComponent).join(",");
   const results: BookingBranchResult[] = [];
   for (const t of tenants) {
+    const bookable = isTenantBookable(t, allowedPlans);
+    const tenantKeyIds = new Set(t.serviceKeys.map((k) => k.id));
     for (const b of t.branches) {
-      const branchServiceKeyIds = new Set(
+      const categoryKeyIds = new Set(
         t.categories
           .filter((c) => c.branches.length === 0 || c.branches.some((x) => x.id === b.id))
           .map((c) => c.systemServiceKeyId),
       );
-      const coversAll = ids.every((id) => branchServiceKeyIds.has(id));
+      const coversAll = ids.every((id) => tenantKeyIds.has(id) || categoryKeyIds.has(id));
       if (!coversAll) continue;
+      // Ангиллаар бүрэн таарвал /book/branch (ангилал урьдчилан сонгогдоно);
+      // зөвхөн байгууллагын сонголтоор бол /org (ажлаа чөлөөтэй сонгоно).
+      const categoriesCoverAll = ids.every((id) => categoryKeyIds.has(id));
+      const href = !bookable
+        ? `/org/${t.slug}/branch/${encodeURIComponent(b.id)}`
+        : categoriesCoverAll
+          ? `/book/branch/${encodeURIComponent(b.id)}?keys=${keysParam}`
+          : `/org/${t.slug}?branch=${encodeURIComponent(b.id)}`;
       const status = branchStatusNow(
         {
           openTime: b.openTime,
@@ -120,8 +149,12 @@ export async function getBookingBranchResults(
         address: formatAddress(b),
         open: status.open,
         hours: status.hours,
+        bookable,
+        phone: b.phone ?? t.phone1 ?? null,
+        href,
       });
     }
   }
-  return results;
+  // Захиалга авдаг газар эхэнд (тогтвортой эрэмбэ — дотроо нэрээр).
+  return results.sort((a, b) => Number(b.bookable) - Number(a.bookable));
 }
