@@ -80,7 +80,7 @@ function IdentifierStep({
           value={identifier}
           onChange={(e) => setIdentifier(e.target.value)}
           className={`auth-input ${fe.identifier ? "border-red-500/50" : ""}`}
-          placeholder="menejer@servis.mn эсвэл 99112233"
+          placeholder="manager@service.mn эсвэл 99112233"
         />
       </Field>
 
