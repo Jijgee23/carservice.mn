@@ -42,9 +42,9 @@ test("getAppStoreLinks never switches an existing tenant (RLS) context to bypass
   const fn = src.slice(src.indexOf("export async function getAppStoreLinks("));
   assert.match(fn.slice(0, 300), /if \(!getTenantContext\(\)\) setBypassContext\(\);/);
   assert.match(fn.slice(0, 300), /readPlatformSettings\(\)/);
-  // The dashboard layout (tenant context) must use the context-safe reader.
+  // The dashboard layout (tenant context) must never read platform settings via
+  // the bypass reader (it no longer shows app links in the compact sidebar).
   const layout = read("app/dashboard/layout.tsx");
-  assert.match(layout, /getAppStoreLinks\(\)\.then\(\(l\) => l\.business\)/);
   assert.doesNotMatch(layout, /getPlatformSettings\(/);
 });
 
@@ -57,7 +57,8 @@ test("badges render nothing without links; placements are wired", () => {
   assert.match(read("app/_components/footer.tsx"), /<StoreBadges links=\{a\.links\} size="sm"/);
   assert.match(read("app/(app)/layout.tsx"), /getAppStoreLinks\(\)\)\.customer/);
   assert.equal((read("app/_components/consumer-sidebar.tsx").match(/<SidebarAppLinks /g) ?? []).length, 2);
-  assert.equal((read("app/_components/admin-sidebar.tsx").match(/<SidebarAppLinks /g) ?? []).length, 2);
+  // Admin (tenant) sidebar was compacted — app links removed from it.
+  assert.equal((read("app/_components/admin-sidebar.tsx").match(/<SidebarAppLinks /g) ?? []).length, 0);
 });
 
 test("schema + migration add the four nullable store URL columns", () => {

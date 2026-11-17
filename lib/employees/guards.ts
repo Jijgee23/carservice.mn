@@ -44,13 +44,16 @@ export async function filterOwnBranchIds(
   return branchIds.filter((id) => ownedSet.has(id));
 }
 
-export async function ensureRoleBelongsToTenant(
+/**
+ * Роль системийн (глобал) тул tenant шүүлтгүй — зөвхөн байгаа, идэвхтэй эсэхийг
+ * шалгана (идэвхгүй ролийг шинээр оноохгүй).
+ */
+export async function ensureRoleAssignable(
   db: EmployeesClient,
-  tenantId: string,
   roleId: string,
 ): Promise<{ ok: boolean; name?: string; permissions?: string[] }> {
   const role: RoleRow | null = await db.role.findFirst({
-    where: { id: roleId, tenantId },
+    where: { id: roleId },
     select: { id: true, name: true, isActive: true, permissions: true },
   });
   if (!role || !role.isActive) return { ok: false };

@@ -43,8 +43,8 @@
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.22);
   /* Sidebar-ийн идэвхтэй өргөн (admin/consumer/system бүгд хуваалцана) —
      collapse/expand JS-ээс шинэчлэгдэнэ (харах: use-sidebar-collapse.ts).
-     designs/design_example.html-ийн rail(4.5rem)/sidebar(16rem) хэмжээтэй. */
-  --sidebar-w: 16rem;
+     Нягт хэмжээ: rail 4rem / sidebar 14rem (use-sidebar-collapse.ts-тэй ижил). */
+  --sidebar-w: 14rem;
   /* App shell (dashboard/discover/system) — дэвсгэр (dark) —
      designs/design_example.html-ийн ink scale: bg=ink-900, sidebar/surface=
      ink-950. Landing/auth зэрэг sidebar-гүй хуудсууд --bg-primary/--surface-
@@ -208,6 +208,12 @@ html.light
 }
 .sidebar-collapse-btn[data-collapsed="true"] {
   rotate: 180deg;
+}
+/* Нягт sidebar: цэсний icon 16px (svg-ууд 18px-ээр зурагдсан). */
+.app-sidebar .nav-icon svg,
+.oc-side .nav-icon svg {
+  width: 16px;
+  height: 16px;
 }
 /* Collapsed үед nav label-уудыг нуух — hover tooltip-оор орлуулна. */
 .sidebar-tooltip {

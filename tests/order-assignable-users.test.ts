@@ -100,7 +100,7 @@ test("Prisma predicate keeps tenant, active, assignable role and branch lock con
       AND: [{ OR: [{ activeUntil: null }, { activeUntil: { gt: now } }] }],
       OR: [
         { isOwner: true },
-        { role: { permissions: { has: "orders.assignable" } } },
+        { role: { isActive: true, permissions: { has: "orders.assignable" } } },
       ],
     },
     { OR: [{ isOwner: true }, { role: { isActive: true } }] },

@@ -5,7 +5,12 @@
 // Дүрэм:
 //  - Аль хэдийн холбосон бол тэр Service-ийг буцаана (идэвхгүй бол алдаа —
 //    эзэн санаатай идэвхгүй болгосон байж болно).
-//  - Нэр/код/баркод/үнэ/тайлбар сангаас; нэгжийг тенантын нэгжтэй НЭРЭЭР
+//  - Код/баркод/тайлбар сангаас. Нэр, үнэ — засварын хуудсанд ЯГ ашигласнаар
+//    (`overrides`), өгөөгүй бол сангийнхаар. Ингэснээр дараагийн удаа
+//    байгууллагын өөрийн жагсаалтаас тэр нэр, үнээрээ шууд олдоно.
+//  - Тенант ижил төрөл, ижил нэртэй (том/жижиг үсэг үл харгалзан) идэвхтэй
+//    ажил/сэлбэгтэй бол шинээр үүсгэхгүй — тэрийг ашиглана (давхардал).
+//  - Нэгжийг тенантын нэгжтэй НЭРЭЭР
 //    тааруулна (олдохгүй бол сэлбэг → «ширхэг», ажил → «удаа», эсвэл эхний нэгж).
 //  - Ангилал: сангийн системийн ангилал тухайн төрөлд тохирвол, үгүй бол хоосон.
 //  - Сэлбэгийн үлдэгдэл `null` (хөтлөхгүй) — эс бөгөөс 0 үлдэгдэлтэй тул
@@ -14,7 +19,18 @@
 import { Prisma } from "@/app/generated/prisma/client";
 import { logAudit } from "@/lib/audit";
 import { CATALOG_ITEM_NOT_FOUND } from "@/lib/catalog/catalog-commands";
+import { MAX_ITEM_UNIT_PRICE } from "@/lib/orders/order-item-commands";
 import { prisma } from "@/lib/prisma";
+
+export type AdoptCatalogOverrides = {
+  /** Засварын хуудсанд ашигласан нэр (хоосон бол сангийн нэр). */
+  name?: string | null;
+  /** Засварын хуудсанд ашигласан нэгж үнэ (null бол сангийн үнэ). Үнэ
+   * өөрчлөх эрхгүй хэрэглэгчийнхийг дуудагч тал дамжуулахгүй. */
+  price?: Prisma.Decimal | null;
+};
+
+export const ADOPT_NAME_MAX = 200;
 
 export type AdoptCatalogResult =
   | { ok: true; serviceId: string; created: boolean }
@@ -30,8 +46,21 @@ const unitKey = (name: string) => name.trim().toLowerCase();
 export async function adoptCatalogItemForTenant(
   actor: { id: string; tenantId: string },
   catalogItemId: string,
+  overrides: AdoptCatalogOverrides = {},
 ): Promise<AdoptCatalogResult> {
   const { tenantId } = actor;
+
+  const overrideName = overrides.name?.trim().replace(/\s+/g, " ") || null;
+  if (overrideName && overrideName.length > ADOPT_NAME_MAX) {
+    return { ok: false, message: `Нэр ${ADOPT_NAME_MAX} тэмдэгтээс хэтрэхгүй.` };
+  }
+  const overridePrice = overrides.price ?? null;
+  if (
+    overridePrice &&
+    (!overridePrice.isFinite() || overridePrice.lt(0) || overridePrice.gt(MAX_ITEM_UNIT_PRICE))
+  ) {
+    return { ok: false, message: "Үнэ буруу." };
+  }
 
   const linked = await prisma.service.findFirst({
     where: { tenantId, catalogItemId },
@@ -63,6 +92,17 @@ export async function adoptCatalogItemForTenant(
     return { ok: false, message: CATALOG_ITEM_NOT_FOUND };
   }
   const type = item.type;
+  const name = overrideName ?? item.name;
+  const price = overridePrice ?? item.price;
+
+  // Ижил нэртэй өөрийн ажил/сэлбэг байвал (сангаас хайхаасаа өмнө өөрийнхөөс
+  // олоогүй ч бичлэгийн ялгаатай байж болно) давхар үүсгэхгүй.
+  const sameName = await prisma.service.findFirst({
+    where: { tenantId, type, name: { equals: name, mode: "insensitive" } },
+    orderBy: [{ isActive: "desc" }, { createdAt: "asc" }],
+    select: { id: true, isActive: true },
+  });
+  if (sameName?.isActive) return { ok: true, serviceId: sameName.id, created: false };
 
   // Тенант ижил кодтой мөрийг өөрөө бүртгэсэн бол ([tenantId,type,code] unique)
   // шинээр үүсгэхгүй — тэрийг ашиглана.
@@ -109,11 +149,11 @@ export async function adoptCatalogItemForTenant(
       data: {
         tenantId,
         type,
-        name: item.name,
+        name,
         code: item.code,
         barcode: type === "GOODS" ? item.barcode : null,
         unitId,
-        price: item.price,
+        price,
         costPrice: null,
         stock: null,
         durationValue: durationUnitId ? item.durationValue : null,
@@ -144,8 +184,8 @@ export async function adoptCatalogItemForTenant(
     entity: "Service",
     entityId: created.id,
     action: "CREATE",
-    summary: `[${type}] ${item.name}${item.code ? ` · ${item.code}` : ""} · нэгдсэн сангаас (засварын хуудас)`,
-    after: { type, name: item.name, code: item.code, price: item.price.toString(), catalogItemId: item.id },
+    summary: `[${type}] ${name}${item.code ? ` · ${item.code}` : ""} · нэгдсэн сангаас (засварын хуудас)`,
+    after: { type, name, code: item.code, price: price.toString(), catalogItemId: item.id },
   });
   return { ok: true, serviceId: created.id, created: true };
 }

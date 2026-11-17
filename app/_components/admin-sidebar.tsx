@@ -9,8 +9,6 @@ import { Brand, BrandMark } from "./brand";
 import { FeedbackButton } from "./feedback-button";
 import { HoverFlyoutPortal, useHoverFlyout } from "./nav-hover-flyout";
 import { StaffNotificationBell } from "./staff-notification-bell";
-import { SidebarAppLinks } from "./app-store-badges";
-import type { StoreLinks } from "@/lib/app-store-links";
 import { ThemeToggle } from "./theme-toggle";
 import { useSidebarCollapse } from "./use-sidebar-collapse";
 import { DASHBOARD_MODULE_PATHS, modulesForPath } from "@/lib/plan-modules";
@@ -103,7 +101,6 @@ const navItems: NavItem[] = [
       { href: "/dashboard/employees/schedule", label: "Ажлын хувиар" },
       // Ажилтан бүр өөрийнхөө хувиарыг харна — эцгийн `employees` эрх шаардахгүй.
       { href: "/dashboard/my-schedule", label: "Миний хувиар", view: PUBLIC_VIEW },
-      { href: "/dashboard/employees/roles", label: "Үүргүүд", view: "owner" },
     ],
   },
   {
@@ -238,6 +235,7 @@ const secondaryItems: NavItem[] = [
     ),
     children: [
       { href: "/dashboard/settings", label: "Байгууллагын", exact: true },
+      { href: "/dashboard/settings/orders", label: "Засварын хуудас" },
       { href: "/dashboard/settings/system", label: "Системийн" },
       { href: "/dashboard/settings/subscription", label: "Багц" },
       // `audit.view` эрхтэй (owner биш) ажилтанд бүлэг зөвхөн энэ child-аар харагдана.
@@ -530,7 +528,7 @@ function SidebarUserFooter({
         <Link
           href="/dashboard/profile"
           title={userName}
-          className="w-9 h-9 rounded-full border border-[var(--oc-line)] bg-[var(--oc-panel2)] flex items-center justify-center text-xs font-bold text-[var(--oc-ink2)] shrink-0"
+          className="w-8 h-8 rounded-full border border-[var(--oc-line)] bg-[var(--oc-panel2)] flex items-center justify-center text-xs font-bold text-[var(--oc-ink2)] shrink-0"
         >
           {initials}
         </Link>
@@ -556,9 +554,9 @@ function SidebarUserFooter({
     <div className="p-3 border-t border-[var(--oc-line2)] space-y-2">
       <Link
         href="/dashboard/profile"
-        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/[0.04] transition-colors"
+        className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-white/[0.04] transition-colors"
       >
-        <div className="w-9 h-9 rounded-full border border-[var(--oc-line)] bg-[var(--oc-panel2)] flex items-center justify-center text-xs font-bold text-[var(--oc-ink2)] shrink-0">
+        <div className="w-8 h-8 rounded-full border border-[var(--oc-line)] bg-[var(--oc-panel2)] flex items-center justify-center text-xs font-bold text-[var(--oc-ink2)] shrink-0">
           {initials}
         </div>
         <div className="flex-1 min-w-0">
@@ -595,7 +593,6 @@ export function AdminSidebar({
   lockedModules = [],
   singleBranchNav = null,
   notificationUnread,
-  appLinks,
 }: {
   userName: string;
   userEmail: string;
@@ -607,8 +604,6 @@ export function AdminSidebar({
   lockedModules?: string[];
   singleBranchNav?: SingleBranchNav;
   notificationUnread: number;
-  /** Засварын газрын аппын store холбоос (super admin) — хоосон бол харагдахгүй. */
-  appLinks?: StoreLinks;
 }) {
   const { collapsed, toggle } = useSidebarCollapse();
 
@@ -654,7 +649,6 @@ export function AdminSidebar({
         collapsed={collapsed}
       />
 
-      <SidebarAppLinks links={appLinks} title="Апп татах" appName="carservice засварын газрын апп" collapsed={collapsed} />
 
       <SidebarUserFooter
         initials={initials}
@@ -690,7 +684,7 @@ function NavLeafLink({
         href={item.href}
         onClick={onNavigate}
         title={collapsed ? item.label : undefined}
-        className={`flex h-11 items-center gap-3 rounded-xl text-[13px] font-medium transition-colors ${collapsed ? "justify-center px-0" : "px-3"
+        className={`flex h-9 items-center gap-2.5 rounded-lg text-[13px] font-medium transition-colors ${collapsed ? "justify-center px-0" : "px-3"
           } ${active ? activePillClasses : inactivePillClasses}`}
       >
         {item.icon ? (
@@ -745,7 +739,7 @@ function NavGroupItem({
           href={item.href}
           onClick={onNavigate}
           title={item.label}
-          className={`flex h-11 items-center justify-center rounded-xl text-[13px] font-medium transition-colors ${parentActive ? activePillClasses : inactivePillClasses
+          className={`flex h-9 items-center justify-center rounded-lg text-[13px] font-medium transition-colors ${parentActive ? activePillClasses : inactivePillClasses
             }`}
         >
           {item.icon ? (
@@ -789,7 +783,7 @@ function NavGroupItem({
       <button
         type="button"
         onClick={onToggle}
-        className={`w-full flex h-11 items-center gap-3 px-3 rounded-xl text-[13px] font-medium transition-colors ${parentActive ? activePillClasses : inactivePillClasses
+        className={`w-full flex h-9 items-center gap-2.5 px-3 rounded-lg text-[13px] font-medium transition-colors ${parentActive ? activePillClasses : inactivePillClasses
           }`}
         aria-expanded={open}
       >
@@ -850,7 +844,6 @@ export function MobileTopbar({
   lockedModules = [],
   singleBranchNav = null,
   notificationUnread,
-  appLinks,
 }: {
   userName: string;
   userEmail: string;
@@ -862,7 +855,6 @@ export function MobileTopbar({
   lockedModules?: string[];
   singleBranchNav?: SingleBranchNav;
   notificationUnread: number;
-  appLinks?: StoreLinks;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -989,7 +981,6 @@ export function MobileTopbar({
             onNavigate={() => setOpen(false)}
           />
 
-          <SidebarAppLinks links={appLinks} title="Апп татах" appName="carservice засварын газрын апп" />
 
           <SidebarUserFooter
             initials={initials}

@@ -167,7 +167,7 @@ function ConsumerNavList({
               href={item.href}
               onClick={onNavigate}
               title={collapsed ? item.label : undefined}
-              className={`flex h-11 items-center gap-3 rounded-xl text-[13px] font-medium transition-colors ${
+              className={`flex h-9 items-center gap-2.5 rounded-lg text-[13px] font-medium transition-colors ${
                 collapsed ? "justify-center px-0" : "px-3"
               } ${active ? activePillClasses : inactivePillClasses}`}
             >
@@ -273,7 +273,7 @@ function ConsumerFooter({
         <Link
           href="/account"
           title={accountName || "Профайл"}
-          className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--oc-accent)] to-[var(--oc-accent-hi)] text-[var(--oc-on-accent)] flex items-center justify-center text-xs font-bold shrink-0"
+          className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--oc-accent)] to-[var(--oc-accent-hi)] text-[var(--oc-on-accent)] flex items-center justify-center text-xs font-bold shrink-0"
         >
           {initial ?? (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -304,9 +304,9 @@ function ConsumerFooter({
     <div className="p-3 border-t border-[var(--oc-line2)] space-y-2">
       <Link
         href="/account"
-        className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/[0.04] transition-colors"
+        className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-white/[0.04] transition-colors"
       >
-        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--oc-accent)] to-[var(--oc-accent-hi)] text-[var(--oc-on-accent)] flex items-center justify-center text-xs font-bold shrink-0">
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[var(--oc-accent)] to-[var(--oc-accent-hi)] text-[var(--oc-on-accent)] flex items-center justify-center text-xs font-bold shrink-0">
           {initial ?? (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />

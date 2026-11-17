@@ -58,7 +58,7 @@ type FakeUser = {
   deletedAt?: Date | null;
 };
 type FakeBranch = { id: string; tenantId: string; name: string; isActive: boolean };
-type FakeRole = { id: string; tenantId: string; name: string; isActive: boolean; permissions?: string[] };
+type FakeRole = { id: string; tenantId?: string; name: string; isActive: boolean; permissions?: string[] };
 
 function p2002(): Error & { code: string; clientVersion: string } {
   return Object.assign(new Error("Unique constraint failed"), { code: "P2002", clientVersion: "x" });
@@ -163,7 +163,8 @@ function makeFakeDb(
     },
     role: {
       async findFirst({ where }: { where: Record<string, unknown> }) {
-        return roles.find((r) => r.id === where.id && r.tenantId === where.tenantId) ?? null;
+        if ("tenantId" in where) throw new Error("roles are global — no tenantId filter");
+        return roles.find((r) => r.id === where.id) ?? null;
       },
     },
     serviceOrder: {
@@ -1059,12 +1060,20 @@ test("bulkUpdateEmployeeRoleBranch: unknown role/branch id fails with the exact 
   assert.equal(badBranch.message, "Сонгосон салбар олдсонгүй.");
 });
 
-// --- guards: ensureRoleBelongsToTenant / filterOwnBranchIds ----------------
+// --- guards: ensureRoleAssignable / filterOwnBranchIds ---------------------
 
-test("ensureRoleBelongsToTenant: cross-tenant role id is rejected", async () => {
-  const { db } = makeFakeDb({ roles: [{ id: "r1", tenantId: "other", name: "X", isActive: true }] });
-  const result = await guards.ensureRoleBelongsToTenant(db, "t1", "r1");
-  assert.equal(result.ok, false);
+test("ensureRoleAssignable: global role — inactive or missing is rejected, active accepted", async () => {
+  const { db } = makeFakeDb({
+    roles: [
+      { id: "r1", name: "X", isActive: false, permissions: [] },
+      { id: "r2", name: "Y", isActive: true, permissions: ["orders.view"] },
+    ],
+  });
+  assert.equal((await guards.ensureRoleAssignable(db, "r1")).ok, false);
+  assert.equal((await guards.ensureRoleAssignable(db, "ghost")).ok, false);
+  const ok = await guards.ensureRoleAssignable(db, "r2");
+  assert.equal(ok.ok, true);
+  assert.deepEqual(ok.permissions, ["orders.view"]);
 });
 
 test("filterOwnBranchIds: empty input short-circuits without a query", async () => {

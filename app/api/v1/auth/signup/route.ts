@@ -100,7 +100,7 @@ export async function POST(req: Request) {
     where: { id: userId },
     include: {
       tenant: { select: { id: true, name: true } },
-      role: { select: { id: true, name: true, permissions: true } },
+      role: { select: { id: true, name: true, permissions: true, isActive: true } },
     },
   });
 

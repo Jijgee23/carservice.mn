@@ -71,6 +71,9 @@ export async function Footer() {
           <span className="font-plex-mono text-[11.5px] uppercase tracking-[0.1em] text-[var(--oc-muted3)]">
             Холбоос
           </span>
+          <Link href="/discover" className="text-[var(--oc-muted)] hover:text-[var(--oc-accent-hi)] transition-colors">
+            Засварын газар хайх
+          </Link>
           <a href="#boloms" className="text-[var(--oc-muted)] hover:text-[var(--oc-accent-hi)] transition-colors">
             Боломжууд
           </a>

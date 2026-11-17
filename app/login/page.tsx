@@ -1,7 +1,6 @@
 import { Geist, Geist_Mono } from "next/font/google";
-import { redirect } from "next/navigation";
 import { ConsumerAuthShell } from "@/app/_components/consumer-auth-shell";
-import { getAccount } from "@/lib/auth/account";
+import { redirectIfSignedIn } from "@/lib/auth/guest-redirect";
 import { AccountLoginForm } from "./login-form";
 
 const plexSans = Geist({
@@ -21,10 +20,14 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function AccountLoginPage() {
-  // Нэвтэрсэн бол шууд миний цаг руу.
-  const account = await getAccount();
-  if (account) redirect("/account");
+export default async function AccountLoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
+  // Аль ч realm-д нэвтэрсэн бол өөрийнх нь нүүр рүү (account бол миний цаг).
+  const { next } = await searchParams;
+  await redirectIfSignedIn({ prefer: "account", next });
 
   return (
     <div className={`${plexSans.variable} ${plexMono.variable}`}>

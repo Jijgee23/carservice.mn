@@ -341,61 +341,137 @@ export function WebPushBar({
 
   const denied = status === "denied";
   return (
-    <div className={className}>
-      <div
-        role="status"
-        className={`flex items-center gap-2.5 rounded-full border py-1 pl-1 pr-1.5 text-xs ${
+  <div className={`${className} h-full`.trim()}>
+    <div
+      role="status"
+      className="flex h-full min-h-[52px] min-w-0 items-center gap-3 rounded-xl border border-[var(--oc-line)] bg-[var(--oc-panel)] py-2 pl-2 pr-2.5 transition-colors"
+    >
+      {/* Icon */}
+      <span
+        className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${
           denied
-            ? "border-[var(--oc-line)] bg-[var(--oc-panel)]"
-            : "border-[var(--oc-accent)]/25 bg-[var(--oc-accent)]/[0.06]"
+            ? "bg-white/[0.06] text-[var(--oc-muted3)] light:bg-black/[0.05]"
+            : "bg-[var(--oc-accent)]/15 text-[var(--oc-accent)]"
         }`}
       >
-        <span
-          className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${
-            denied
-              ? "bg-white/[0.06] text-[var(--oc-muted3)] light:bg-black/[0.05]"
-              : "bg-[var(--oc-accent)]/15 text-[var(--oc-accent)]"
-          }`}
-        >
-          <BellIcon off={denied} />
+        <BellIcon off={denied} />
+      </span>
+
+      {/* Content */}
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5 leading-tight">
+        <span className="truncate text-sm font-semibold text-[var(--oc-ink)]">
+          {denied
+            ? "Мэдэгдэл хаалттай"
+            : status === "error"
+              ? "Мэдэгдэл асааж чадсангүй"
+              : "Мэдэгдэл идэвхжүүлэх"}
         </span>
-        <span className="min-w-0 flex-1 truncate">
-          {denied ? (
-            <>
-              <span className="font-medium text-[var(--oc-ink2)]">Мэдэгдэл хаалттай</span>
-              <span className="text-[var(--oc-muted3)]"> · хөтчийн тохиргооноос зөвшөөрнө үү</span>
-            </>
-          ) : (
-            <>
-              <span className="font-medium text-[var(--oc-ink)]">
-                {status === "error" ? "Мэдэгдэл асааж чадсангүй" : "Энэ төхөөрөмж дээр мэдэгдэл авах"}
-              </span>
-              <span className="hidden text-[var(--oc-muted3)] md:inline"> · {description}</span>
-            </>
-          )}
+
+        <span className="hidden truncate text-xs text-[var(--oc-muted3)] sm:block">
+          {denied
+            ? "Хөтчийн тохиргооноос мэдэгдэл зөвшөөрнө үү."
+            : description}
         </span>
-        {denied ? null : (
+      </span>
+
+      {/* Actions */}
+      <div className="flex shrink-0 items-center gap-2">
+        {!denied && (
           <button
             type="button"
             disabled={status === "working"}
             onClick={() => enable(false)}
-            className="shrink-0 rounded-full bg-[var(--oc-accent)] px-3 py-1 text-xs font-semibold text-[var(--oc-on-accent)] transition-colors hover:bg-[var(--oc-accent-hi)] disabled:opacity-60"
+            className="rounded-lg bg-[var(--oc-accent)] px-3 py-2 text-xs font-semibold text-[var(--oc-on-accent)] transition-colors hover:bg-[var(--oc-accent-hi)] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {status === "working" ? "Асааж байна…" : status === "error" ? "Дахин оролдох" : "Асаах"}
+            {status === "working"
+              ? "Асааж байна..."
+              : status === "error"
+                ? "Дахин оролдох"
+                : "Асаах"}
           </button>
         )}
+
         <button
           type="button"
           onClick={dismiss}
           aria-label="Хаах"
           title="14 хоног харуулахгүй"
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[var(--oc-muted3)] transition-colors hover:bg-white/[0.08] hover:text-[var(--oc-ink2)] light:hover:bg-black/[0.06]"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[var(--oc-muted3)] transition-colors hover:bg-white/[0.06] hover:text-[var(--oc-ink2)] light:hover:bg-black/[0.05]"
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            aria-hidden="true"
+          >
             <path d="M18 6 6 18M6 6l12 12" />
           </svg>
         </button>
       </div>
     </div>
-  );
+  </div>
+);
+  // return (
+
+  //   <div className={className}>
+  //     <div
+  //       role="status"
+  //       className={`flex items-center gap-2.5 rounded-full border py-1 pl-1 pr-1.5 text-xs ${
+  //         denied
+  //           ? "border-[var(--oc-line)] bg-[var(--oc-panel)]"
+  //           : "border-[var(--oc-accent)]/25 bg-[var(--oc-accent)]/[0.06]"
+  //       }`}
+  //     >
+  //       <span
+  //         className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${
+  //           denied
+  //             ? "bg-white/[0.06] text-[var(--oc-muted3)] light:bg-black/[0.05]"
+  //             : "bg-[var(--oc-accent)]/15 text-[var(--oc-accent)]"
+  //         }`}
+  //       >
+  //         <BellIcon off={denied} />
+  //       </span>
+  //       <span className="min-w-0 flex-1 truncate">
+  //         {denied ? (
+  //           <>
+  //             <span className="font-medium text-[var(--oc-ink2)]">Мэдэгдэл хаалттай</span>
+  //             <span className="text-[var(--oc-muted3)]"> · хөтчийн тохиргооноос зөвшөөрнө үү</span>
+  //           </>
+  //         ) : (
+  //           <>
+  //             <span className="font-medium text-[var(--oc-ink)]">
+  //               {status === "error" ? "Мэдэгдэл асааж чадсангүй" : "Энэ төхөөрөмж дээр мэдэгдэл авах"}
+  //             </span>
+  //             <span className="hidden text-[var(--oc-muted3)] md:inline"> · {description}</span>
+  //           </>
+  //         )}
+  //       </span>
+  //       {denied ? null : (
+  //         <button
+  //           type="button"
+  //           disabled={status === "working"}
+  //           onClick={() => enable(false)}
+  //           className="shrink-0 rounded-full bg-[var(--oc-accent)] px-3 py-1 text-xs font-semibold text-[var(--oc-on-accent)] transition-colors hover:bg-[var(--oc-accent-hi)] disabled:opacity-60"
+  //         >
+  //           {status === "working" ? "Асааж байна…" : status === "error" ? "Дахин оролдох" : "Асаах"}
+  //         </button>
+  //       )}
+  //       <button
+  //         type="button"
+  //         onClick={dismiss}
+  //         aria-label="Хаах"
+  //         title="14 хоног харуулахгүй"
+  //         className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-[var(--oc-muted3)] transition-colors hover:bg-white/[0.08] hover:text-[var(--oc-ink2)] light:hover:bg-black/[0.06]"
+  //       >
+  //         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+  //           <path d="M18 6 6 18M6 6l12 12" />
+  //         </svg>
+  //       </button>
+  //     </div>
+  //   </div>
+  // );
 }

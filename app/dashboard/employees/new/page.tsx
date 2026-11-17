@@ -24,8 +24,8 @@ export default async function NewEmployeePage() {
       select: { id: true, name: true, district: true, slotCapacity: true },
     }),
     prisma.role.findMany({
-      where: { tenantId: me.tenantId, isActive: true },
-      orderBy: { name: "asc" },
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true },
     }),
   ]);
@@ -61,14 +61,7 @@ export default async function NewEmployeePage() {
 
       {roles.length === 0 && !me.isOwner ? (
         <div className="rounded-[10px] border border-[var(--oc-accent)]/30 bg-[var(--oc-panel)] p-5 text-sm text-[var(--oc-ink2)]">
-          Эхлээд{" "}
-          <a
-            href="/dashboard/employees/roles/new"
-            className="text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)] underline"
-          >
-            хэрэглэгчийн үүрэг үүсгэнэ үү
-          </a>
-          . Ажилтны үүргийг үүсгэсэн үүргүүдээс сонгох болно.
+          Идэвхтэй системийн роль алга байна. Системийн админтай холбогдоно уу.
         </div>
       ) : (
         <EmployeeForm

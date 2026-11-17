@@ -9,8 +9,8 @@ import { useEffect, useState } from "react";
 // "flash of wrong width"-ээс сэргийлдэг (харах: app/layout.tsx).
 const STORAGE_KEY = "carcare:sidebar:collapsed";
 
-export const SIDEBAR_EXPANDED_W = "16rem";
-export const SIDEBAR_COLLAPSED_W = "4.5rem";
+export const SIDEBAR_EXPANDED_W = "14rem";
+export const SIDEBAR_COLLAPSED_W = "4rem";
 
 type SidebarCollapseConfig = {
   storageKey?: string;

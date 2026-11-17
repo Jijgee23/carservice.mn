@@ -11,6 +11,7 @@ import {
   workingBranchScopeId,
 } from "@/lib/auth/roles";
 import { prisma } from "@/lib/prisma";
+import { getOrderSettings } from "@/lib/orders/order-settings-server";
 import { safeNext } from "@/lib/safe-redirect";
 import { ORDER_FORM_ID, OrderForm } from "../order-form";
 
@@ -32,6 +33,7 @@ export default async function NewOrderPage({
   }>;
 }) {
   const user = await requireUser();
+  const orderSettings = await getOrderSettings(prisma, user.tenantId);
   if (!canCreate(user, "orders")) redirect("/dashboard/orders");
   const scopeBranchId = workingBranchScopeId(user);
   // Энгийн багц (ганц салбар): салбарыг нууна.
@@ -269,6 +271,14 @@ export default async function NewOrderPage({
           // Энгийн (FREE) багц: Өдрийн хуваарь, Ойролцоо хугацаа, Хүлээн авахыг нууна.
           simplified={user.tenant.plan === "FREE"}
           hideBranches={hideBranches}
+          requireAssignee={orderSettings.requireAssignee}
+          intakeRules={{
+            requireMileage: orderSettings.requireMileage,
+            requireSignature: orderSettings.requireSignature,
+            minIntakePhotos: orderSettings.minIntakePhotos,
+            requireChecklist: orderSettings.requireChecklist,
+            checklist: orderSettings.intakeChecklist,
+          }}
         />
       </div>
     </div>

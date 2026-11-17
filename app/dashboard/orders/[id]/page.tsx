@@ -41,12 +41,13 @@ import {
 } from "@/lib/orders";
 import { canSettlePostpaidOrder } from "@/lib/orders/order-commands";
 import { orderCompleteBlockedReason } from "@/lib/orders/order-complete-guard";
+import { getOrderSettings } from "@/lib/orders/order-settings-server";
 import { prisma } from "@/lib/prisma";
 import { calculateServiceItemDurationMinutes } from "@/lib/service-duration";
 import type { QPayBankUrl } from "@/lib/qpay-tenant";
 import { AddItemForm } from "./add-item-form";
-import { CATALOG_OPTION_PREFIX } from "@/lib/catalog/catalog-option";
 import { IntakeRecord } from "./intake-record";
+import { parseChecklistSnapshot } from "@/lib/orders/order-settings";
 import { OrderItems } from "./order-items";
 import { OrderPaymentsList } from "./order-payments-list";
 import { openSessionBranchIds } from "../../cash/open-sessions";
@@ -83,7 +84,7 @@ export default async function OrderDetailPage({
   const { hideBranches } = await getBranchVisibility(user);
   const { id } = await params;
 
-  const [order, branches, customers, vehicles, technicians, services, diagnosticTemplates, catalogItems] = await Promise.all([
+  const [order, branches, customers, vehicles, technicians, services, diagnosticTemplates] = await Promise.all([
     prisma.serviceOrder.findFirst({
       where: {
         id,
@@ -210,27 +211,6 @@ export default async function OrderDetailPage({
         durationMin: true,
       },
     }),
-    // Нэгдсэн сангийн ажил/сэлбэг — тенант өөртөө хараахан холбоогүйг нь.
-    // Сонговол addOrderItemAction тенантын Service болгон автоматаар холбоно
-    // (lib/services/catalog-adopt.ts), тиймээс шинэ тенант ч шууд ашиглана.
-    prisma.catalogItem.findMany({
-      where: {
-        isActive: true,
-        type: { in: ["LABOR", "GOODS"] },
-        services: { none: { tenantId: user.tenantId } },
-      },
-      orderBy: [{ type: "asc" }, { name: "asc" }],
-      select: {
-        id: true,
-        type: true,
-        name: true,
-        code: true,
-        unitName: true,
-        price: true,
-        categoryId: true,
-        category: { select: { name: true } },
-      },
-    }),
   ]);
 
   // QPay тохиргоо + одоо хүлээгдэж байгаа QPay invoice + бүртгэгдсэн
@@ -313,6 +293,7 @@ export default async function OrderDetailPage({
     isPostpaid: order.isPostpaid,
     remaining: remainingDecimal,
     canCloseUnpaidPostpaid: hasPermission(user, "orders.closeUnpaidPostpaid"),
+    settings: await getOrderSettings(prisma, user.tenantId),
   });
   // Ижил оношилгоо нэг засварын хуудсанд давхардаж болохгүй тул аль хэдийн
   // нэмэгдсэн загваруудыг "+ Мөр нэмэх" сонголтоос хасна.
@@ -478,18 +459,6 @@ export default async function OrderDetailPage({
                     stock: s.stock != null ? s.stock.toString() : null,
                     laborCategoryId: s.categoryId,
                     laborCategoryName: s.category?.name ?? null,
-                  }))}
-                  catalogItems={catalogItems.map((c) => ({
-                    id: `${CATALOG_OPTION_PREFIX}${c.id}`,
-                    type: c.type as ServiceKind,
-                    name: c.name,
-                    code: c.code,
-                    unit: c.unitName,
-                    price: c.price.toString(),
-                    stock: null,
-                    laborCategoryId: c.categoryId,
-                    laborCategoryName: c.category?.name ?? null,
-                    fromCatalog: true,
                   }))}
                   diagnosticTemplates={diagnosticTemplates
                     .filter((t) => !usedDiagnosticTemplateIds.has(t.id))
@@ -734,6 +703,7 @@ export default async function OrderDetailPage({
                   photos={order.intakePhotos}
                   signaturePath={order.intakeSignaturePath}
                   mileageKm={order.intakeMileageKm}
+                  checklist={parseChecklistSnapshot(order.intakeChecklist)}
                   recordedAtLabel={
                     order.intakeRecordedAt
                       ? order.intakeRecordedAt.toLocaleString("mn-MN", { timeZone: "Asia/Ulaanbaatar", hour12: false })

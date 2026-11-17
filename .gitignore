@@ -35,6 +35,7 @@ yarn-error.log*
 !.env.example
 
 # Firebase service account / secrets — НЭ ХЭЗЭЭ Ч commit хийхгүй
+/secrets/
 *firebase-adminsdk*.json
 serviceAccount*.json
 *-service-account*.json
@@ -58,4 +59,4 @@ image.png
 /*.dump
 
 # Local import test spreadsheets
-/*_import_test.xlsx
+/tests/fixtures/*_import_test.xlsx

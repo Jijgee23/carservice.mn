@@ -99,7 +99,7 @@ Res:  200 { "users": [{ "id": "...", "firstName": "...", "lastName": "..." }] }
 422 { "error": "Query branchId нь баталгаажсан ажлын салбартай зөрчилдөж байна.", "fieldErrors": { "branchId": "..." } }`}</Code>
         </Endpoint>
 
-        <Endpoint method="GET" path="/api/v1/orders/catalog-items" auth="bearer" bearerLabel={BEARER} tags={["Эрх: orders.edit (эсвэл orders.editOwn)"]} title="«Мөр нэмэх» сонгогчид нэгдсэн сангийн ажил/сэлбэг — тенант өөртөө хараахан холбоогүйг нь. Сонгосныг POST /orders/[id]/items-д catalogItemId-аар илгээнэ.">
+        <Endpoint method="GET" path="/api/v1/orders/catalog-items" auth="bearer" bearerLabel={BEARER} tags={["Эрх: orders.edit (эсвэл orders.editOwn)"]} title="«Мөр нэмэх» сонгогчид нэгдсэн сангийн ажил/сэлбэг — тенант өөртөө хараахан холбоогүйг нь. Апп эхлээд өөрийн ажил/сэлбэгээс хайж, олдохгүй бол үүнийг дуудна. Сонгосныг POST /orders/[id]/items-д catalogItemId-аар илгээхэд байгууллагын ажил/сэлбэгт ЯГ илгээсэн description (нэр) болон unitPrice-аар (orders.itemPrice эрхтэй бол, эс бөгөөс сангийн үнэ) нэмэгдэнэ; ижил нэртэй өөрийнх байвал түүнийг ашиглана.">
           <Code>{`Query: ?type=LABOR|GOODS&q=&page=&pageSize=   // q: нэр (агуулсан), код (эхлэл), баркод; pageSize default 50, max 200
 Res:  200 { "items": [{ "id": "...", "type": "LABOR" | "GOODS", "name": "...", "code": "..." | null, "unitName": "..." | null,
                         "price": "45000", "description": "..." | null, "category": { "id", "name" } | null }],

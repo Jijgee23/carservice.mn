@@ -92,7 +92,7 @@ test("update paths re-derive isPostpaid and refresh snapshots only on vehicle ch
 test("orders.closeUnpaidPostpaid is a standalone permission listed in the role editor", async () => {
   const { PERMISSIONS, STANDALONE_PERMISSIONS } = await import("../lib/auth/permissions");
   const def = PERMISSIONS.find((p) => p.code === "orders.closeUnpaidPostpaid");
-  assert.equal(def?.label, "Дараа тооцоо хаах, тооцоо нийлэх");
+  assert.equal(def?.label, "Төлбөр дутуу засварыг хаах, тооцоо нийлэх");
   assert.ok(STANDALONE_PERMISSIONS.some((p) => p.code === "orders.closeUnpaidPostpaid"));
 });
 

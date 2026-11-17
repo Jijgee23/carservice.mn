@@ -8,6 +8,7 @@ import { canView, workingBranchScopeId } from "@/lib/auth/roles";
 import { BANK_REF_SELECT } from "@/lib/payment-accounts";
 import { buildOrderDocument, parsePrintFormat } from "@/lib/print/documents";
 import { prisma } from "@/lib/prisma";
+import { getOrderSettings } from "@/lib/orders/order-settings-server";
 
 export const metadata = {
   title: "Захиалгын хуудас хэвлэх",
@@ -26,7 +27,9 @@ export default async function OrderPrintPage({
   // Энгийн багц (ганц салбар): хэвлэхэд салбарын нэрийг нууна (хаяг үлдэнэ).
   const { hideBranches } = await getBranchVisibility(user);
   const [{ id }, { format: rawFormat }] = await Promise.all([params, searchParams]);
-  const format = parsePrintFormat(rawFormat);
+  const orderSettings = await getOrderSettings(prisma, user.tenantId);
+  // URL-д format байхгүй бол tenant-ийн анхдагч хэмжээ.
+  const format = parsePrintFormat(rawFormat, orderSettings.printFormat);
 
   // Same visibility as the order detail page: tenant + working-branch scope, then canViewOrder.
   const order = await prisma.serviceOrder.findFirst({
@@ -42,6 +45,7 @@ export default async function OrderPrintPage({
       plateSnapshot: true,
       vinSnapshot: true,
       intakeMileageKm: true,
+      intakeChecklist: true,
       assignedToId: true,
       assignedTo: { select: { firstName: true, lastName: true } },
       customer: { select: { fullName: true, phone: true, isOrganization: true, orgName: true, orgRegnum: true } },
@@ -74,6 +78,12 @@ export default async function OrderPrintPage({
     branch: hideBranches ? { ...order.branch, name: "" } : order.branch,
     order,
     master: order.assignedTo,
+    template: {
+      headerNote: orderSettings.printHeaderNote,
+      footerNote: orderSettings.printFooterNote,
+      signatureLines: orderSettings.printSignatureLines,
+      showChecklist: orderSettings.printShowChecklist,
+    },
     customer: order.customer,
     vehicle: order.vehicle,
     items: order.items,

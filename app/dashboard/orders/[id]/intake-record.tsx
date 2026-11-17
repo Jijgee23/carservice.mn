@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Modal } from "@/app/_components/modal";
 import { formatMileageKm } from "@/lib/orders/order-intake";
+import { CHECKLIST_STATUS_LABEL, type ChecklistAnswer } from "@/lib/orders/order-settings";
 
 // QA #14: хүлээн авах бүртгэл — захиалга үүсгэх үед бичигдсэн, зөвхөн унших.
 // Хуудсыг уртасгахгүйн тулд товч хураангуй + modal-д бүрэн харагдана.
@@ -12,12 +13,14 @@ type Props = {
   photos: { id: string; path: string }[];
   signaturePath: string | null;
   mileageKm: number | null;
+  /** Шалгах жагсаалтын snapshot (нээх үед). */
+  checklist?: ChecklistAnswer[];
   // Огноог server дээр UB цагаар форматлана (hydration зөрөхгүй).
   recordedAtLabel: string | null;
   recordedBy: string | null;
 };
 
-export function IntakeRecord({ notes, photos, signaturePath, mileageKm, recordedAtLabel, recordedBy }: Props) {
+export function IntakeRecord({ notes, photos, signaturePath, mileageKm, checklist = [], recordedAtLabel, recordedBy }: Props) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
 
@@ -30,6 +33,9 @@ export function IntakeRecord({ notes, photos, signaturePath, mileageKm, recorded
     notes ? "тэмдэглэл" : null,
     photos.length > 0 ? `${photos.length} зураг` : null,
     signaturePath ? "гарын үсэг" : null,
+    checklist.length > 0
+      ? `шалгах жагсаалт${checklist.some((c) => c.status === "ISSUE") ? ` (${checklist.filter((c) => c.status === "ISSUE").length} асуудал)` : ""}`
+      : null,
   ].filter(Boolean);
 
   return (
@@ -54,6 +60,7 @@ export function IntakeRecord({ notes, photos, signaturePath, mileageKm, recorded
           photos={photos}
           signaturePath={signaturePath}
           mileageKm={mileageKm}
+          checklist={checklist}
           recordedAtLabel={recordedAtLabel}
           recordedBy={recordedBy}
         />
@@ -62,7 +69,7 @@ export function IntakeRecord({ notes, photos, signaturePath, mileageKm, recorded
   );
 }
 
-function IntakeDetails({ notes, photos, signaturePath, mileageKm, recordedAtLabel, recordedBy }: Props) {
+function IntakeDetails({ notes, photos, signaturePath, mileageKm, checklist = [], recordedAtLabel, recordedBy }: Props) {
   const [viewing, setViewing] = useState<number | null>(null);
 
   // Томруулсан зураг дээр ←/→ товчоор шилжинэ.
@@ -131,6 +138,33 @@ function IntakeDetails({ notes, photos, signaturePath, mileageKm, recordedAtLabe
 
       {mileageKm !== null ? (
         <p className="text-sm text-[var(--oc-ink2)]">Гүйлт: {formatMileageKm(mileageKm)}</p>
+      ) : null}
+
+      {checklist.length > 0 ? (
+        <section>
+          <h3 className="mb-1.5 text-xs font-medium text-[var(--oc-muted3)]">Шалгах жагсаалт</h3>
+          <ul className="divide-y divide-[var(--oc-line)] rounded-md border border-[var(--oc-line)]">
+            {checklist.map((c, i) => (
+              <li key={i} className="flex flex-wrap items-baseline justify-between gap-2 px-3 py-2 text-sm">
+                <span className="text-[var(--oc-ink2)]">{c.label}</span>
+                <span className="text-right">
+                  <span
+                    className={
+                      c.status === "ISSUE"
+                        ? "font-medium text-red-400"
+                        : c.status === "OK"
+                          ? "text-[var(--oc-ok)]"
+                          : "text-[var(--oc-muted3)]"
+                    }
+                  >
+                    {CHECKLIST_STATUS_LABEL[c.status]}
+                  </span>
+                  {c.note ? <span className="block text-xs text-[var(--oc-muted2)]">{c.note}</span> : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       <section>

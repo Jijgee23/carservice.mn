@@ -7,7 +7,7 @@ export type RoleRow = {
   description?: string | null;
   permissions?: string[];
   isActive?: boolean;
-  tenantId?: string;
+  key?: string | null;
   _count?: { users: number };
 };
 
@@ -26,14 +26,6 @@ export type RolesClient = {
     update(args: Args): Promise<Args>;
     delete(args: Args): Promise<Args>;
   };
-};
-
-// `requireUser()`'s real return value (full Prisma User) satisfies this
-// structurally.
-export type RoleActor = {
-  id: string;
-  tenantId: string;
-  isOwner: boolean;
 };
 
 export type ValidatedRole = {

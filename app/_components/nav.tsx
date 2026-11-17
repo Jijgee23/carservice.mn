@@ -6,6 +6,7 @@ import { Brand } from "./brand";
 import { ThemeToggle } from "./theme-toggle";
 
 const links = [
+  { href: "/discover", label: "Засварын газар хайх" },
   { href: "#boloms", label: "Боломжууд" },
   { href: "#hows", label: "Хэрхэн ажилладаг" },
   { href: "#price", label: "Үнэ" },
@@ -30,19 +31,19 @@ export function Nav() {
             <Brand />
           </Link>
 
-          <nav className="hidden md:flex items-center gap-8 text-[14px] text-[var(--oc-muted)]">
+          <nav className="hidden lg:flex items-center gap-5 xl:gap-8 text-[14px] whitespace-nowrap text-[var(--oc-muted)]">
             {links.map((l) => (
-              <a
+              <Link
                 key={l.href}
                 href={l.href}
                 className="hover:text-[var(--oc-accent-hi)] transition-colors"
               >
                 {l.label}
-              </a>
+              </Link>
             ))}
           </nav>
 
-          <div className="hidden md:flex items-center gap-2">
+          <div className="hidden lg:flex items-center gap-2">
             <ThemeToggle variant="icon" />
             <Link
               href="/page/login"
@@ -58,7 +59,7 @@ export function Nav() {
             </Link>
           </div>
 
-          <div className="flex md:hidden items-center gap-2">
+          <div className="flex lg:hidden items-center gap-2">
             <ThemeToggle variant="icon" />
             <button
               type="button"
@@ -84,17 +85,17 @@ export function Nav() {
         </div>
 
         {open ? (
-          <div className="md:hidden border-t border-[var(--oc-line2)]">
+          <div className="lg:hidden border-t border-[var(--oc-line2)]">
             <div className="px-3 py-3 flex flex-col gap-1">
               {links.map((l) => (
-                <a
+                <Link
                   key={l.href}
                   href={l.href}
                   onClick={() => setOpen(false)}
                   className="px-3 py-3 rounded-lg text-base font-medium text-[var(--oc-ink2)] hover:bg-[var(--oc-panel)]"
                 >
                   {l.label}
-                </a>
+                </Link>
               ))}
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <Link

@@ -24,8 +24,8 @@ export default async function EmployeeImportPage() {
       select: { id: true, name: true },
     }),
     prisma.role.findMany({
-      where: { tenantId: me.tenantId, isActive: true },
-      orderBy: { name: "asc" },
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true },
     }),
   ]);
@@ -55,14 +55,8 @@ export default async function EmployeeImportPage() {
 
       {roles.length === 0 ? (
         <div className="rounded-[10px] border border-[var(--oc-accent)]/30 bg-[var(--oc-panel)] p-5 text-sm text-[var(--oc-ink2)]">
-          Ажилтан бүрт үүрэг заавал оноогдоно, гэтэл идэвхтэй үүрэг алга.{" "}
-          {me.isOwner ? (
-            <Link href="/dashboard/employees/roles" className="text-[var(--oc-accent-hi)] underline underline-offset-2">
-              Эхлээд үүрэг үүсгэнэ үү.
-            </Link>
-          ) : (
-            "Админаар үүрэг үүсгүүлнэ үү."
-          )}
+          Ажилтан бүрт роль заавал оноогдоно, гэтэл идэвхтэй системийн роль алга.
+          Системийн админтай холбогдоно уу.
         </div>
       ) : (
         <EmployeeImportWizard roles={roles} branches={branches} singleBranchId={singleBranchId} />

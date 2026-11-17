@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
-import { redirect } from "next/navigation";
-import { hasActiveSystemSession } from "@/lib/auth/system";
+import { redirectIfSignedIn } from "@/lib/auth/guest-redirect";
 import { Brand } from "@/app/_components/brand";
 import { SystemLoginForm } from "./login-form";
 
@@ -22,9 +21,14 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function SystemLoginPage() {
-  // Аль хэдийн нэвтэрсэн бол системийн самбар руу.
-  if (await hasActiveSystemSession()) redirect("/system");
+export default async function SystemLoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
+  // Аль ч realm-д нэвтэрсэн бол өөрийнх нь нүүр рүү (system бол самбар).
+  const { next } = await searchParams;
+  await redirectIfSignedIn({ prefer: "system", next });
 
   return (
     <div

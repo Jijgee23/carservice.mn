@@ -175,7 +175,7 @@ export function orderAssignableWhere(now: Date = new Date()) {
     AND: [{ OR: [{ activeUntil: null }, { activeUntil: { gt: now } }] }],
     OR: [
       { isOwner: true },
-      { role: { permissions: { has: "orders.assignable" } } },
+      { role: { isActive: true, permissions: { has: "orders.assignable" } } },
     ],
   } satisfies Prisma.UserWhereInput;
 }

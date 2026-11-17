@@ -1,4 +1,5 @@
 import type { Prisma } from "@/app/generated/prisma/client";
+import { parseChecklistSnapshot, type ChecklistAnswer } from "@/lib/orders/order-settings";
 
 // Хүлээн авах бүртгэлийн (intake) уншихад зориулсан нийтлэг select + JSON хөрвүүлэгч.
 // Staff болон customer API хоёулаа ижил `intake` объект буцаана.
@@ -8,6 +9,7 @@ export const INTAKE_VIEW_SELECT = {
   intakeRecordedAt: true,
   intakeSignaturePath: true,
   intakeMileageKm: true,
+  intakeChecklist: true,
   intakePhotos: {
     orderBy: { createdAt: "asc" as const },
     select: { id: true, path: true },
@@ -20,6 +22,7 @@ export type IntakeViewRow = {
   intakeRecordedAt: Date | null;
   intakeSignaturePath: string | null;
   intakeMileageKm: number | null;
+  intakeChecklist: Prisma.JsonValue | null;
   intakePhotos: { id: string; path: string }[];
   intakeRecordedBy: { firstName: string | null; lastName: string | null } | null;
 };
@@ -29,6 +32,8 @@ export type IntakeView = {
   photos: { id: string; url: string }[];
   signatureUrl: string | null;
   mileageKm: number | null;
+  /** Шалгах жагсаалт [{label, status: OK|ISSUE|NA, note}] — хоосон бол []. */
+  checklist: ChecklistAnswer[];
   recordedAt: string;
   recordedBy: string | null;
 };
@@ -54,6 +59,7 @@ export function toIntakeView(
     photos: row.intakePhotos.map((p) => ({ id: p.id, url: p.path })),
     signatureUrl: row.intakeSignaturePath,
     mileageKm: row.intakeMileageKm,
+    checklist: parseChecklistSnapshot(row.intakeChecklist),
     recordedAt: row.intakeRecordedAt.toISOString(),
     recordedBy: opts.includeRecordedBy ? name || null : null,
   };

@@ -2288,3 +2288,39 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - Захиалгын хураамжийн refund зөвхөн платформын админ (API 403 PLATFORM_REFUND_ONLY). Ангилал устгахад FK алдаа гарахгүй (архивлана), салбар солиход цагийн хуваарь шилжинэ, нөөц тохируулга атомик, машин засах/устгах багц шалгана, appointment–order холбоос салбарын хүрээ, захиалгын алдаа toast-аар, PATCH /orders хоосон body 400, null body 400, шалгалтын дараа бичилт, хэрэглэгчийн app 5 нээлттэй захиалга + rate limit, бөөн үйлдлийн дээд хязгаар.
 - Бага: алдааны дотоод текст задрахгүй, catalog эрэмбэ, NaN хуудаслалт, үнэлгээний rate limit, /me/schedule модуль, system-* action-ууд throw хийхгүй, await-гүй $transaction.
 - Тест: бүтэн suite 1860/1860 (өмнө 51 унадаг байсан); хуучирсан source-scan тестүүдийг шинэ бүтэц рүү шинэчлэв, шинэ: auth-race-hardening, order-appointment-audit-fixes.
+
+[2026-11-13] Роль системээс тогтмол (глобал) — супер админ удирдана
+- Role tenant-д хамаарахаа больсон: tenantId хасагдаж, key (MECHANIC|ENGINEER|ACCOUNTANT|CASHIER|MANAGER) + sortOrder нэмэгдэв; name глобал unique; Role хүснэгтээс RLS хасагдав (migration 20261113130000_global_system_roles).
+- Үндсэн 5 роль: Засварчин, Инженер, Нягтлан, Кассын нярав, Менежер (зөвхөн харах). Анхдагч эрх lib/roles/system-roles.ts (SYSTEM_ROLE_DEFAULTS) — migration SQL-тэй тест тулгадаг. Tenant-admin = isOwner (өөрчлөгдөөгүй).
+- Шилжилт: хуучин tenant ролийг нэрээр (alias: Механик/Мастер/Туслах/Ажилчин → Засварчин, Салбарын мастер → Инженер, Кассчин/Нярав → Кассын нярав, Сервис менежер → Менежер, Нягтлан бодогч → Нягтлан) тааруулж оноов; таарахгүй бол roleId=NULL. Хуучин tenant ролиуд устсан.
+- Супер админ: /system/roles (жагсаалт, шинэ, засах) — app/_actions/system-roles.ts + lib/roles/core.ts (глобал). Үндсэн ролийг устгахгүй (SYSTEM_ROLE), ажилтантай нэмэлт ролийг устгахгүй.
+- Tenant: /dashboard/employees/roles болон «Үүргүүд» цэс хасагдав; ажилтны форм идэвхтэй системийн ролиос сонгоно. Mobile: GET /api/v1/roles глобал (key талбар нэмэгдэв), POST /roles, PATCH/DELETE /roles/[id] → 403 SYSTEM_MANAGED.
+- Идэвхгүй роль = эрхгүй: requireUser / API token / login / me дээр permissions=[]; orderAssignableWhere идэвхтэй роль шаардана. validateOrderAssignee-ийн Role lock FOR SHARE (глобал мөр).
+
+[2026-11-13] Засварын хуудас: ажил/сэлбэгийг эхлээд өөрөөсөө, олдохгүй бол нэгдсэн сангаас
+- Вэб «мөр нэмэх» (app/dashboard/orders/[id]/add-item-form.tsx): Ажил/Сэлбэг сонгогч зөвхөн байгууллагын өөрийн жагсаалтаар хайна (searchable); бичсэн нь олдохгүй бол «… — мэдээллийн сангаас хайх» мөр + «Олдохгүй байна уу?» холбоос → сангаас хайх панел (searchOrderCatalogAction, 20 хүртэл, orders засах эрх). Өөрийн жагсаалт хоосон ч Ажил/Сэлбэг таб идэвхтэй.
+- Сангаас сонгоход нэр нь засагдах талбар болж, үнэ бөглөгдөнө; нэмэхэд байгууллагын ажил/сэлбэгт ЯГ ашигласан нэр, үнээр (orders.itemPrice эрхгүй бол сангийн үнэ) бүртгэгдэнэ — дараагийн удаа өөрийн жагсаалтаас олдоно.
+- lib/services/catalog-adopt.ts: overrides { name, price }; ижил төрөл+нэртэй (case-insensitive) идэвхтэй өөрийн мөр байвал түүнийг ашиглана; нэр ≤200, үнэ 0..MAX. assertOrderItemAddPrecheck canSetPrice буцаана. Mobile POST /orders/:id/items ч description/unitPrice-аар холбоно.
+- Хуудас нэгдсэн санг бүхэлд нь урьдчилан татахаа болив (catalogItem.findMany хасагдсан).
+
+[2026-11-13] Засварын хуудасны тохиргоо (tenant бүр) — /dashboard/settings/orders
+- TenantOrderSettings (1:1, RLS) + ServiceOrder.intakeChecklist (migration 20261113140000_tenant_order_settings). Мөргүй tenant = өмнөх хатуу дүрэм (lib/orders/order-settings.ts ORDER_SETTINGS_DEFAULTS).
+- Дугаарлалт: {угтвар}{он-}{дараалал} (lib/order-number.ts). Дараалал numberNextSeq-д (бүх захиалгыг scan хийхээ болив; анх нэг удаа хуучин дугаараас тооцно), он оруулбал жил бүр 1-ээс (Asia/Ulaanbaatar). «Он оруулах» солигдоход тоолуур шинэчлэгдэнэ.
+- Нээх: хариуцагч/гүйлт/гарын үсэг/зургийн доод тоо/шалгах жагсаалт заавал эсэх — createOrderCommand дотор (web+API): MILEAGE_REQUIRED, SIGNATURE_REQUIRED, INTAKE_PHOTOS_REQUIRED, CHECKLIST_REQUIRED. Шалгах жагсаалт (Хэвийн/Асуудалтай/Хамаарахгүй + тэмдэглэл) snapshot-оор хадгалагдаж дэлгэрэнгүй, API intake.checklist, хэвлэлтэд гарна. FREE (энгийн) формд ч шаардлагатай бол хүлээн авах хэсэг харагдана.
+- Хаах: оношилгоо заавал / бүх ажил дууссан байх (унтраавал хаахад автоматаар дуусгана, бөглөөгүй оношилгоог биш) / төлбөр дутуу хаах (orders.closeUnpaidPostpaid эрхтэй, isPostpaid=true болж авлага). UI guard (order-complete-guard) тохиргоотой ижил. Эрхийн шошго «Төлбөр дутуу засварыг хаах, тооцоо нийлэх».
+- Хэвлэх: анхдагч A4/80мм, толгой/доод тэмдэглэл, гарын үсгийн мөр, шалгах жагсаалт (lib/print/documents.ts, print-document.tsx).
+- Mobile: GET (бүх ажилтан) / PATCH (эзэн) /api/v1/tenant/order-settings; POST /orders intakeChecklist. API docs, гарын авлага (settings-orders) шинэчлэгдэв. Тест: tests/order-settings.test.ts (18); локал DB дээр нээх/дугаар/хаах урсгал шалгагдсан.
+
+[2026-11-13] Sidebar нягтруулав (admin/consumer/system)
+- Өргөн 16rem → 14rem, rail 4.5rem → 4rem (globals.css --sidebar-w, use-sidebar-collapse.ts, app/layout.tsx inline script).
+- Цэсний мөр h-11 → h-9, rounded-lg, gap-2.5; icon 16px (.nav-icon svg); хэрэглэгчийн footer p-2, avatar 32px.
+
+[2026-11-13] Зочны хуудас (login/signup/forgot): аль ч realm-д нэвтэрсэн бол өөрийн нүүр рүү
+- lib/auth/guest-redirect.ts (redirectIfSignedIn, getSignedInRealm) — session-ийг DB-ээр шалгана (JWT-ээр биш → цуцлагдсан session дээр redirect loop үүсэхгүй). `next` нь зөвхөн тухайн realm-ийн дотор бол (safeNextWithin).
+- lib/auth/realm.ts — Realm/REALM_HOME нэг газар (proxy.ts эндээс импортлоно). /login, /page/login, /page/signup, /page/forgot, /system/login ашиглана. Тест: tests/guest-redirect.test.ts.
+
+[2026-11-13] Landing: «Засварын газар хайх» (/discover) холбоос
+- Nav, hero (ButtonGhost), footer-т /discover нэмэгдэв; nav desktop цэс md → lg breakpoint (мөр багтахгүй байсан), <a> → <Link>.
+- Ажилтны (admin) sidebar-аас «Апп татах» холбоос хасагдсан (dashboard layout getAppStoreLinks татахаа болив); tests/app-store-links.test.ts шинэчлэгдэв.
+
+[2026-11-17] Файл цэгцлэлт: md/постер/танилцуулга/лого → docs/ (docs/marketing/), _tmp-shot-dashboard.mjs → scripts/.

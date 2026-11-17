@@ -154,6 +154,9 @@ export async function POST(req: Request) {
       workingBranchId: scopeResult.branchId,
       attachUnownedVehicleOwner: true,
       intake,
+      // Хүлээн авалтын шалгах жагсаалт [{id, status: OK|ISSUE|NA, note?}] —
+      // GET /api/v1/tenant/order-settings-ийн intakeChecklist-ээр.
+      intakeChecklist: (body as Record<string, unknown>).intakeChecklist,
     });
     const order = await prisma.serviceOrder.findFirst({
       where: { id: created.id, tenantId: auth.user.tenantId },

@@ -55,7 +55,6 @@ model Tenant {
   updatedAt                      DateTime  @updatedAt
 
   users                    User[]
-  roles                    Role[]
   branches                 Branch[]
   customers                Customer[]
   tenantVehicles           TenantVehicle[]
@@ -74,6 +73,7 @@ model Tenant {
   reviews                  Review[]
   auditLogs                AuditLog[]
   qpaySettings             TenantQPaySettings?
+  orderSettings            TenantOrderSettings?
   orderPayments            OrderPayment[]
   cashTransactionTypes     CashTransactionType[]
   cashTransactions         CashTransaction[]
@@ -186,30 +186,31 @@ model User {
   @@index([activeUntil])
 }
 
-// --- Role (тенант бүрийн өөрийн үүсгэдэг хэрэглэгчийн үүрэг) -------------
-// Админ (isOwner=true) бүртгэлийн дараа байгууллагынхаа онцлогт тохируулан
-// Role үүсгэж, permission массивыг сонгоно. Ажилтан үүсгэх үед эдгээрээс
-// сонгоно. OWNER үргэлж бүх эрхтэй, тусдаа Role үүсэхгүй.
+// --- Role (системийн глобал роль) -------------------------------------------
+// Роль tenant-д хамаарахгүй: супер админ /system/roles-оос удирдана, бүх
+// байгууллага эдгээрээс сонгож ажилтандаа онооно. `key`-тэй мөрүүд нь үндсэн
+// роль (lib/roles/system-roles.ts) — устгагдахгүй. Tenant-admin (isOwner) роль
+// биш, үргэлж бүх эрхтэй. Глобал хүснэгт тул RLS-гүй.
 
 model Role {
   id          String   @id @default(cuid())
-  name        String
+  // Үндсэн ролийн тогтмол түлхүүр (MECHANIC|ENGINEER|ACCOUNTANT|CASHIER|MANAGER).
+  // null = супер админы нэмсэн роль.
+  key         String?  @unique
+  name        String   @unique
   description String?
   // Permission code-уудын массив. Кодын жагсаалт нь `lib/auth/permissions.ts`
-  // дотор төвлөрсөн (ж: "orders.manage", "audit.view").
+  // дотор төвлөрсөн (ж: "orders.view", "audit.view").
   permissions String[]
   isActive    Boolean  @default(true)
-
-  tenantId String
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sortOrder   Int      @default(0)
 
   users User[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([tenantId, name])
-  @@index([tenantId, isActive])
+  @@index([isActive])
 }
 
 // --- Branch ---------------------------------------------------------------
@@ -596,6 +597,10 @@ model ServiceOrder {
   intakeSignaturePath      String?
   // Хүлээн авах үеийн гүйлт (км, 0–2,000,000). Заавал биш.
   intakeMileageKm          Int?
+  // Хүлээн авалтын шалгах жагсаалтын snapshot (нээх үед):
+  // [{label, status: "OK"|"ISSUE"|"NA", note?}] — tenant жагсаалтаа дараа
+  // өөрчилсөн ч энэ хуудас/хэвлэлт өөрчлөгдөхгүй (lib/orders/order-settings.ts).
+  intakeChecklist          Json?
   totalAmount              Decimal?      @db.Decimal(12, 2)
   paidAmount               Decimal?      @db.Decimal(12, 2)
 
@@ -1249,6 +1254,48 @@ model QPaySettings {
   tokenExpiresAt        DateTime?
   refreshTokenExpiresAt DateTime?
   updatedAt             DateTime  @updatedAt
+}
+
+// --- TenantOrderSettings (засварын хуудасны тохиргоо, tenant бүр) -----------
+// Мөр байхгүй = анхдагч (ORDER_SETTINGS_DEFAULTS, lib/orders/order-settings.ts)
+// — одоогийн хатуу дүрэмтэй яг адил. Owner /dashboard/settings/orders-оос засна.
+model TenantOrderSettings {
+  tenantId String @id
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Дугаарлалт: {prefix}{YYYY-}{seq padStart(padding)} — lib/order-number.ts.
+  numberPrefix      String  @default("")
+  numberPadding     Int     @default(5)
+  numberIncludeYear Boolean @default(false)
+  // Дараагийн дараалал (null = хуучин дугааруудаас нэг удаа тооцно) ба тэр
+  // дарааллын он (numberIncludeYear үед он солигдоход 1-ээс эхэлнэ).
+  numberNextSeq     Int?
+  numberSeqYear     Int?
+
+  // Нээх үеийн шаардлага.
+  requireAssignee  Boolean @default(true)
+  requireMileage   Boolean @default(false)
+  requireSignature Boolean @default(false)
+  minIntakePhotos  Int     @default(0)
+  requireChecklist Boolean @default(false)
+  // Хүлээн авалтын шалгах жагсаалт: [{id, label}].
+  intakeChecklist  Json    @default("[]")
+
+  // Хаах дүрэм.
+  requireDiagnosticsFilled Boolean @default(true)
+  requireItemsCompleted    Boolean @default(true)
+  // Ердийн засварыг үлдэгдэлтэй хаах (orders.closeUnpaidPostpaid эрхтэй) — авлага болно.
+  allowCloseUnpaid         Boolean @default(false)
+
+  // Хэвлэх загвар.
+  printFormat         String  @default("a4") // "a4" | "80mm"
+  printHeaderNote     String?
+  printFooterNote     String?
+  printSignatureLines Boolean @default(true)
+  printShowChecklist  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // --- TenantQPaySettings (байгууллагын merchant — захиалгын төлбөрт) ------

@@ -8,18 +8,11 @@ import {
   ACCOUNT_COOKIE_NAME,
   verifyAccountSession,
 } from "@/lib/auth/account-session";
+import { REALM_HOME, type Realm } from "@/lib/auth/realm";
 
 const TENANT_PROTECTED_PREFIXES = ["/dashboard"];
 const SYSTEM_PROTECTED_PREFIX = "/system";
 const ACCOUNT_PROTECTED_PREFIX = "/account";
-
-type Realm = "system" | "tenant" | "account";
-
-const REALM_HOME: Record<Realm, string> = {
-  system: "/system",
-  tenant: "/dashboard",
-  account: "/account",
-};
 
 function startsWithSegment(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);

@@ -164,7 +164,7 @@ export function BranchSwitcher({
   }
 
   return (
-    <div ref={containerRef} className="relative min-w-0 shrink-0">
+    <div ref={containerRef} className="relative min-w-0 shrink-0 self-stretch">
       <button
         type="button"
         onClick={() => {
@@ -174,7 +174,7 @@ export function BranchSwitcher({
         aria-haspopup="listbox"
         aria-expanded={open}
         title={`${firstName}, ажиллах салбараа солих`}
-        className={`group flex w-full min-w-0 items-center gap-3 rounded-xl border bg-[var(--oc-panel)] py-1.5 pl-1.5 pr-3 transition-colors sm:w-auto ${
+        className={`group flex h-full w-full min-w-0 items-center gap-3 rounded-xl border bg-[var(--oc-panel)] py-1.5 pl-1.5 pr-3 transition-colors sm:w-auto ${
           open
             ? "border-[var(--oc-accent)]/50 ring-2 ring-[var(--oc-accent)]/15"
             : "border-[var(--oc-line)] hover:border-[var(--oc-line2)] hover:bg-[var(--oc-panel2)]"

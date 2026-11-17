@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { Prisma, prisma } from "@/lib/prisma";
+import { SYSTEM_ROLE_DEFAULTS } from "@/lib/roles/system-roles";
 
 type SeedDb = typeof prisma;
 
@@ -22,25 +23,6 @@ const appointmentStatuses = [
   "NO_SHOW",
   "CONFIRMED",
 ] as const;
-
-const permissions = [
-  "branches.view",
-  "branches.manage",
-  "customers.view",
-  "customers.manage",
-  "vehicles.view",
-  "vehicles.manage",
-  "services.view",
-  "services.manage",
-  "orders.view",
-  "orders.manage",
-  "appointments.view",
-  "appointments.manage",
-  "diagnostics.view",
-  "diagnostics.manage",
-  "reports.view",
-  "audit.view",
-];
 
 const tenants = [
   {
@@ -385,6 +367,16 @@ export async function seedFixtureData(db: SeedDb) {
   const tenantServices = new Map<string, string[]>();
   const tenantTemplates = new Map<string, string[]>();
 
+  // Системийн (глобал) роль — migration-д үүссэн байх ч, хоосон DB-д seed
+  // ажиллахад заавал байлгана. Эрхийг дарж бичихгүй (супер админы засвар).
+  for (const r of SYSTEM_ROLE_DEFAULTS) {
+    await db.role.upsert({
+      where: { id: r.id },
+      update: {},
+      create: { id: r.id, key: r.key, name: r.name, description: r.description, permissions: [...r.permissions], sortOrder: r.sortOrder },
+    });
+  }
+
   for (let tenantIndex = 0; tenantIndex < tenants.length; tenantIndex++) {
     const tenant = tenants[tenantIndex];
     await db.tenant.upsert({
@@ -393,18 +385,11 @@ export async function seedFixtureData(db: SeedDb) {
       create: tenant,
     });
 
-    const roleId = `seed-role-${tenantIndex + 1}-manager`;
-    await db.role.upsert({
-      where: { tenantId_name: { tenantId: tenant.id, name: "Сервис менежер" } },
-      update: { description: "Seed fixture бүх үндсэн үйлдэл", permissions, isActive: true },
-      create: { id: roleId, tenantId: tenant.id, name: "Сервис менежер", description: "Seed fixture бүх үндсэн үйлдэл", permissions },
-    });
-
     const userIds: string[] = [];
     const staff = [
       ["Бат", "Эрдэнэ", `owner${tenantIndex + 1}@carservice.mn`, `8800000${tenantIndex + 1}`, true, null],
-      ["Саруул", "Мөнх", `service${tenantIndex + 1}@carservice.mn`, `8800010${tenantIndex + 1}`, false, roleId],
-      ["Гарьд", "Төгс", `tech${tenantIndex + 1}@carservice.mn`, `8800020${tenantIndex + 1}`, false, roleId],
+      ["Саруул", "Мөнх", `service${tenantIndex + 1}@carservice.mn`, `8800010${tenantIndex + 1}`, false, "sysrole_engineer"],
+      ["Гарьд", "Төгс", `tech${tenantIndex + 1}@carservice.mn`, `8800020${tenantIndex + 1}`, false, "sysrole_mechanic"],
     ] as const;
     for (let staffIndex = 0; staffIndex < staff.length; staffIndex++) {
       const [firstName, lastName, email, phone, isOwner, assignedRoleId] = staff[staffIndex];

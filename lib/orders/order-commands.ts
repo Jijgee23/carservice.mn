@@ -20,8 +20,10 @@ import {
   isOrderLocked,
   POSTPAID_CLOSE_FORBIDDEN_MESSAGE,
   POSTPAID_SETTLEMENT_FORBIDDEN_MESSAGE,
+  serviceItemTimingPatch,
   type OrderStatus,
 } from "@/lib/orders";
+import { getOrderSettings } from "@/lib/orders/order-settings-server";
 import { effectiveBranchScope } from "@/lib/cash/scope";
 
 export type OrderCommandActor = OrderAccessUser & {
@@ -165,8 +167,8 @@ export async function validateOrderAssignee(
   if (roleId) {
     const lockedRole = await tx.$queryRaw<{ id: string }[]>`
       SELECT id FROM "Role"
-      WHERE id = ${roleId} AND "tenantId" = ${input.tenantId}
-      FOR UPDATE
+      WHERE id = ${roleId}
+      FOR SHARE
     `;
     if (lockedRole.length === 0) {
       throw new OrderCommandError("Сонгосон ажилтан энэ салбарт хариуцагч болж болохгүй.", 422, "ASSIGNEE_INELIGIBLE");
@@ -264,13 +266,16 @@ export function assertCompletionPaymentAllowed(input: {
   isPostpaid: boolean;
   /** Дотоод засвар: төлбөрийн дүрэм хамаарахгүй. */
   isInternal?: boolean;
+  /** Tenant-ийн тохиргоо: ердийн засварыг үлдэгдэлтэй хаахыг зөвшөөрөх
+   * (эрхтэй хэрэглэгч л; үлдэгдэл нь дараа тооцоо/авлага болно). */
+  allowCloseUnpaid?: boolean;
   totalAmount: Prisma.Decimal | null;
   paid: Prisma.Decimal;
 }): void {
   if (input.isInternal) return;
   const total = input.totalAmount ?? new Prisma.Decimal(0);
   if (!input.paid.lt(total)) return;
-  if (!input.isPostpaid) {
+  if (!input.isPostpaid && !input.allowCloseUnpaid) {
     throw new OrderCommandError(
       `Төлбөр бүрэн төлөгдөөгүй (үлдэгдэл ${total.minus(input.paid).toString()}₮). Төлбөрөө бүрэн авсны дараа засварын хуудсыг дуусгана уу.`,
       422,
@@ -425,8 +430,13 @@ export async function applyOrderPatchCommand(input: {
       }
 
       let uncheckPostpaidOnCompletion = false;
+      // Тохиргоогоор зөвшөөрсөн бол ердийн засварыг үлдэгдэлтэй хаахад авлага болгоно.
+      let closeAsReceivable = false;
+      // «Бүх ажил дууссан байх» унтраалттай үед хаахад автоматаар дуусгах мөрүүд.
+      let autoCompleteItems: { id: string; status: string; startedAt: Date | null }[] = [];
       if (nextStatus === "COMPLETED") {
-        const pending = await tx.serviceItem.count({
+        const orderSettings = await getOrderSettings(tx, actor.tenantId);
+        const pending = !orderSettings.requireDiagnosticsFilled ? 0 : await tx.serviceItem.count({
           where: {
             orderId,
             kind: "DIAGNOSTIC",
@@ -443,7 +453,15 @@ export async function applyOrderPatchCommand(input: {
         }
         // Ажил/оношилгоо/хураамжийн мөр бүгд дууссан байх (сэлбэгт явц байхгүй).
         const unfinished = order.items.filter((item) => item.kind !== "PART" && item.status !== "COMPLETED").length;
-        if (unfinished > 0) {
+        if (unfinished > 0 && !orderSettings.requireItemsCompleted) {
+          // Тохиргоо: хаах үед дуусаагүй ажлыг автоматаар дуусгана. Бөглөгдөөгүй
+          // оношилгоог (тайлангүй) дууссан болгохгүй — хэвээр үлдэнэ.
+          const open = await tx.serviceItem.findMany({
+            where: { orderId, status: { in: ["PENDING", "IN_PROGRESS"] }, kind: { not: "PART" } },
+            select: { id: true, kind: true, status: true, startedAt: true, diagnosticReportId: true },
+          });
+          autoCompleteItems = open.filter((item) => item.kind !== "DIAGNOSTIC" || item.diagnosticReportId);
+        } else if (unfinished > 0) {
           throw new OrderCommandError(
             `Дуусаагүй ${unfinished} ажил байна. Бүх ажлыг дуусгасны дараа засварын хуудсыг дуусгана уу.`,
             422,
@@ -457,9 +475,30 @@ export async function applyOrderPatchCommand(input: {
           actor,
           isPostpaid: completingPostpaid,
           isInternal: nextInternal,
+          allowCloseUnpaid: orderSettings.allowCloseUnpaid,
           totalAmount: order.totalAmount,
           paid,
         });
+        closeAsReceivable =
+          !nextInternal &&
+          !completingPostpaid &&
+          paid.lt(order.totalAmount ?? new Prisma.Decimal(0));
+        for (const item of autoCompleteItems) {
+          await tx.serviceItem.update({
+            where: { id: item.id },
+            data: { status: "COMPLETED", ...serviceItemTimingPatch("COMPLETED", item.startedAt) },
+          });
+          await logAudit({
+            tenantId: actor.tenantId,
+            userId: actor.id,
+            entity: "ServiceOrder",
+            entityId: orderId,
+            action: "ITEM_STATUS_CHANGE",
+            summary: `${item.status} → COMPLETED (мөр ${item.id}) · хаах үед автоматаар`,
+            before: { status: item.status },
+            after: { status: "COMPLETED" },
+          }, tx);
+        }
         // Дуусгах үед төлбөр бүрэн бол дараа тооцоог арилгана (тооцоо нийлэх зүйлгүй).
         uncheckPostpaidOnCompletion = shouldUncheckPostpaidOnCompletion(completingPostpaid, order.totalAmount, paid);
       }
@@ -511,6 +550,9 @@ export async function applyOrderPatchCommand(input: {
       if (input.isInternal === true) updates.isPostpaid = false;
       else if (input.isPostpaid !== undefined) updates.isPostpaid = input.isPostpaid;
       if (uncheckPostpaidOnCompletion) updates.isPostpaid = false;
+      // Үлдэгдэлтэй хаасан ердийн засвар → дараа тооцоо (авлага); тооцоог дараа нь
+      // postpaid settlement урсгалаар (canSettlePostpaidOrder) нийлнэ.
+      if (closeAsReceivable) updates.isPostpaid = true;
       if (nextStatus != null || input.notes !== undefined || input.assignedToId !== undefined || input.isPostpaid !== undefined || input.isInternal !== undefined) {
         if (input.assignedToId !== undefined) {
           // Ижил хариуцагчийг дахин илгээвэл шалгахгүй — дараа нь ажлаас гарсан /

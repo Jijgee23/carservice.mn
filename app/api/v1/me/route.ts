@@ -30,7 +30,7 @@ async function buildMeResponse(userId: string, tenantId: string) {
       isOwner: true,
       branchId: true,
       role: {
-        select: { id: true, name: true, permissions: true },
+        select: { id: true, name: true, permissions: true, isActive: true },
       },
     },
   });
@@ -55,7 +55,11 @@ async function buildMeResponse(userId: string, tenantId: string) {
     phone: user.phone,
     isOwner: user.isOwner,
     role: user.role
-      ? { id: user.role.id, name: user.role.name, permissions: user.role.permissions }
+      ? {
+          id: user.role.id,
+          name: user.role.name,
+          permissions: user.role.isActive ? user.role.permissions : [],
+        }
       : null,
     tenant,
     branch,

@@ -1,6 +1,6 @@
 "use client";
 
-import { deleteRoleAction } from "@/app/_actions/roles";
+import { deleteRoleAction } from "@/app/_actions/system-roles";
 import { ConfirmForm } from "@/app/_components/confirm-form";
 import { Btn } from "@/app/_components/landing-ops-ui";
 
@@ -14,10 +14,10 @@ export function DeleteRoleButton({
   canDelete: boolean;
 }) {
   return (
-    <ConfirmForm action={deleteRoleAction} message={`"${roleName}" үүргийг устгах уу?`}>
+    <ConfirmForm action={deleteRoleAction} message={`"${roleName}" ролийг устгах уу?`}>
       <input type="hidden" name="id" value={roleId} />
       <Btn type="submit" variant="danger" disabled={!canDelete}>
-        Үүрэг устгах
+        Роль устгах
       </Btn>
     </ConfirmForm>
   );

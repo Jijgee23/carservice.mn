@@ -47,8 +47,9 @@ export function Hero() {
             carservice нь автозасвар, автосервисийн газруудад засварын хуудас, ажлын хуваарь, нөөц, тайланг;
             жолоочид ойролцоох автозасварт цаг захиалах, засварын түүхээ харахыг нэг платформ дээр нэгтгэдэг.
           </p>
-          <div className="mt-9 flex flex-col sm:flex-row gap-3">
+          <div className="mt-9 flex flex-col sm:flex-row sm:flex-wrap gap-3">
             <ButtonPrimary href="/page/signup">Үнэгүй эхлүүлэх</ButtonPrimary>
+            <ButtonGhost href="/discover">Засварын газар хайх</ButtonGhost>
             <ButtonGhost href="#hows">Хэрхэн ажилладаг</ButtonGhost>
           </div>
           <div className="mt-7 text-[13px] text-[var(--oc-muted3)]">

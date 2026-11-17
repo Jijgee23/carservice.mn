@@ -20,7 +20,7 @@ export function StaffDocs() {
           <Code>{`Query: ?q=&branchId=&roleId=&active=yes|no&page=&pageSize=|limit=   // pageSize ≤100 (default 50); бусад параметр → 422
 Res: 200 { "employees": [EmployeeDto], "pagination": {...},
   "meta": { "branches": [{ "id": "...", "name": "...", "count": 4 }],   // шүүлтээс үл хамаарах тоо; салбаргүй бол { "id": "", "name": "Хуваарилагдаагүй" }
-            "roles": [{ "id": "...", "name": "..." }] } }                 // идэвхтэй үүргүүд
+            "roles": [{ "id": "...", "name": "..." }] } }                 // идэвхтэй системийн роль
 EmployeeDto = { "id", "firstName", "lastName", "email", "phone", "isOwner": false, "roleId": "..."|null, "roleName": "..."|null,
   "isActive": true, "activeUntil": "ISO"|null, "tenantId", "branchId": "..."|null, "assignableBranchIds": ["..."],
   "verified": true,                 // OTP идэвхжүүлэлт хийсэн эсэх
@@ -30,7 +30,7 @@ EmployeeDto = { "id", "firstName", "lastName", "email", "phone", "isOwner": fals
 
         <Endpoint method="POST" path="/api/v1/employees" auth="bearer" bearerLabel={BEARER} tags={["Эрх: employees.create", "Багц идэвхтэй байх шаардлагатай"]} title="Шинэ ажилтан нэмэх — нууц үггүй, verified=false үүснэ; ажилтан анхны нэвтрэлтэд OTP-оор нууц үгээ үүсгэнэ.">
           <Code>{`Req:  { "lastName": "...", "firstName": "...", "email": "a@b.mn", "phone": "99112233",   // бүгд заавал; email lowercase болно, утас 8 оронтой
-        "roleId": "...",                      // заавал (isOwner=true үед үл тооцно) — идэвхтэй, энэ тенантын үүрэг
+        "roleId": "...",                      // заавал (isOwner=true үед үл тооцно) — идэвхтэй системийн роль
         "branchId": "...", "assignableBranchIds": ["..."],   // заавал биш; нэмэлт салбараас үндсэн салбар хасагдана, бусад тенантынх шүүгдэнэ
         "isActive": true, "activeUntil": "2026-12-31",        // заавал биш; isActive default true
         "isOwner": true }                     // заавал биш — зөвхөн дуудагч өөрөө админ бол хүчинтэй (roleId=null болно)
@@ -93,43 +93,21 @@ Res:  200 { "succeeded": 2, "failed": 1, "errors": ["Овог Нэр: Тенан
       | "Сонгосон салбар олдсонгүй." | "Дор хаяж нэг ажилтан сонгоно уу.", "code": "VALIDATION" }`}</Code>
         </Endpoint>
 
-        <Endpoint method="GET" path="/api/v1/roles" auth="bearer" bearerLabel={BEARER} tags={["Эрх: employees.view / employees.create / employees.edit (аль нэг)"]} title="Тенантын үүргүүд (идэвхтэй нь эхэндээ, нэрээр) — ажилтны формын үүрэг сонгогчид.">
+        <Endpoint method="GET" path="/api/v1/roles" auth="bearer" bearerLabel={BEARER} tags={["Эрх: employees.view / employees.create / employees.edit (аль нэг)"]} title="Системийн (глобал) роль — бүх байгууллагад нэг жагсаалт, супер админ удирдана. Ажилтны формын роль сонгогчид (идэвхтэй нь эхэндээ, sortOrder/нэрээр).">
           <Code>{`Query: ?page=&pageSize=|limit=   // бусад параметр → 422 VALIDATION
-Res: 200 { "roles": [{ "id": "...", "name": "Менежер", "description": "..."|null, "permissions": ["orders.view", ...], "isActive": true }],
+Res: 200 { "roles": [{ "id": "sysrole_manager", "key": "MANAGER"|null,   // key: үндсэн роль (MECHANIC|ENGINEER|ACCOUNTANT|CASHIER|MANAGER), null = нэмэлт
+                       "name": "Менежер", "description": "..."|null, "permissions": ["orders.view", ...], "isActive": true }],
            "pagination": {...} }
 403 { "error": "Танд энэ үйлдэл хийх эрх байхгүй." }`}</Code>
         </Endpoint>
 
-        <Endpoint method="POST" path="/api/v1/roles" auth="bearer" bearerLabel={BEARER} tags={["Зөвхөн эзэн"]} title="Шинэ үүрэг үүсгэх (зөвхөн тенант админ).">
-          <Code>{`Req:  { "name": "Менежер",            // заавал, ≤60 тэмдэгт, тенант дотор давтагдахгүй
-        "description": "...",          // заавал биш
-        "permissions": ["orders.view", "orders.edit", ...],   // ≥1 (GET /permissions-ийн code-ууд)
-        "isActive": true }             // заавал биш, default true
-      // orders.edit/editOwn сонгосон бол orders.view/viewOwn заавал; orders.edit → orders.view заавал (fieldErrors.orderScopes)
-Res:  201 { "role": { "id", "name", "description", "permissions", "isActive" } }
-403 { "error": "Зөвхөн тенант админ үүргийг удирдана." }
-422 { "error": "Оруулсан мэдээлэл буруу.", "code": "VALIDATION", "fieldErrors": { "name" | "permissions" | "orderScopes": "..." } }
-422 { "error": "Энэ нэртэй үүрэг аль хэдийн байна.", "code": "DUPLICATE", "fieldErrors": {...} }`}</Code>
+        <Endpoint method="GET" path="/api/v1/roles/[id]" auth="bearer" bearerLabel={BEARER} tags={["Эрх: employees.view / employees.create / employees.edit (аль нэг)"]} title="Нэг ролийн дэлгэрэнгүй.">
+          <Code>{`Res: 200 { "role": { "id", "key", "name", "description", "permissions", "isActive" } }
+404 { "error": "Роль олдсонгүй.", "code": "NOT_FOUND" }`}</Code>
         </Endpoint>
 
-        <Endpoint method="GET" path="/api/v1/roles/[id]" auth="bearer" bearerLabel={BEARER} tags={["Эрх: employees.view / employees.create / employees.edit (аль нэг)"]} title="Нэг үүргийн дэлгэрэнгүй.">
-          <Code>{`Res: 200 { "role": { "id", "name", "description", "permissions", "isActive" } }
-404 { "error": "Үүрэг олдсонгүй.", "code": "NOT_FOUND" }`}</Code>
-        </Endpoint>
-
-        <Endpoint method="PATCH" path="/api/v1/roles/[id]" auth="bearer" bearerLabel={BEARER} tags={["Зөвхөн эзэн"]} title="Үүрэг засах — name, description, permissions, isActive-ийг бүтнээр нь илгээнэ.">
-          <Code>{`Req:  { "name": "...", "description": "...", "permissions": [...], "isActive": true }   // POST-той ижил шалгалт
-Res:  200 { "role": {...} }
-403 { "error": "Зөвхөн тенант админ үүргийг удирдана." }
-404 { "error": "Үүрэг олдсонгүй.", "code": "NOT_FOUND" }
-422 { "code": "VALIDATION" | "DUPLICATE", "fieldErrors": {...} }`}</Code>
-        </Endpoint>
-
-        <Endpoint method="DELETE" path="/api/v1/roles/[id]" auth="bearer" bearerLabel={BEARER} tags={["Зөвхөн эзэн"]} title="Үүрэг устгах — тухайн үүрэгтэй ажилтан байхгүй үед л.">
-          <Code>{`Res: 200 { "role": { "id": "..." } }
-403 { "error": "Зөвхөн тенант админ үүргийг удирдана." }
-404 { "error": "Үүрэг олдсонгүй.", "code": "NOT_FOUND" }
-409 { "error": "Энэ үүрэгтэй 2 ажилтан байна. Эхлээд тэдний үүргийг солино уу.", "code": "ROLE_IN_USE" }`}</Code>
+        <Endpoint method="POST" path="/api/v1/roles" auth="bearer" bearerLabel={BEARER} tags={["Хасагдсан"]} title="Байгууллага роль үүсгэх/засах/устгах боломжгүй болсон — POST /roles, PATCH/DELETE /roles/[id] үргэлж 403.">
+          <Code>{`403 { "error": "Роль системээс тохируулагдана. Системийн админтай холбогдоно уу.", "code": "SYSTEM_MANAGED" }`}</Code>
         </Endpoint>
 
         <Endpoint method="GET" path="/api/v1/permissions" auth="bearer" bearerLabel={BEARER} tags={["Эрх: employees.view / employees.create / employees.edit (аль нэг)"]} title="Эрхийн каталог (тенантаас үл хамаарна) — үүргийн эрх сонгогч бүтээхэд.">

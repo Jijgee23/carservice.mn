@@ -512,7 +512,8 @@ Res: 200 { "paid": false, "underpaidAmount": null, "message": null }  // хар�
       // өөрийн өгсөн үнэлгээ (super admin нуусан ч өөрт харагдана); reply = засварын газрын хариу
   "canReview": true,   // status=COMPLETED БӨГӨӨД захиалгын Customer нь энэ Account-тай холбогдсон үед true → POST /orders/[id]/review
   "intake": { "notes": "..." | null, "photos": [{ "id": "...", "url": "/uploads/..." }], "signatureUrl": "/uploads/..." | null,
-              "mileageKm": 152300 | null, "recordedAt": "...", "recordedBy": null } | null
+              "mileageKm": 152300 | null, "checklist": [{ "label": "...", "status": "OK" | "ISSUE" | "NA", "note": "..." | null }],
+              "recordedAt": "...", "recordedBy": null } | null
       // машин хүлээн авах бүртгэл (бүртгээгүй бол null). recordedBy үргэлж null — ажилтны нэр гаргахгүй.
 } }
 404 { "error": "Засварын хуудас олдсонгүй." }   // дотоод засвар, эсвэл өөрийн биш захиалга`}</Code>

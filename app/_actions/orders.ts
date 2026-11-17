@@ -21,6 +21,7 @@ import {
 } from "@/lib/action-errors";
 import { parseDurationInput } from "@/lib/category-duration";
 import { parseIntakeInput } from "@/lib/orders/order-intake-server";
+import { getOrderSettings } from "@/lib/orders/order-settings-server";
 import {
   closeOpenOrderTimeBooking,
   openOrderTimeBooking,
@@ -383,11 +384,23 @@ export async function createOrderAction(
     }
     data.assignedToId = user.id;
   }
-  if (!data.assignedToId) errors.assignedToId = "Хариуцах мастер сонгоно уу.";
+  // Хариуцагч заавал эсэх — tenant-ийн тохиргоо (command дахин шалгана).
+  const orderSettings = await getOrderSettings(prisma, user.tenantId);
+  if (!data.assignedToId && orderSettings.requireAssignee) errors.assignedToId = "Хариуцах мастер сонгоно уу.";
   // QA #14: хүлээн авах хэсэг зөвхөн энд (үүсгэх үед) бичигдэнэ; update нь
   // OrderInput-оор дамждаг тул түүнийг хэзээ ч өөрчлөхгүй.
   const { intake, error: intakeError } = await parseIntakeInput(formData, user.tenantId, user.id);
   if (intakeError) errors.intake = intakeError;
+  // Хүлээн авалтын шалгах жагсаалт: [{id, status, note?}] JSON (command шалгана).
+  let intakeChecklist: unknown = null;
+  const checklistRaw = s(formData, "intakeChecklist");
+  if (checklistRaw) {
+    try {
+      intakeChecklist = JSON.parse(checklistRaw);
+    } catch {
+      errors.intake = "Шалгах жагсаалтын хариулт буруу.";
+    }
+  }
 
   const appointmentId = s(formData, "appointmentId") || null;
   let estimatedDurationMinutes: number | null = null;
@@ -464,6 +477,7 @@ export async function createOrderAction(
       scheduledAt: data.scheduledAt,
       notes: data.notes,
       intake,
+      intakeChecklist,
       appointmentId,
       estimatedDurationMinutes,
       workingBranchId: scope,
@@ -1336,8 +1350,12 @@ export async function addOrderItemAction(orderId: string, _prev: OrderActionStat
     // Нэгдсэн сангаас сонгосон бол эхлээд тенантын ажил/сэлбэг болгон холбоно.
     // Захиалгын хүрээ/эрх/түгжээг adopt (тенантад Service үүсгэх) хийхээс өмнө шалгана.
     if (!serviceId && catalogItemId && !diagnosticTemplateId) {
-      await assertOrderItemAddPrecheck(user, orderId);
-      const adopted = await adoptCatalogItemForTenant(user, catalogItemId);
+      const { canSetPrice } = await assertOrderItemAddPrecheck(user, orderId);
+      // Байгууллагын ажил/сэлбэгт засварын хуудсанд ЯГ ашигласан нэр, үнээр нэмнэ.
+      const adopted = await adoptCatalogItemForTenant(user, catalogItemId, {
+        name: s(formData, "description"),
+        price: canSetPrice ? unitPrice : null,
+      });
       if (!adopted.ok) return { ok: false, fieldErrors: { serviceId: adopted.message } };
       serviceId = adopted.serviceId;
     }

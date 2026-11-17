@@ -67,7 +67,7 @@ const confirmActions: Array<[string, string]> = [
   ["app/_actions/branch-schedules.ts", "deleteBranchScheduleSeasonAction"],
   ["app/_actions/employees.ts", "deleteEmployeeAction"],
   ["app/_actions/employees.ts", "resetEmployeePasswordAction"],
-  ["app/_actions/roles.ts", "deleteRoleAction"],
+  ["app/_actions/system-roles.ts", "deleteRoleAction"],
   ["app/_actions/system-admins.ts", "setSuperAdminActiveAction"],
   ["app/_actions/system-subscriptions.ts", "extendSubscriptionAction"],
   ["app/_actions/system-subscriptions.ts", "cancelSubscriptionAction"],

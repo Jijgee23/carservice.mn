@@ -310,14 +310,16 @@ test("assigned master is required on create and cannot be removed afterwards", (
   const here = dirname(fileURLToPath(import.meta.url));
   const read = (f: string) => readFileSync(resolve(here, f), "utf8");
   const create = read("../lib/orders/order-create-command.ts");
-  assert.match(create, /if \(!input\.assignedToId(?: && !input\.appointmentId)?\) \{[\s\S]{0,200}"ASSIGNEE_REQUIRED"/);
-  // QA #28: from an appointment the master may be carried over, but one must still resolve.
-  assert.match(create, /if \(!assignedToId\) \{[\s\S]{0,200}"ASSIGNEE_REQUIRED"/);
+  // Tenant-ийн тохиргоо (анхдагч: заавал). QA #28: цагаас мастер дамжиж болох
+  // тул тохиргоо + цагийн хариуцагчийг уншсаны дараа шалгана.
+  assert.match(create, /const settings = await getOrderSettings\(tx, input\.tenantId\);\s*if \(!assignedToId && settings\.requireAssignee\) \{[\s\S]{0,200}"ASSIGNEE_REQUIRED"/);
+  // Хариуцагчгүй (тохиргоогоор зөвшөөрсөн) үед validateOrderAssignee-г алгасна.
+  assert.match(create, /if \(assignedToId\) await validateOrderAssignee\(/);
   const patch = read("../lib/orders/order-commands.ts");
   assert.match(patch, /input\.assignedToId === null && order\.assignedToId[\s\S]{0,200}"ASSIGNEE_REQUIRED"/);
   // Оноох эрхгүй mobile хэрэглэгч өөрөө (web-тэй ижил).
   const route = read("../app/api/v1/orders/route.ts");
   assert.match(route, /else if \(!canAssignOrders\(auth\.user\)\) \{[\s\S]{0,160}assignedToId = auth\.user\.id;/);
   const web = read("../app/_actions/orders.ts");
-  assert.match(web, /if \(!data\.assignedToId\) errors\.assignedToId = "Хариуцах мастер сонгоно уу\.";/);
+  assert.match(web, /if \(!data\.assignedToId && orderSettings\.requireAssignee\) errors\.assignedToId = "Хариуцах мастер сонгоно уу\.";/);
 });

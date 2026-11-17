@@ -83,13 +83,16 @@ export async function assertOrderItemAddPrecheck(
   actor: OrderCommandActor,
   orderId: string,
   scope?: string | null,
-): Promise<void> {
+): Promise<{ canSetPrice: boolean }> {
   const order = await prisma.serviceOrder.findFirst({
     where: { id: orderId, tenantId: actor.tenantId },
     select: { id: true, branchId: true, status: true, assignedToId: true },
   });
   if (!order) throw new OrderCommandError("Засварын хуудас олдсонгүй.", 404, "ORDER_NOT_FOUND");
   assertOrderItemAccess(actor, order, scope);
+  // Сангаас холбох үед хэрэглэгчийн оруулсан үнийг Service-д хадгалах эсэх —
+  // addOrderItemCommand-ийн canSetPrice-тэй ижил дүрэм.
+  return { canSetPrice: canChangeOrderItemPrice(actor, order) };
 }
 
 /**

@@ -222,7 +222,7 @@ export function EmployeeForm({
               error={fe.roleId}
               hint={
                 roles.length === 0
-                  ? "Үүрэг үүсээгүй. Эхлээд үүрэг үүсгэнэ үү."
+                  ? "Идэвхтэй системийн роль алга. Системийн админд хандана уу."
                   : undefined
               }
             >

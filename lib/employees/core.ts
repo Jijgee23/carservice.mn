@@ -19,7 +19,7 @@ import { parseIdsJson } from "@/lib/bulk-action";
 import { importRowToFormData, isCalendarDate, type ImportRow, type ImportRowResult } from "./import";
 import {
   duplicateUserFields,
-  ensureRoleBelongsToTenant,
+  ensureRoleAssignable,
   filterOwnBranchIds,
   roleWithinActorPermissions,
 } from "./guards";
@@ -101,7 +101,7 @@ export async function prepareCreateEmployee(
     // Админ өөрөө permission системээс дээгүүр тул тусад нь Role хэрэггүй.
     data.roleId = null;
   } else if (data.roleId) {
-    const r = await ensureRoleBelongsToTenant(db, actor.tenantId, data.roleId);
+    const r = await ensureRoleAssignable(db, data.roleId);
     if (!r.ok) {
       return {
         ok: false,
@@ -302,7 +302,7 @@ export async function updateEmployee(
   }
 
   if (data.roleId) {
-    const r = await ensureRoleBelongsToTenant(db, actor.tenantId, data.roleId);
+    const r = await ensureRoleAssignable(db, data.roleId);
     if (!r.ok) {
       return {
         ok: false,
@@ -469,7 +469,7 @@ export async function bulkUpdateEmployeeRoleBranch(
 
   let roleName = "";
   if (roleId) {
-    const r = await ensureRoleBelongsToTenant(db, actor.tenantId, roleId);
+    const r = await ensureRoleAssignable(db, roleId);
     if (!r.ok) return { ok: false, message: "Сонгосон үүрэг олдсонгүй эсвэл идэвхгүй байна." };
     if (!roleWithinActorPermissions(actor, r.permissions)) {
       return { ok: false, message: ROLE_EXCEEDS_ACTOR_ERROR };

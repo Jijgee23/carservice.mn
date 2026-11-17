@@ -4,6 +4,37 @@ import { useEffect, useRef, useState } from "react";
 import { stageIntakeFileAction } from "@/app/_actions/order-intake";
 import { Field } from "@/app/_components/landing-ops-ui";
 import { INTAKE_NOTES_MAX, INTAKE_PHOTOS_MAX, formatMileageKm } from "@/lib/orders/order-intake";
+import {
+  CHECKLIST_NOTE_MAX,
+  CHECKLIST_STATUSES,
+  CHECKLIST_STATUS_LABEL,
+  type ChecklistItemDef,
+  type ChecklistStatus,
+} from "@/lib/orders/order-settings";
+
+/** Tenant-ийн «нээх үеийн шаардлага» + шалгах жагсаалт (TenantOrderSettings). */
+export type IntakeRules = {
+  requireMileage: boolean;
+  requireSignature: boolean;
+  minIntakePhotos: number;
+  requireChecklist: boolean;
+  checklist: ChecklistItemDef[];
+};
+
+export const NO_INTAKE_RULES: IntakeRules = {
+  requireMileage: false,
+  requireSignature: false,
+  minIntakePhotos: 0,
+  requireChecklist: false,
+  checklist: [],
+};
+
+/** Хүлээн авах хэсэгт заавал бөглөх зүйл байгаа эсэх. */
+export function hasIntakeRequirements(r: IntakeRules): boolean {
+  return r.requireMileage || r.requireSignature || r.minIntakePhotos > 0 || (r.requireChecklist && r.checklist.length > 0);
+}
+
+const Req = () => <span className="text-red-400"> *</span>;
 
 // QA #14: захиалга үүсгэх үеийн «Хүлээн авах» хэсэг. Утгууд hidden input-ээр
 // createOrderAction руу явна; үүссэний дараа бүрмөсөн түгжигдэнэ.
@@ -40,12 +71,17 @@ export function IntakeSection({
   error,
   onBusyChange,
   className = "",
+  rules = NO_INTAKE_RULES,
 }: {
   error?: string;
   onBusyChange: (busy: boolean) => void;
   className?: string;
+  rules?: IntakeRules;
 }) {
-  const [open, setOpen] = useState(false);
+  const required = hasIntakeRequirements(rules);
+  // Заавал бөглөх зүйлтэй бол анхнаасаа нээлттэй.
+  const [open, setOpen] = useState(required);
+  const [checks, setChecks] = useState<Record<string, { status: ChecklistStatus | ""; note: string }>>({});
   const [notes, setNotes] = useState("");
   // Гүйлт: цифрийг тайлбартайгаар таслалаар бүлэглэнэ ("152,300"); илгээхдээ таслалгүй тоо.
   const [mileage, setMileage] = useState("");
@@ -97,12 +133,30 @@ export function IntakeSection({
   }
 
   const mileageDigits = mileage.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+  const answered = rules.checklist.filter((c) => checks[c.id]?.status);
   const summary = [
     mileageDigits ? formatMileageKm(Number(mileageDigits)) : null,
     notes.trim() ? "тэмдэглэл" : null,
     photos.length > 0 ? `${photos.length} зураг` : null,
     signature ? "гарын үсэг" : null,
+    answered.length > 0 ? `шалгах жагсаалт ${answered.length}/${rules.checklist.length}` : null,
   ].filter(Boolean);
+  const requiredLabels = [
+    rules.requireMileage ? "гүйлт" : null,
+    rules.minIntakePhotos > 0 ? `${rules.minIntakePhotos}+ зураг` : null,
+    rules.requireSignature ? "гарын үсэг" : null,
+    rules.requireChecklist && rules.checklist.length > 0 ? "шалгах жагсаалт" : null,
+  ].filter(Boolean);
+  const checklistValue = JSON.stringify(
+    answered.map((c) => ({
+      id: c.id,
+      status: checks[c.id]!.status,
+      ...(checks[c.id]!.note.trim() ? { note: checks[c.id]!.note.trim() } : {}),
+    })),
+  );
+  function setCheck(id: string, patch: Partial<{ status: ChecklistStatus | ""; note: string }>) {
+    setChecks((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { status: "", note: "" }), ...patch } }));
+  }
   const allErrors = [...(error ? [error] : []), ...errors];
 
   return (
@@ -114,6 +168,7 @@ export function IntakeSection({
         <input key={p} type="hidden" name="intakePhotoPaths" value={p} />
       ))}
       {signature ? <input type="hidden" name="intakeSignaturePath" value={signature} /> : null}
+      {answered.length > 0 ? <input type="hidden" name="intakeChecklist" value={checklistValue} /> : null}
 
       <div className="flex items-center gap-3 flex-wrap">
         <button
@@ -127,14 +182,16 @@ export function IntakeSection({
         <span className="text-xs text-[var(--oc-muted3)]">
           {summary.length > 0
             ? `Бүртгэсэн: ${summary.join(", ")}`
-            : "Машины одоогийн байдал (заавал биш). Үүсгэсний дараа засах боломжгүй."}
+            : required
+              ? `Заавал: ${requiredLabels.join(", ")}. Үүсгэсний дараа засах боломжгүй.`
+              : "Машины одоогийн байдал (заавал биш). Үүсгэсний дараа засах боломжгүй."}
         </span>
       </div>
 
       {open ? (
         <div className="flex flex-col gap-4 rounded-[10px] border border-[var(--oc-line)] p-4">
           <div className="w-40">
-            <Field label="Гүйлт (км)" htmlFor="intakeMileageInput">
+            <Field label={<>Гүйлт (км){rules.requireMileage ? <Req /> : null}</>} htmlFor="intakeMileageInput">
               <input
                 id="intakeMileageInput"
                 type="text"
@@ -150,6 +207,60 @@ export function IntakeSection({
               />
             </Field>
           </div>
+          {rules.checklist.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              <div className="text-xs font-medium text-[var(--oc-muted2)]">
+                Шалгах жагсаалт{rules.requireChecklist ? <Req /> : null}
+                <span className="ml-2 font-normal text-[var(--oc-muted3)]">
+                  {answered.length}/{rules.checklist.length}
+                </span>
+              </div>
+              <ul className="flex flex-col divide-y divide-[var(--oc-line)] rounded-md border border-[var(--oc-line)]">
+                {rules.checklist.map((c) => {
+                  const cur = checks[c.id];
+                  return (
+                    <li key={c.id} className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center">
+                      <span className="flex-1 text-sm text-[var(--oc-ink2)]">{c.label}</span>
+                      <div className="flex flex-wrap gap-1" role="radiogroup" aria-label={c.label}>
+                        {CHECKLIST_STATUSES.map((st) => {
+                          const on = cur?.status === st;
+                          const tone =
+                            st === "ISSUE"
+                              ? "border-red-500/60 bg-red-500/10 text-red-400"
+                              : st === "OK"
+                                ? "border-[var(--oc-ok)] bg-[var(--oc-ok)]/10 text-[var(--oc-ok)]"
+                                : "border-[var(--oc-line2)] bg-[var(--oc-line2)]/40 text-[var(--oc-ink2)]";
+                          return (
+                            <button
+                              key={st}
+                              type="button"
+                              role="radio"
+                              aria-checked={on}
+                              onClick={() => setCheck(c.id, { status: on ? "" : st })}
+                              className={`rounded-md border px-2.5 py-1 text-xs ${on ? tone : "border-[var(--oc-line)] text-[var(--oc-muted2)] hover:bg-[var(--oc-line2)]"}`}
+                            >
+                              {CHECKLIST_STATUS_LABEL[st]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {cur?.status === "ISSUE" ? (
+                        <input
+                          type="text"
+                          maxLength={CHECKLIST_NOTE_MAX}
+                          value={cur.note}
+                          onChange={(e) => setCheck(c.id, { note: e.target.value })}
+                          placeholder="Тэмдэглэл"
+                          className="auth-input sm:max-w-56"
+                          aria-label={`${c.label} — тэмдэглэл`}
+                        />
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
           <Field label="Тэмдэглэл" htmlFor="intakeNotesInput" hint="гүйлт, шатахуун, гэмтэл, үлдээсэн эд зүйл…">
             <textarea
               id="intakeNotesInput"
@@ -163,7 +274,15 @@ export function IntakeSection({
           </Field>
 
           <div className="flex flex-col gap-2">
-            <div className="text-xs font-medium text-[var(--oc-muted2)]">Зураг</div>
+            <div className="text-xs font-medium text-[var(--oc-muted2)]">
+              Зураг
+              {rules.minIntakePhotos > 0 ? (
+                <>
+                  {` (хамгийн багадаа ${rules.minIntakePhotos})`}
+                  <Req />
+                </>
+              ) : null}
+            </div>
             {photos.length > 0 ? (
               <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
                 {photos.map((p) => (
@@ -203,7 +322,9 @@ export function IntakeSection({
           </div>
 
           <div className="flex flex-col gap-2">
-            <div className="text-xs font-medium text-[var(--oc-muted2)]">Үйлчлүүлэгчийн гарын үсэг</div>
+            <div className="text-xs font-medium text-[var(--oc-muted2)]">
+              Үйлчлүүлэгчийн гарын үсэг{rules.requireSignature ? <Req /> : null}
+            </div>
             {signature ? (
               <div className="flex items-center gap-3">
                 {/* eslint-disable-next-line @next/next/no-img-element -- /uploads нь runtime файл */}

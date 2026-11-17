@@ -96,6 +96,7 @@ const recorded: IntakeViewRow = {
   intakeRecordedAt: new Date("2026-10-02T09:30:00.000Z"),
   intakeSignaturePath: "/uploads/sig.png",
   intakeMileageKm: 152300,
+  intakeChecklist: [{ label: "Тос", status: "ISSUE", note: "бага" }, { label: "bad" }],
   intakePhotos: [
     { id: "p2", path: "/uploads/b.jpg" },
     { id: "p1", path: "/uploads/a.jpg" },
@@ -118,6 +119,8 @@ test("toIntakeView: staff view includes recordedBy and keeps photo order", () =>
     ],
     signatureUrl: "/uploads/sig.png",
     mileageKm: 152300,
+    // Буруу хэлбэрийн мөрийг алгасна.
+    checklist: [{ label: "Тос", status: "ISSUE", note: "бага" }],
     recordedAt: "2026-10-02T09:30:00.000Z",
     recordedBy: "Dorj Bat",
   });
@@ -145,7 +148,8 @@ test("routes use the shared intake view and uploads handles kind=intake", async 
   assert.match(staff, /includeRecordedBy:\s*true/);
   assert.match(customer, /includeRecordedBy:\s*false/);
   assert.match(create, /validateIntakeFields\(/);
-  assert.match(create, /intake,\s*\}\);/, "create route must pass intake to createOrderCommand");
+  assert.match(create, /\n\s*intake,\s*\n/, "create route must pass intake to createOrderCommand");
+  assert.match(create, /intakeChecklist: \(body as Record<string, unknown>\)\.intakeChecklist,/);
   assert.match(uploads, /kind === "intake"/);
   assert.match(uploads, /requirePermission\(auth\.user, "orders\.create"\)/);
   assert.match(uploads, /intakeStagingSubdir\(auth\.user\.tenantId, auth\.user\.id\)/);

@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     where: id,
     include: {
       tenant: { select: { id: true, name: true, suspended: true } },
-      role: { select: { id: true, name: true, permissions: true } },
+      role: { select: { id: true, name: true, permissions: true, isActive: true } },
     },
   });
   if (!user) return jsonError(401, "Нэвтрэх нэр эсвэл нууц үг буруу.");

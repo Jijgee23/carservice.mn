@@ -1,9 +1,9 @@
-// Framework-free role business rules, moved from `app/_actions/roles.ts`
-// (P6-B0). No `redirect`/`revalidatePath`/cookies/`"use server"`/
-// `server-only` imports here — audit logging and revalidation stay in the
-// action wrapper.
+// Framework-free business rules for the global (system) roles managed by
+// super admins at /system/roles. No `redirect`/`revalidatePath`/cookies/
+// `"use server"`/`server-only` imports here — auth and revalidation stay in
+// the action wrapper (`app/_actions/system-roles.ts`).
 
-import type { RoleActor, RolesClient, ValidatedRole } from "./types";
+import type { RolesClient, ValidatedRole } from "./types";
 import { s, validate } from "./validate";
 
 export type FieldErr = {
@@ -15,7 +15,7 @@ export type FieldErr = {
 
 export type MessageErr = {
   ok: false;
-  code: "NOT_FOUND" | "DUPLICATE" | "UNKNOWN" | "ROLE_IN_USE";
+  code: "NOT_FOUND" | "DUPLICATE" | "UNKNOWN" | "ROLE_IN_USE" | "SYSTEM_ROLE";
   error: string;
 };
 
@@ -33,7 +33,6 @@ export type CreateRoleResult =
 
 export async function createRole(
   db: RolesClient,
-  actor: RoleActor,
   formData: FormData,
 ): Promise<CreateRoleResult> {
   const { data, errors } = validate(formData);
@@ -45,7 +44,6 @@ export async function createRole(
   try {
     created = await db.role.create({
       data: {
-        tenantId: actor.tenantId,
         name: data.name,
         description: data.description,
         permissions: data.permissions,
@@ -58,7 +56,7 @@ export async function createRole(
       return {
         ok: false,
         code: "DUPLICATE",
-        error: "Энэ нэртэй үүрэг аль хэдийн байна.",
+        error: "Энэ нэртэй роль аль хэдийн байна.",
       };
     }
     return {
@@ -91,7 +89,6 @@ export type UpdateRoleResult =
 
 export async function updateRole(
   db: RolesClient,
-  actor: RoleActor,
   id: string,
   formData: FormData,
 ): Promise<UpdateRoleResult> {
@@ -100,8 +97,8 @@ export async function updateRole(
     return { ok: false, code: "VALIDATION", error: "Оруулсан мэдээлэл буруу.", fieldErrors: errors };
   }
 
-  const target = await db.role.findFirst({ where: { id, tenantId: actor.tenantId } });
-  if (!target) return { ok: false, code: "NOT_FOUND", error: "Үүрэг олдсонгүй." };
+  const target = await db.role.findFirst({ where: { id } });
+  if (!target) return { ok: false, code: "NOT_FOUND", error: "Роль олдсонгүй." };
 
   try {
     await db.role.update({
@@ -118,7 +115,7 @@ export async function updateRole(
       return {
         ok: false,
         code: "DUPLICATE",
-        error: "Энэ нэртэй үүрэг аль хэдийн байна.",
+        error: "Энэ нэртэй роль аль хэдийн байна.",
       };
     }
     return {
@@ -152,27 +149,33 @@ export type Noop = { ok: true; noop: true };
 export type DeleteRoleResult =
   | Noop
   | { ok: true; id: string; summary: string }
-  | { ok: false; code: "ROLE_IN_USE"; error: string };
+  | { ok: false; code: "ROLE_IN_USE" | "SYSTEM_ROLE"; error: string };
 
 export async function deleteRole(
   db: RolesClient,
-  actor: RoleActor,
   formData: FormData,
 ): Promise<DeleteRoleResult> {
   const id = s(formData, "id");
   if (!id) return { ok: true, noop: true };
 
   const target = await db.role.findFirst({
-    where: { id, tenantId: actor.tenantId },
+    where: { id },
     include: { _count: { select: { users: true } } },
   });
   if (!target) return { ok: true, noop: true };
+  if (target.key) {
+    return {
+      ok: false,
+      code: "SYSTEM_ROLE",
+      error: "Үндсэн системийн ролийг устгах боломжгүй. Шаардлагагүй бол идэвхгүй болгоно уу.",
+    };
+  }
   const userCount = target._count?.users ?? 0;
   if (userCount > 0) {
     return {
       ok: false,
       code: "ROLE_IN_USE",
-      error: `Энэ үүрэгтэй ${userCount} ажилтан байна. Эхлээд тэдний үүргийг солино уу.`,
+      error: `Энэ рольтой ${userCount} ажилтан (бүх байгууллагад) байна. Устгахын оронд идэвхгүй болгоно уу.`,
     };
   }
 

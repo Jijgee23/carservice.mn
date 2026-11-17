@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
-import { redirect } from "next/navigation";
-import { hasActiveUserSession } from "@/lib/auth";
+import { redirectIfSignedIn } from "@/lib/auth/guest-redirect";
 import { TenantAuthShellWide } from "@/app/_components/tenant-auth-shell";
 import { getAddressData } from "@/lib/address";
 import { setBypassContext } from "@/lib/tenant-context";
@@ -23,8 +22,8 @@ export const metadata = {
 };
 
 export default async function SignUpPage() {
-  // Аль хэдийн байгууллагад нэвтэрсэн бол консол руу.
-  if (await hasActiveUserSession()) redirect("/dashboard");
+  // Аль ч realm-д нэвтэрсэн бол өөрийнх нь нүүр рүү.
+  await redirectIfSignedIn({ prefer: "tenant" });
   // Нэвтрээгүй, public хуудас — session/tenant байхгүй.
   setBypassContext();
   const addressData = await getAddressData();

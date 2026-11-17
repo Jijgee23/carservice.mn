@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     where: id,
     include: {
       tenant: { select: { id: true, name: true, suspended: true } },
-      role: { select: { id: true, name: true, permissions: true } },
+      role: { select: { id: true, name: true, permissions: true, isActive: true } },
     },
   });
   // Бүртгэлгүй нэвтрэх нэрийг "код буруу"-тай адил харуулна (enumeration-аас сэргийлнэ).

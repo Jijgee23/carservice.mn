@@ -33,7 +33,7 @@ export function ButtonPrimary({
   return (
     <Link
       href={href}
-      className="rounded-lg bg-[var(--oc-accent)] px-6 py-[15px] text-[15px] font-semibold text-[var(--oc-on-accent)] transition-colors hover:bg-[var(--oc-accent-hi)]"
+      className="whitespace-nowrap rounded-lg bg-[var(--oc-accent)] px-6 py-[15px] text-[15px] font-semibold text-[var(--oc-on-accent)] transition-colors hover:bg-[var(--oc-accent-hi)]"
     >
       {children}
     </Link>
@@ -50,7 +50,7 @@ export function ButtonGhost({
   return (
     <Link
       href={href}
-      className="rounded-lg border border-[var(--oc-line)] px-6 py-[15px] text-[15px] font-medium text-[var(--oc-ink2)] transition-colors hover:border-[var(--oc-muted4)] hover:bg-[var(--oc-panel2)]"
+      className="whitespace-nowrap rounded-lg border border-[var(--oc-line)] px-6 py-[15px] text-[15px] font-medium text-[var(--oc-ink2)] transition-colors hover:border-[var(--oc-muted4)] hover:bg-[var(--oc-panel2)]"
     >
       {children}
     </Link>
@@ -269,32 +269,75 @@ const CHIP_BORDER: Record<ChipTone, string> = {
  * (input, товч)-тай ижил өндөртэй (`h-11`) зэрэгцэн зогсохоор зохиогдсон.
  * Сонгогдоход (`has-checked:`) ногоон өнгөөр тодрано. Урт тайлбар текст
  * шаардлагатай бол дуудагч тал `<p>`-ээр мөрнөөс гадна тусад нь харуулна. */
+
+// import { ReactNode } from "react";
+
 export function ToggleChip({
   name,
   label,
   defaultChecked,
   className = "",
+  disabled = false,
 }: {
   name: string;
   label: ReactNode;
   defaultChecked?: boolean;
   className?: string;
+  disabled?: boolean;
 }) {
   return (
     <label
-      className={`inline-flex h-11 items-center gap-1.5 rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-3.5 text-xs text-[var(--oc-muted3)] whitespace-nowrap cursor-pointer transition-colors has-checked:border-[var(--oc-ok)]/40 has-checked:bg-[var(--oc-ok)]/10 has-checked:text-[var(--oc-ok)] ${className}`}
+      className={`
+        group inline-flex h-11 items-center justify-between gap-3
+        rounded-xl border px-3.5
+        text-xs font-medium whitespace-nowrap
+        transition-all duration-200
+        ${
+          disabled
+            ? "cursor-not-allowed opacity-50"
+            : "cursor-pointer"
+        }
+        border-[var(--input-border)]
+        bg-[var(--input-bg)]
+        text-[var(--oc-muted3)]
+        has-checked:border-[var(--oc-ok)]/40
+        has-checked:bg-[var(--oc-ok)]/5
+        has-checked:text-[var(--oc-text)]
+        ${className}
+      `}
     >
-      <input
-        type="checkbox"
-        name={name}
-        defaultChecked={defaultChecked}
-        className="sr-only"
-      />
-      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />
-      {label}
+      <span className="min-w-0 truncate">{label}</span>
+
+      <span
+        className="
+          relative inline-flex h-5 w-9 shrink-0
+          items-center rounded-full
+          bg-[var(--oc-line)]
+          transition-colors duration-200
+          group-has-[:checked]:bg-[var(--oc-ok)]
+        "
+      >
+        <input
+          type="checkbox"
+          name={name}
+          defaultChecked={defaultChecked}
+          disabled={disabled}
+          className="peer sr-only"
+        />
+
+        <span
+          className="
+            absolute left-0.5 h-4 w-4 rounded-full
+            bg-white shadow-sm
+            transition-transform duration-200
+            peer-checked:translate-x-4
+          "
+        />
+      </span>
     </label>
   );
 }
+
 
 /** Жижиг badge/pill — төлөв (Идэвхтэй/Хугацаа дууссан), үүрэг (Админ), тэмдэг
  * (Үндсэн) зэрэгт ашиглана. Хэмжээ ганцхан — хуудас бүр өөр px/text-size

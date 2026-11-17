@@ -99,6 +99,10 @@ export async function getApiUserFromRequest(req: Request) {
   }
   // D-180: nullable for tokens signed before this claim existed.
   // tenantPlan: /api/v1 модулийн хаалтад (requireApiUser → lib/plan-modules-server).
+  // Идэвхгүй (глобал) роль = эрхгүй — lib/auth/index.ts-тэй ижил.
+  if (profile.role && !profile.role.isActive) {
+    profile.role = { ...profile.role, permissions: [] };
+  }
   return {
     ...profile,
     tenantPlan: tenant.plan,

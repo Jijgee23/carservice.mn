@@ -102,8 +102,8 @@ export default async function EmployeesPage({
       select: { id: true, name: true },
     }),
     prisma.role.findMany({
-      where: { tenantId: me.tenantId, isActive: true },
-      orderBy: { name: "asc" },
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true },
     }),
     prisma.user.count({ where: { tenantId: me.tenantId, deletedAt: null } }),
@@ -149,11 +149,6 @@ export default async function EmployeesPage({
           <a href={exportHref} className={btnClass("ghost", "md")}>
             Excel татах
           </a>
-          {me.isOwner ? (
-            <BtnLink href="/dashboard/employees/roles" variant="ghost">
-              Үүргүүд
-            </BtnLink>
-          ) : null}
           {canAdd ? (
             <BtnLink href="/dashboard/employees/import" variant="ghost">
               Excel-ээс оруулах

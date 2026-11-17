@@ -5,12 +5,15 @@ import { Prisma } from "@/app/generated/prisma/client";
 import { customerLabel } from "@/lib/customers";
 import { ORDER_PAYMENT_METHOD_LABEL } from "@/lib/orders";
 import { paymentAccountHint } from "@/lib/payment-accounts";
+import { parseChecklistSnapshot, type ChecklistAnswer } from "@/lib/orders/order-settings";
 
 export const PRINT_FORMATS = ["a4", "80mm"] as const;
 export type PrintFormat = (typeof PRINT_FORMATS)[number];
 
-export function parsePrintFormat(value: unknown): PrintFormat {
-  return value === "80mm" ? "80mm" : "a4";
+/** URL-ийн `format` → хэмжээ; байхгүй/буруу бол `fallback` (tenant-ийн анхдагч). */
+export function parsePrintFormat(value: unknown, fallback: PrintFormat = "a4"): PrintFormat {
+  if (value === "80mm" || value === "a4") return value;
+  return fallback;
 }
 
 const ZERO = new Prisma.Decimal(0);
@@ -76,6 +79,15 @@ export type OrderDocumentSource = HeaderSource & {
     plateSnapshot: string | null;
     vinSnapshot: string | null;
     intakeMileageKm: number | null;
+    /** Хүлээн авалтын шалгах жагсаалтын snapshot (ServiceOrder.intakeChecklist). */
+    intakeChecklist?: unknown;
+  };
+  /** Tenant-ийн хэвлэх загвар (TenantOrderSettings). Байхгүй бол нэмэлт хэсэггүй. */
+  template?: {
+    headerNote: string | null;
+    footerNote: string | null;
+    signatureLines: boolean;
+    showChecklist: boolean;
   };
   master: { firstName: string; lastName: string } | null;
   customer: CustomerSource;
@@ -103,6 +115,10 @@ export type OrderDocument = {
   paid: string;
   remaining: string;
   payTo: Array<{ name: string; accountNumber: string }>;
+  headerNote: string | null;
+  footerNote: string | null;
+  signatureLines: boolean;
+  checklist: ChecklistAnswer[];
 };
 
 export function orderDocumentTitle(input: { status: string; isInternal: boolean; total: Prisma.Decimal; paid: Prisma.Decimal }): string {
@@ -157,6 +173,10 @@ export function buildOrderDocument(src: OrderDocumentSource): OrderDocument {
           .filter((a) => a.type === "BANK_ACCOUNT" && a.isActive && !a.isTest && a.accountNumber?.trim())
           .map((a) => ({ name: a.name, accountNumber: a.accountNumber!.trim() }))
       : [],
+    headerNote: src.template?.headerNote?.trim() || null,
+    footerNote: src.template?.footerNote?.trim() || null,
+    signatureLines: src.template?.signatureLines ?? false,
+    checklist: src.template?.showChecklist ? parseChecklistSnapshot(order.intakeChecklist) : [],
   };
 }
 

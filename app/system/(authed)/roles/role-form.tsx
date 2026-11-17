@@ -5,7 +5,7 @@ import {
   type RoleActionState,
   createRoleAction,
   updateRoleAction,
-} from "@/app/_actions/roles";
+} from "@/app/_actions/system-roles";
 import { Field, FormError } from "@/app/_components/auth-shell";
 import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
 import type { OrderAccessScope } from "@/lib/auth/order-access";
@@ -233,7 +233,7 @@ export function RoleForm({
 
       <SectionPanel index={1} total={2} title="Үндсэн мэдээлэл">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Үүргийн нэр" htmlFor="name" error={fe.name}>
+          <Field label="Ролийн нэр" htmlFor="name" error={fe.name}>
             <input
               id="name"
               name="name"
@@ -249,7 +249,7 @@ export function RoleForm({
           <Field
             label="Тайлбар"
             htmlFor="description"
-            hint="Энэ үүрэг юу хийдгийг богино тайлбарлана уу."
+            hint="Энэ роль юу хийдгийг богино тайлбарлана уу."
           >
             <input
               id="description"
@@ -281,7 +281,7 @@ export function RoleForm({
           <div className="flex-1">
             <div className="text-sm font-medium text-[var(--oc-ink2)]">Идэвхтэй</div>
             <div className="text-xs text-[var(--oc-muted3)] mt-0.5">
-              Идэвхгүй үүргийг шинэ ажилтанд сонгох боломжгүй.
+              Идэвхгүй ролийг шинэ ажилтанд сонгох боломжгүй, одоо байгаа ажилтнууд нь бүх эрхээ алдана.
             </div>
           </div>
         </label>
@@ -435,7 +435,7 @@ export function RoleForm({
         <span className="text-xs text-[var(--oc-muted3)] flex-1">
           {dirty ? "Хадгалагдаагүй өөрчлөлт байна" : ""}
         </span>
-        <BtnLink href="/dashboard/employees/roles" variant="ghost">
+        <BtnLink href="/system/roles" variant="ghost">
           Болих
         </BtnLink>
         <Btn type="submit" disabled={pending}>

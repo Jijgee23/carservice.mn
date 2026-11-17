@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirectIfSignedIn } from "@/lib/auth/guest-redirect";
 import { Geist, Geist_Mono } from "next/font/google";
 import { TenantAuthShell } from "@/app/_components/tenant-auth-shell";
 import { ForgotPasswordForm } from "./forgot-form";
@@ -20,7 +21,9 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function ForgotPage() {
+export default async function ForgotPage() {
+  // Нэвтэрсэн хэрэглэгч нууц үг сэргээх хуудас харах шаардлагагүй.
+  await redirectIfSignedIn({ prefer: "tenant" });
   return (
     <div className={`${plexSans.variable} ${plexMono.variable}`}>
       <TenantAuthShell

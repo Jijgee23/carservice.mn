@@ -13,6 +13,8 @@ import {
   isCarriedAssigneeIneligible,
 } from "@/lib/appointments/appointment-assignee-label";
 import { internalPostpaidConflict } from "@/lib/orders/order-internal";
+import { buildChecklistSnapshot } from "@/lib/orders/order-settings";
+import { getOrderSettings } from "@/lib/orders/order-settings-server";
 import {
   LINKABLE_APPOINTMENT_STATUSES,
   resolveOrderIsPostpaid,
@@ -30,6 +32,9 @@ export type CreateOrderCommandInput = {
   notes: string | null;
   // QA #14: үүсгэх үед л бичигдэх хүлээн авах хэсэг (шалгагдсан staged замууд).
   intake?: IntakeInput | null;
+  // Хүлээн авалтын шалгах жагсаалтын хариулт [{id, status, note?}] — tenant-ийн
+  // тохиргооны жагсаалтаар transaction дотор шалгаж snapshot болгоно.
+  intakeChecklist?: unknown;
   appointmentId?: string | null;
   estimatedDurationMinutes?: number | null;
   workingBranchId?: string | null;
@@ -49,6 +54,38 @@ export type CreateOrderCommandResult = {
   number: string;
 };
 
+/**
+ * Tenant-ийн «нээх үеийн шаардлага» (гүйлт, гарын үсэг, зургийн тоо, шалгах
+ * жагсаалт). Алдааг хүлээн авах хэсгийн `intake` талбарт буцаана (web форм
+ * IntakeSection-д харуулдаг). Шалгах жагсаалтын snapshot-ийг буцаана.
+ */
+function assertIntakeRequirements(
+  settings: Awaited<ReturnType<typeof getOrderSettings>>,
+  intake: IntakeInput | null,
+  rawChecklist: unknown,
+) {
+  const fail = (code: string, message: string): never => {
+    throw new OrderCommandError(message, 422, code, { intake: message });
+  };
+  if (settings.requireMileage && intake?.mileageKm == null) {
+    fail("MILEAGE_REQUIRED", "Хүлээн авах үеийн гүйлтийг (км) оруулна уу.");
+  }
+  if (settings.requireSignature && !intake?.signaturePath) {
+    fail("SIGNATURE_REQUIRED", "Үйлчлүүлэгчийн гарын үсгийг авна уу.");
+  }
+  const photos = intake?.photoPaths.length ?? 0;
+  if (settings.minIntakePhotos > 0 && photos < settings.minIntakePhotos) {
+    fail("INTAKE_PHOTOS_REQUIRED", `Хүлээн авалтын зураг хамгийн багадаа ${settings.minIntakePhotos} байна (одоо ${photos}).`);
+  }
+  const checklist = buildChecklistSnapshot(
+    settings.intakeChecklist,
+    rawChecklist,
+    settings.requireChecklist && settings.intakeChecklist.length > 0,
+  );
+  if (!checklist.ok) fail("CHECKLIST_REQUIRED", checklist.error);
+  return checklist.ok ? checklist.value : null;
+}
+
 function branchSlotMinutes(value: number | null | undefined): number {
   return value && value > 0 ? value : DEFAULT_SLOT_MINUTES;
 }
@@ -56,17 +93,9 @@ function branchSlotMinutes(value: number | null | undefined): number {
 export async function createOrderCommand(
   input: CreateOrderCommandInput,
 ): Promise<CreateOrderCommandResult> {
-  // Хариуцах мастер заавал — web, mobile бүх замд. QA #28: цаг захиалгаас
-  // үүсгэж байгаа бол мастер нь цагийн хариуцагчаас (доор) дамжиж болох тул
-  // тэр тохиолдолд шалгалтыг цагийг уншсаны дараа хийнэ.
-  if (!input.assignedToId && !input.appointmentId) {
-    throw new OrderCommandError(
-      "Хариуцах мастер сонгоно уу.",
-      422,
-      "ASSIGNEE_REQUIRED",
-      { assignedToId: "Хариуцах мастер сонгоно уу." },
-    );
-  }
+  // Хариуцах мастер заавал эсэх нь tenant-ийн тохиргоо (анхдагч: заавал) —
+  // transaction дотор тохиргоо болон цагийн хариуцагчийг (QA #28) уншсаны
+  // дараа шалгана.
   if (input.workingBranchId && input.workingBranchId !== "ALL" && input.branchId !== input.workingBranchId) {
     throw new OrderCommandError(
       "Зөвхөн өөрийн салбарт засварын хуудас үүсгэх боломжтой.",
@@ -133,7 +162,8 @@ export async function createOrderCommand(
         // master is rejected with the standard assignee error, never silently
         // written.
         const assignedToId = input.assignedToId ?? appointment?.assignedToId ?? null;
-        if (!assignedToId) {
+        const settings = await getOrderSettings(tx, input.tenantId);
+        if (!assignedToId && settings.requireAssignee) {
           throw new OrderCommandError(
             "Хариуцах мастер сонгоно уу.",
             422,
@@ -141,6 +171,7 @@ export async function createOrderCommand(
             { assignedToId: "Хариуцах мастер сонгоно уу." },
           );
         }
+        const intakeChecklist = assertIntakeRequirements(settings, input.intake ?? null, input.intakeChecklist);
 
         let accountVehicleToLink = false;
         if (!vehicle && appointment?.accountId && appointment.customerId === input.customerId) {
@@ -190,7 +221,7 @@ export async function createOrderCommand(
         }
 
         const number = await nextOrderNumber(tx, input.tenantId);
-        await validateOrderAssignee(scopedTx, {
+        if (assignedToId) await validateOrderAssignee(scopedTx, {
           tenantId: input.tenantId,
           assigneeId: assignedToId,
           orderBranchId: input.branchId,
@@ -256,13 +287,17 @@ export async function createOrderCommand(
             assignedToId,
             scheduledAt: input.scheduledAt,
             notes: input.notes,
+            ...(intakeChecklist
+              ? { intakeChecklist: intakeChecklist as unknown as Prisma.InputJsonValue }
+              : {}),
+            ...(input.intake || intakeChecklist
+              ? { intakeRecordedAt: new Date(), intakeRecordedById: input.actorId }
+              : {}),
             ...(input.intake
               ? {
                   intakeNotes: input.intake.notes,
                   intakeSignaturePath: input.intake.signaturePath,
                   intakeMileageKm: input.intake.mileageKm,
-                  intakeRecordedAt: new Date(),
-                  intakeRecordedById: input.actorId,
                   intakePhotos: input.intake.photoPaths.length > 0
                     ? { create: input.intake.photoPaths.map((path) => ({ tenantId: input.tenantId, path })) }
                     : undefined,

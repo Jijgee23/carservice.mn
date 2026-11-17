@@ -9,6 +9,7 @@ import { findLockedPaymentIds } from "@/lib/cash/session-attach";
 import { ORDER_STATUS_TRANSITIONS, type OrderStatus } from "@/lib/orders";
 import { canSettlePostpaidOrder } from "@/lib/orders/order-commands";
 import { orderCompleteBlockedReason } from "@/lib/orders/order-complete-guard";
+import { getOrderSettings } from "@/lib/orders/order-settings-server";
 import { listPickerAccounts } from "@/lib/payment-account-service";
 import { prisma } from "@/lib/prisma";
 import { calculateServiceItemDurationMinutes } from "@/lib/service-duration";
@@ -120,6 +121,7 @@ export async function getOrderQuickContextAction(
       isPostpaid: order.isPostpaid,
       remaining,
       canCloseUnpaidPostpaid: hasPermission(user, "orders.closeUnpaidPostpaid"),
+      settings: await getOrderSettings(prisma, user.tenantId),
     }),
     cancelBlockedReason: lockedIds.size > 0 ? PAID_PAYMENT_LOCKED_CANCEL_REASON : null,
     payment,

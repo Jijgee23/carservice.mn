@@ -129,8 +129,8 @@ export async function GET(req: Request) {
       select: { id: true, name: true },
     }),
     prisma.role.findMany({
-      where: { tenantId: auth.user.tenantId, isActive: true },
-      orderBy: { name: "asc" },
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true },
     }),
     prisma.user.groupBy({

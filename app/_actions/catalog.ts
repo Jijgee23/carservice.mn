@@ -1,7 +1,7 @@
 "use server";
 
 import { requireUser } from "@/lib/auth";
-import { canCreate } from "@/lib/auth/roles";
+import { canCreate, canEdit } from "@/lib/auth/roles";
 import { isCatalogKind } from "@/lib/catalog/catalog-commands";
 import { normalizeCatalogCode, normalizeCatalogName } from "@/lib/catalog/normalize";
 import { prisma } from "@/lib/prisma";
@@ -26,6 +26,27 @@ export type CatalogSearchHit = {
 export async function searchCatalogAction(type: string, q: string): Promise<CatalogSearchHit[]> {
   const user = await requireUser();
   if (!canCreate(user, "services") || !isCatalogKind(type)) return [];
+  return searchCatalogForTenant(user.tenantId, type, q, 10);
+}
+
+/**
+ * Засварын хуудасны «мөр нэмэх»: байгууллагын өөрийн ажил/сэлбэгээс олдоогүй
+ * үед нэгдсэн сангаас хайна (засварын хуудас засах эрхтэй хэнд ч —
+ * GET /api/v1/orders/catalog-items-тэй ижил). Сонгосныг addOrderItemAction
+ * байгууллагын ажил/сэлбэгт ашигласан нэр, үнээр нь нэмнэ.
+ */
+export async function searchOrderCatalogAction(type: string, q: string): Promise<CatalogSearchHit[]> {
+  const user = await requireUser();
+  if (!canEdit(user, "orders") || !isCatalogKind(type)) return [];
+  return searchCatalogForTenant(user.tenantId, type, q, 20);
+}
+
+async function searchCatalogForTenant(
+  tenantId: string,
+  type: "LABOR" | "GOODS",
+  q: string,
+  take: number,
+): Promise<CatalogSearchHit[]> {
   const query = q.trim();
   if (query.length < 2) return [];
 
@@ -39,7 +60,7 @@ export async function searchCatalogAction(type: string, q: string): Promise<Cata
         { nameKey: { contains: nameKey } },
         ...(codeKey ? [{ codeKey: { startsWith: codeKey } }, { barcode: codeKey }] : []),
       ],
-      services: { none: { tenantId: user.tenantId } },
+      services: { none: { tenantId } },
     },
     // Нэрээр эрэмбэлнэ. Өмнө нь `services._count`-аар (түгээмэл нь эхэнд)
     // эрэмбэлдэг байсан ч tenant RLS дор зөвхөн өөрийн тенантын холбоос
@@ -48,7 +69,7 @@ export async function searchCatalogAction(type: string, q: string): Promise<Cata
     // bypass helper байхгүй, setBypassContext нь хүсэлтийн үлдсэн хэсэгт
     // нөлөөлнө) энд хийхгүй.
     orderBy: [{ name: "asc" }],
-    take: 10,
+    take,
     select: {
       id: true,
       name: true,

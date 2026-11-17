@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { CHECKLIST_STATUS_LABEL } from "@/lib/orders/order-settings";
 import { formatTugrik } from "@/lib/orders";
 import type { DocCustomer, DocHeader, OrderDocument, PrintFormat, SettlementDocument } from "@/lib/print/documents";
 
@@ -139,6 +140,7 @@ export function OrderPrint({ doc, format }: { doc: OrderDocument; format: PrintF
     <Paper format={format}>
       <Header header={doc.header} format={format} />
       <Title title={doc.title} sub={<div>№ {doc.number} · {fmtDate(doc.date)}</div>} format={format} />
+      {doc.headerNote ? <div className="mb-3 whitespace-pre-line text-[#333]">{doc.headerNote}</div> : null}
 
       <div className={narrow ? "flex flex-col gap-0.5" : "grid grid-cols-2 gap-x-8 gap-y-0.5"}>
         <CustomerBlock customer={doc.customer} />
@@ -150,6 +152,23 @@ export function OrderPrint({ doc, format }: { doc: OrderDocument; format: PrintF
           {doc.master ? <Row label="Мастер" value={doc.master} /> : null}
         </div>
       </div>
+
+      {doc.checklist.length > 0 ? (
+        <>
+          <SectionTitle format={format}>Хүлээн авалтын шалгалт</SectionTitle>
+          <div className={narrow ? "flex flex-col gap-0.5" : "grid grid-cols-2 gap-x-8 gap-y-0.5"}>
+            {doc.checklist.map((c, i) => (
+              <div key={i} className="flex justify-between gap-2">
+                <span className="min-w-0">{c.label}</span>
+                <span className={`text-right ${c.status === "ISSUE" ? "font-semibold" : "text-[#555]"}`}>
+                  {CHECKLIST_STATUS_LABEL[c.status]}
+                  {c.note ? <span className="block font-normal text-[#555]">{c.note}</span> : null}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : null}
 
       <SectionTitle format={format}>Ажил, сэлбэг</SectionTitle>
       {doc.lines.length === 0 ? (
@@ -224,6 +243,23 @@ export function OrderPrint({ doc, format }: { doc: OrderDocument; format: PrintF
             </div>
           ))}
           <div className="text-[#555] mt-1">Гүйлгээний утга: {doc.number}</div>
+        </div>
+      ) : null}
+
+      {doc.footerNote ? (
+        <div className={`whitespace-pre-line text-[#333] ${narrow ? "mt-2 border-t border-dashed border-[#999] pt-1.5" : "mt-5"}`}>
+          {doc.footerNote}
+        </div>
+      ) : null}
+
+      {doc.signatureLines ? (
+        <div className={narrow ? "mt-4 flex flex-col gap-4" : "mt-10 grid grid-cols-2 gap-10"}>
+          {["Хүлээлгэн өгсөн", "Хүлээн авсан"].map((label) => (
+            <div key={label}>
+              <div className="border-b border-[#555] h-6" />
+              <div className="mt-1 text-[#555]">{label}: ............................</div>
+            </div>
+          ))}
         </div>
       ) : null}
 

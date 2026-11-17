@@ -65,6 +65,16 @@ const navGroups: NavGroup[] = [
         ),
       },
       {
+        href: "/system/roles",
+        label: "Роль",
+        icon: (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            <path d="m9 12 2 2 4-4" />
+          </svg>
+        ),
+      },
+      {
         href: "/system/customers",
         label: "Үйлчлүүлэгчид",
         icon: (
@@ -334,7 +344,7 @@ function NavLeafRow({
       <Link
         href={item.href}
         title={collapsed ? item.label : undefined}
-        className={`flex h-11 items-center gap-3 rounded-xl text-[13px] font-medium transition-colors ${
+        className={`flex h-9 items-center gap-2.5 rounded-lg text-[13px] font-medium transition-colors ${
           collapsed ? "justify-center px-0" : "px-3"
         } ${active ? activePillClasses : inactivePillClasses}`}
       >
@@ -368,7 +378,7 @@ function CollapsedNavGroup({
     <div ref={anchorRef} className="relative" onMouseEnter={onEnter} onMouseLeave={onLeave}>
       <div
         title={group.label ?? undefined}
-        className={`flex h-11 items-center justify-center rounded-xl text-[13px] font-medium transition-colors ${
+        className={`flex h-9 items-center justify-center rounded-lg text-[13px] font-medium transition-colors ${
           active ? activePillClasses : inactivePillClasses
         }`}
       >
@@ -537,7 +547,7 @@ export function SystemSidebar({
                 type="button"
                 onClick={() => toggleGroup(group)}
                 aria-expanded={open}
-                className={`w-full flex h-11 items-center gap-3 px-3 rounded-xl text-[13px] font-medium transition-colors ${
+                className={`w-full flex h-9 items-center gap-2.5 px-3 rounded-lg text-[13px] font-medium transition-colors ${
                   groupActive ? activePillClasses : inactivePillClasses
                 }`}
               >
@@ -593,7 +603,7 @@ export function SystemSidebar({
         <div className="p-3 border-t border-[var(--oc-line2)] flex flex-col items-center gap-2">
           <div
             title={adminName}
-            className="w-9 h-9 rounded-full border border-[var(--oc-line)] bg-[var(--oc-panel2)] flex items-center justify-center text-xs font-bold text-[var(--oc-ink2)] shrink-0"
+            className="w-8 h-8 rounded-full border border-[var(--oc-line)] bg-[var(--oc-panel2)] flex items-center justify-center text-xs font-bold text-[var(--oc-ink2)] shrink-0"
           >
             {initials}
           </div>
@@ -613,8 +623,8 @@ export function SystemSidebar({
         </div>
       ) : (
         <div className="p-3 border-t border-[var(--oc-line2)] space-y-2">
-          <div className="flex items-center gap-3 p-2.5 rounded-xl">
-            <div className="w-9 h-9 rounded-full border border-[var(--oc-line)] bg-[var(--oc-panel2)] flex items-center justify-center text-xs font-bold text-[var(--oc-ink2)] shrink-0">
+          <div className="flex items-center gap-2.5 p-2 rounded-lg">
+            <div className="w-8 h-8 rounded-full border border-[var(--oc-line)] bg-[var(--oc-panel2)] flex items-center justify-center text-xs font-bold text-[var(--oc-ink2)] shrink-0">
               {initials}
             </div>
             <div className="flex-1 min-w-0">

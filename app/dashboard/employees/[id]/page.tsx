@@ -14,7 +14,7 @@ export const metadata = {
 };
 
 // Ажилтны байдлыг нэг харцаар харуулах curated permission жагсаалт (эрхийн
-// БҮРЭН жагсаалт биш — "Үүргүүд" хэсэгт дэлгэрэнгүй тохируулна).
+// БҮРЭН жагсаалт биш — ролийн эрхийг системийн админ /system/roles-оос тохируулна).
 const QUICK_PERMISSIONS = [
   "orders.view",
   "orders.create",
@@ -62,8 +62,8 @@ export default async function EditEmployeePage({
       select: { id: true, name: true, district: true, slotCapacity: true },
     }),
     prisma.role.findMany({
-      where: { tenantId: me.tenantId, isActive: true },
-      orderBy: { name: "asc" },
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true },
     }),
   ]);
@@ -258,11 +258,7 @@ export default async function EditEmployeePage({
                 })}
               </ul>
               <p className="mt-3 text-xs text-[var(--oc-muted3)]">
-                Эрхийн дэлгэрэнгүйг{" "}
-                <Link href="/dashboard/employees/roles" className="text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)]">
-                  Үүргүүд
-                </Link>{" "}
-                хэсгээс тохируулна.
+                Ролийн эрхийг системийн админ тохируулдаг.
               </p>
             </div>
           ) : null}

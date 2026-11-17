@@ -197,6 +197,29 @@ Res:  200 { GET-тэй ижил хэлбэр }
           <Code>{`Res:  200 { "ok": true }
 404 { "error": "QPay тохиргоо хийгдээгүй байна.", "code": "NOT_CONFIGURED" }`}</Code>
         </Endpoint>
+
+        <Endpoint method="GET" path="/api/v1/tenant/order-settings" auth="bearer" bearerLabel={BEARER} title="Засварын хуудасны тохиргоо — нэвтэрсэн бүх ажилтан (нээх формын заавал талбар, шалгах жагсаалт). Тохиргоогүй бол анхдагч утга.">
+          <Code>{`Res: 200 { "settings": {
+    "numberPrefix": "ZS-", "numberPadding": 4, "numberIncludeYear": true,      // дугаар: ZS-2026-0001 (анхдагч: "", 5, false → 00001)
+    "requireAssignee": true, "requireMileage": false, "requireSignature": false,
+    "minIntakePhotos": 0, "requireChecklist": false,
+    "intakeChecklist": [{ "id": "c1a2b3", "label": "Тосны түвшин" }],          // POST /orders-ийн intakeChecklist[].id
+    "requireDiagnosticsFilled": true, "requireItemsCompleted": true,
+    "allowCloseUnpaid": false,          // true: orders.closeUnpaidPostpaid эрхтэй хэрэглэгч ердийн засварыг үлдэгдэлтэй хааж болно → дараа тооцоо (авлага)
+    "printFormat": "a4" | "80mm", "printHeaderNote": "..." | null, "printFooterNote": "..." | null,
+    "printSignatureLines": true, "printShowChecklist": true },
+  "canEdit": true }   // = эзэн`}</Code>
+        </Endpoint>
+
+        <Endpoint method="PATCH" path="/api/v1/tenant/order-settings" auth="bearer" bearerLabel={BEARER} tags={["Зөвхөн эзэн"]} title="Засварын хуудасны тохиргоог хэсэгчлэн шинэчлэх (ирээгүй талбар хэвээр).">
+          <Code>{`Req:  { GET-ийн settings-ийн аль ч талбар }   // дор хаяж 1; өөр талбар → 400
+      // numberPrefix ≤10 (үсэг/тоо/-/.), numberPadding 3–8, minIntakePhotos 0–20, intakeChecklist ≤50 мөр (label ≤80, давхардахгүй;
+      //   шинэ мөрөнд id өгөхгүй байж болно), printHeaderNote ≤500, printFooterNote ≤2000.
+      // numberIncludeYear солигдвол дараалал дахин тооцогдоно (асаахад 1-ээс). Хуучин дугаар өөрчлөгдөхгүй.
+Res:  200 { GET-тэй ижил }
+400 { "error": "...", "code": "VALIDATION", "fieldErrors": { "<талбар>": "..." } }
+403 { "error": "Зөвхөн админ тохиргоог өөрчилнө." }`}</Code>
+        </Endpoint>
       </Section>
 
       {/* --- Салбар удирдлага --- */}

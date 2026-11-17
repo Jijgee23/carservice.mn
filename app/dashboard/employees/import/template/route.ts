@@ -13,8 +13,8 @@ export async function GET() {
 
   const [roles, branches] = await Promise.all([
     prisma.role.findMany({
-      where: { tenantId: user.tenantId, isActive: true },
-      orderBy: { name: "asc" },
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       select: { name: true },
     }),
     prisma.branch.findMany({

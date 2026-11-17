@@ -16,8 +16,10 @@ const PERSONAS = [
     role: "Үйлчлүүлэгч",
     title: "Машиныхаа эрүүл мэндийг мэдэх",
     desc: "Өмнөх засваруудын түүх, дараагийн ТО-ны хугацаа, үнийн саналыг утсан дээрээ.",
-    href: "/login",
-    ctaLabel: "Утасны дугаараа оруулж нэвтрэх",
+    links: [
+      { href: "/discover", label: "Засварын газар хайж цаг захиалах" },
+      { href: "/login", label: "Утасны дугаараа оруулж нэвтрэх" },
+    ],
   },
 ];
 
@@ -42,14 +44,19 @@ export function Personas() {
               {p.title}
             </h3>
             <p className="mt-3 text-[15px] leading-relaxed text-[var(--oc-muted)]">{p.desc}</p>
-            {p.href ? (
-              <Link
-                href={p.href}
-                className="mt-6 inline-flex items-center gap-1.5 text-[14.5px] font-semibold text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)] transition-colors"
-              >
-                <span className="font-plex-mono">→</span>
-                {p.ctaLabel}
-              </Link>
+            {p.links ? (
+              <div className="mt-6 flex flex-col items-start gap-2.5">
+                {p.links.map((l) => (
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    className="inline-flex items-center gap-1.5 text-[14.5px] font-semibold text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)] transition-colors"
+                  >
+                    <span className="font-plex-mono">→</span>
+                    {l.label}
+                  </Link>
+                ))}
+              </div>
             ) : null}
           </div>
         ))}

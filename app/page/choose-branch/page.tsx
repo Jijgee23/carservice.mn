@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { safeNext } from "@/lib/safe-redirect";
 import { Geist, Geist_Mono } from "next/font/google";
 import { EmptyState } from "@/app/_components/empty-state";
 import { TenantAuthShellWide } from "@/app/_components/tenant-auth-shell";
@@ -45,7 +46,7 @@ export default async function ChooseBranchPage({
   if (user.workingBranchId) redirect("/dashboard");
 
   const { next: nextRaw } = await searchParams;
-  const next = nextRaw && nextRaw.startsWith("/") ? nextRaw : "/dashboard";
+  const next = safeNext(nextRaw, "/dashboard");
 
   // Owner эсвэл тогтмол салбаргүй ч нэмэлт сонголтгүй ("Бүх салбар"-аар
   // хамрагдсан) ажилтанд тенантын БҮХ идэвхтэй салбарыг харуулна. 2+

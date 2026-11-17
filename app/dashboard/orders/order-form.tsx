@@ -6,7 +6,7 @@ import {
   createOrderAction,
   updateOrderAction,
 } from "@/app/_actions/orders";
-import { IntakeSection } from "./intake-section";
+import { IntakeSection, NO_INTAKE_RULES, hasIntakeRequirements, type IntakeRules } from "./intake-section";
 import {
   getBranchDaySchedulePreview,
   type BranchDaySchedulePreview,
@@ -96,6 +96,8 @@ export function OrderForm({
   assigneeHint,
   hasPaidPayment = false,
   simplified = false,
+  requireAssignee = true,
+  intakeRules = NO_INTAKE_RULES,
   hideBranches = false,
 }: {
   initial?: Initial;
@@ -120,6 +122,10 @@ export function OrderForm({
   // Энгийн (FREE) багц: шинэ хуудсанд Өдрийн хуваарь, Ойролцоо хугацаа,
   // Хүлээн авах хэсгийг нууна (бүгд заавал биш тул хадгалалтад нөлөөгүй).
   simplified?: boolean;
+  /** Tenant-ийн тохиргоо: хариуцагч заавал эсэх (анхдагч: заавал). */
+  requireAssignee?: boolean;
+  /** Tenant-ийн тохиргоо: хүлээн авалтын шаардлага + шалгах жагсаалт. */
+  intakeRules?: IntakeRules;
   // Энгийн багц (ганц салбар): салбар сонгох талбарыг нууж, hidden input-аар илгээнэ.
   hideBranches?: boolean;
 }) {
@@ -202,7 +208,7 @@ export function OrderForm({
     if (!branchId) missing.branchId = "Салбар сонгоно уу.";
     if (!customerId) missing.customerId = "Үйлчлүүлэгчээ сонгоно уу.";
     if (!vehicleId) missing.vehicleId = "Машинаа сонгоно уу.";
-    if (!effectiveAssignedToId) missing.assignedToId = "Хариуцах мастер сонгоно уу.";
+    if (!effectiveAssignedToId && requireAssignee) missing.assignedToId = "Хариуцах мастер сонгоно уу.";
     setClientErrors(missing);
     if (Object.keys(missing).length > 0) e.preventDefault();
   }
@@ -572,7 +578,7 @@ export function OrderForm({
         ) : (
         <Field
           label="Хариуцах мастер"
-          required
+          required={requireAssignee}
           htmlFor="assignedToId"
           hint={assigneeHint}
           error={fe.assignedToId}
@@ -581,7 +587,7 @@ export function OrderForm({
           <Select
             id="assignedToId"
             name="assignedToId"
-            required
+            required={requireAssignee}
             value={assignedToId}
             onChange={(v) => {
               setAssignedToId(v);
@@ -807,9 +813,11 @@ export function OrderForm({
 
         {/* Хүлээн авах: xl дээр үйлчлүүлэгч/машины доор 2 мөр эзэлнэ (зүүн талд
             огноо/хугацаа, тэмдэглэл); бусад өргөнд талбаруудын доор бүтэн мөр. */}
-        {!isEdit && !simplified ? (
+        {/* Энгийн (FREE) горимд ч заавал бөглөх зүйлтэй бол харуулна. */}
+        {!isEdit && (!simplified || hasIntakeRequirements(intakeRules) || intakeRules.checklist.length > 0) ? (
           <IntakeSection
             error={fe.intake}
+            rules={intakeRules}
             onBusyChange={setIntakeBusy}
             className="sm:col-span-2 lg:col-span-3 xl:col-span-2 xl:col-start-3 xl:row-start-2 xl:row-span-2"
           />

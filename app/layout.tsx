@@ -13,7 +13,7 @@ const geist = Geist({
 // class-ыг авна. Хумигдсан sidebar-ийн өргөнийг ч мөн тавина. Өөрчлөгдвөл src (data: URL) өөрчлөгдөж React
 // шинэ resource гэж үзнэ.
 const THEME_INIT_CODE =
-  "(function(){try{if(localStorage.getItem('theme')==='dark')document.documentElement.classList.remove('light');if(localStorage.getItem('carcare:sidebar:collapsed')==='1')document.documentElement.style.setProperty('--sidebar-w','4.5rem')}catch(e){}})()";
+  "(function(){try{if(localStorage.getItem('theme')==='dark')document.documentElement.classList.remove('light');if(localStorage.getItem('carcare:sidebar:collapsed')==='1')document.documentElement.style.setProperty('--sidebar-w','4rem')}catch(e){}})()";
 const THEME_INIT_SRC = `data:text/javascript,${encodeURIComponent(THEME_INIT_CODE)}`;
 
 export const metadata: Metadata = {

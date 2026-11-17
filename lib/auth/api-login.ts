@@ -45,7 +45,7 @@ export type ApiLoginUser = {
   tenantId: string;
   branchId: string | null;
   tenant: { id: string; name: string };
-  role: { id: string; name: string; permissions: unknown } | null;
+  role: { id: string; name: string; permissions: unknown; isActive?: boolean } | null;
 };
 
 function requestMeta(req: Request): {
@@ -117,7 +117,7 @@ export async function buildApiLoginResponse(
         ? {
             id: user.role.id,
             name: user.role.name,
-            permissions: user.role.permissions,
+            permissions: user.role.isActive === false ? [] : user.role.permissions,
           }
         : null,
       branchId: user.branchId,

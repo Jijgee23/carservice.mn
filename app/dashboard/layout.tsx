@@ -13,7 +13,6 @@ import { requireUser } from "@/lib/auth";
 import { canChooseAllBranches, eligibleBranchIds } from "@/lib/auth/roles";
 import { ALL_BRANCHES } from "@/lib/auth/session";
 import { resolveTodayLockedBranch } from "@/lib/employee-branch-lock";
-import { getAppStoreLinks } from "@/lib/platform-settings";
 import { MODULE_LIMIT_CODES } from "@/lib/plan-limits";
 import { getBranchVisibility, SINGLE_BRANCH_LABEL } from "@/lib/branch-visibility";
 import { getEnabledModules } from "@/lib/plan-modules-server";
@@ -59,7 +58,7 @@ export default async function DashboardLayout({
   const eligible = eligibleBranchIds(user);
   const restrictToEligible = !user.isOwner && eligible.length > 0;
 
-  const [subState, unreadNotifications, switchableBranches, lockedBranch, appLinks, enabledModules, branchVisibility] = await Promise.all([
+  const [subState, unreadNotifications, switchableBranches, lockedBranch, enabledModules, branchVisibility] = await Promise.all([
     getSubscriptionState(user.tenantId),
     prisma.notification.count({
       where: { userId: user.id, readAt: null },
@@ -77,8 +76,6 @@ export default async function DashboardLayout({
     // switcher-ийг унтраагаад, session хуучирсан бол автоматаар шинэчилнэ
     // (харах: ./branch-roster-sync.tsx, lib/employee-branch-lock.ts).
     resolveTodayLockedBranch(user),
-    // Засварын газрын аппын store холбоос — tenant context-ыг өөрчлөхгүй уншина.
-    getAppStoreLinks().then((l) => l.business),
     // Багцад ороогүй модулиуд — цэсэнд түгжээ тэмдэгтэй харагдана.
     getEnabledModules(user.tenant.plan),
     // Энгийн багц + ганц салбар бол «салбар»-ыг UI-аас нууна.
@@ -86,9 +83,9 @@ export default async function DashboardLayout({
   ]);
   const singleBranchNav = branchVisibility.hideBranches
     ? {
-        href: `/dashboard/branches/${branchVisibility.singleBranchId}`,
-        label: SINGLE_BRANCH_LABEL,
-      }
+      href: `/dashboard/branches/${branchVisibility.singleBranchId}`,
+      label: SINGLE_BRANCH_LABEL,
+    }
     : null;
   const lockedModules = MODULE_LIMIT_CODES.filter((m) => !enabledModules.has(m));
 
@@ -108,7 +105,6 @@ export default async function DashboardLayout({
           lockedModules={lockedModules}
           singleBranchNav={singleBranchNav}
           notificationUnread={unreadNotifications}
-          appLinks={appLinks}
         />
         <div className="app-content-offset flex-1 min-w-0 min-h-screen flex flex-col relative isolate">
           <MobileTopbar
@@ -119,16 +115,16 @@ export default async function DashboardLayout({
             initials={initials.toUpperCase()}
             isOwner={user.isOwner}
             permissions={user.role?.permissions ?? []}
-          lockedModules={lockedModules}
-          singleBranchNav={singleBranchNav}
+            lockedModules={lockedModules}
+            singleBranchNav={singleBranchNav}
             notificationUnread={unreadNotifications}
-          appLinks={appLinks}
           />
           <SubscriptionGuard locked={subState.locked} isOwner={user.isOwner} />
-          <div className="px-4 sm:px-6 lg:px-8 pt-3">
-            <div className="flex flex-col sm:flex-row items-stretch gap-3">
+
+         <div className="px-4 sm:px-6 lg:px-8 pt-3">
+  <div className="flex flex-col sm:flex-row sm:items-stretch gap-3">
               {!branchVisibility.hideBranches &&
-              (user.workingBranchId === ALL_BRANCHES || user.workingBranch) ? (
+                (user.workingBranchId === ALL_BRANCHES || user.workingBranch) ? (
                 <BranchSwitcher
                   firstName={user.firstName}
                   currentBranch={user.workingBranch}
@@ -136,8 +132,10 @@ export default async function DashboardLayout({
                   branches={switchableBranches}
                   allowAllBranches={allowAllBranches}
                   locked={Boolean(lockedBranch)}
+
                 />
               ) : null}
+
               <BranchRosterSync
                 lockedBranchId={lockedBranch?.branchId ?? null}
                 currentBranchId={
@@ -146,6 +144,7 @@ export default async function DashboardLayout({
                     : null
                 }
               />
+
               <SubscriptionBanner
                 locked={subState.locked}
                 isTrial={subState.active?.isTrial ?? false}
@@ -156,13 +155,16 @@ export default async function DashboardLayout({
                 isOwner={user.isOwner}
                 className="flex-1 min-w-0"
               />
+
+              <WebPushBar
+                target="user"
+                description="засварын хуудас, цаг захиалгын мэдэгдэл"
+                 className="shrink-0 self-stretch"
+              />
             </div>
           </div>
-          <WebPushBar
-            target="user"
-            description="засварын хуудас, цаг захиалгын мэдэгдэл"
-            className="px-4 sm:px-6 lg:px-8 pt-3"
-          />
+
+
           <main className="flex-1 flex flex-col min-w-0">{children}</main>
         </div>
       </div>

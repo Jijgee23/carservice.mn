@@ -57,6 +57,9 @@ const loadCurrentUser = cache(async () => {
     },
   });
   if (!user) redirect("/page/login");
+  // Роль глобал: супер админ идэвхгүй болгосон бол бүх tenant-ийн эзэмшигчид
+  // нь шууд эрхгүй болно (sidebar, order-access зэрэг role.permissions-ийг шууд уншдаг).
+  if (user.role && !user.role.isActive) user.role = { ...user.role, permissions: [] };
 
   // Идэвхгүй / хугацаа дууссан хэрэглэгчийг session-оос гаргана
   const active = checkUserActive({

@@ -47,8 +47,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // Нэгдсэн сангаас сонгосон бол эхлээд тенантын ажил/сэлбэг болгон холбоно.
     // Захиалгын хүрээ/эрх/түгжээг adopt (тенантад Service үүсгэх) хийхээс өмнө шалгана.
     if (!serviceId && catalogItemId && !diagnosticTemplateId) {
-      await assertOrderItemAddPrecheck(auth.user, id, scopeResult.branchId);
-      const adopted = await adoptCatalogItemForTenant(auth.user, catalogItemId);
+      const { canSetPrice } = await assertOrderItemAddPrecheck(auth.user, id, scopeResult.branchId);
+      // Байгууллагын ажил/сэлбэгт ЯГ ашигласан нэр (description), үнээр нэмнэ.
+      const adopted = await adoptCatalogItemForTenant(auth.user, catalogItemId, {
+        name: description,
+        price: canSetPrice ? unitPrice : null,
+      });
       if (!adopted.ok) return jsonError(422, adopted.message, { fieldErrors: { serviceId: adopted.message } });
       serviceId = adopted.serviceId;
     }
