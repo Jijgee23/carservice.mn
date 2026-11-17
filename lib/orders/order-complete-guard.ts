@@ -22,7 +22,7 @@ export function orderCompleteBlockedReason(input: {
   if (settings.requireItemsCompleted && input.unfinishedItems > 0) return `Дуусаагүй ${input.unfinishedItems} ажил байна.`;
   if (input.isInternal) return null;
   if (input.remaining.gt(0) && !input.isPostpaid && !settings.allowCloseUnpaid) {
-    return `Төлбөр бүрэн төлөгдөөгүй (үлдэгдэл ${formatTugrik(input.remaining.toString())}).`;
+    return `Төлбөр бүрэн төлөгдөөгүй (үлдэгдэл ${formatTugrik(input.remaining.toString())}). Төлбөр авсны дараа (касс) хаана.`;
   }
   if (input.remaining.gt(0) && !input.canCloseUnpaidPostpaid) return POSTPAID_CLOSE_FORBIDDEN_MESSAGE;
   return null;

@@ -25,6 +25,7 @@ export const NOTIFICATION_TYPES = [
   "order_in_progress",
   "order_payment_received",
   "order_rescheduled",
+  "order_assigned",
   "service_reminder",
   "appointment_rescheduled",
   "appointment_rescheduled_by_account",
@@ -63,6 +64,7 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   order_in_progress: "Ажил эхэллээ",
   order_payment_received: "Төлбөр хүлээн авсан",
   order_rescheduled: "Товлосон огноо шилжсэн",
+  order_assigned: "Засвар оноогдлоо",
   service_reminder: "Үйлчилгээний сануулга",
   appointment_rescheduled: "Цаг шилжсэн",
   appointment_rescheduled_by_account: "Хэрэглэгч цагаа шилжүүлсэн",
@@ -347,6 +349,19 @@ export const NOTIFICATION_REGISTRY: Record<NotificationType, NotificationDef> = 
       data: { type: "credit_blocked_admin", tenantId: i.tenantId ?? "" },
     }),
     href: (d) => (d.tenantId ? `/system/tenants/${d.tenantId}` : "/system/tenants"),
+  },
+  // Засварын хуудас ажилтанд (засварчин) оноогдсон — зөвхөн тэр ажилтанд
+  // (lib/orders/order-commands.ts notifyOrderAssigned). Өөрөө өөртөө оноовол илгээхгүй.
+  order_assigned: {
+    realm: "staff",
+    build: (i) => ({
+      title: `Танд засвар оноогдлоо${i.number ? ` №${i.number}` : ""}`,
+      body: [i.vehicle, i.customer].filter(Boolean).join(" · ") || "Засварын хуудсаа нээж үзнэ үү.",
+      data: { type: "order_assigned", orderId: i.orderId ?? "" },
+      // Нэг хүнд нэг захиалгыг дахин оноовол (өөр хүн → буцаж) шинэ мэдэгдэл
+      // байх ёстой тул dedupeKey ашиглахгүй.
+    }),
+    href: (d) => (d.orderId ? `/dashboard/orders/${d.orderId}` : "/dashboard/orders"),
   },
   // Үйлчлүүлэгч дууссан засварт үнэлгээ өгсөн (lib/reviews.ts).
   review_received: {

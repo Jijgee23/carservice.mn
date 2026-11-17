@@ -788,7 +788,7 @@ export async function updateOrderAction(
     return { ok: false, message: "Засварын хуудас олдсонгүй." };
   }
   if (!canAssignOrders(user) && data.assignedToId !== existing.assignedToId) {
-    return { ok: false, message: "Зөвхөн orders.assign эрхтэй хэрэглэгч хариуцагч өөрчилж болно." };
+    return { ok: false, message: "Хариуцагч солих эрх танд алга. Менежерт хандана уу." };
   }
   if (isOrderLocked(existing.status as OrderStatus)) {
     return {
@@ -850,7 +850,7 @@ export async function updateOrderAction(
           throw new OrderActionValidationError("Танд энэ засварын хуудсыг засах эрх байхгүй.");
         }
         if (!canAssignOrders(user) && data.assignedToId !== fresh.assignedToId) {
-          throw new OrderActionValidationError("Зөвхөн orders.assign эрхтэй хэрэглэгч хариуцагч өөрчилж болно.");
+          throw new OrderActionValidationError("Хариуцагч солих эрх танд алга. Менежерт хандана уу.");
         }
         // Хариуцах мастер заавал: оноосон мастерыг арилгахгүй; оноох эрхтэй бол
         // мастергүй хуучин хуудсанд ч сонгуулна.

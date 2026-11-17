@@ -71,7 +71,7 @@ test("assignment-only commands use assign permission while mixed patches retain 
   assert.match(source, /if \(input\.assignedToId !== undefined && !canAssignOrders\(actor\)\)/);
   assert.match(
     source,
-    /const editsOrderFields = nextStatus != null \|\| input\.notes !== undefined[\s\S]{0,120}if \(editsOrderFields\) assertCanEdit\(actor, order\);[\s\S]{0,120}if \(input\.assignedToId !== undefined && !canAssignOrders\(actor\)\)/,
+    /const editsOrderFields = nextStatus != null \|\| input\.notes !== undefined[\s\S]{0,120}if \(editsOrderFields\) assertCanEdit\(actor, order\);[\s\S]{0,700}if \(input\.assignedToId !== undefined && !canAssignOrders\(actor\)\)/,
   );
 });
 

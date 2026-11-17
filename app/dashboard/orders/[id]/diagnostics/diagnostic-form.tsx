@@ -14,6 +14,7 @@ import {
   type ReportActionState,
 } from "@/app/_actions/diagnostic-reports";
 import { Field, FormError, SubmitButton } from "@/app/_components/auth-shell";
+import { compressFormDataImages } from "@/lib/client/compress-image";
 import {
   CHECK_TONE_ACCENT,
   CHECK_TONE_CHIP,
@@ -127,9 +128,17 @@ export function DiagnosticForm({
   // action prop ашиглавал React 19 action дууссаны дараа form-ыг reset хийж
   // бөглөсөн хариултууд арилдаг. onSubmit-ээр гардан дамжуулбал алдаа буцахад
   // input-уудын утга хэвээр үлдэнэ.
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  const [compressing, setCompressing] = useState(false);
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    // Утасны камерын зураг 2MB/хүсэлт 4MB хязгаарт унахаас сэргийлж шахна.
+    setCompressing(true);
+    try {
+      await compressFormDataImages(fd);
+    } finally {
+      setCompressing(false);
+    }
     startTransition(() => formAction(fd));
   }
 
@@ -282,7 +291,7 @@ export function DiagnosticForm({
             className="block w-full text-sm text-white/60 file:mr-3 file:rounded-lg file:border-0 file:bg-white/[0.08] file:px-3 file:py-2 file:text-sm file:font-medium file:text-white/80 hover:file:bg-white/[0.12] file:cursor-pointer"
           />
           <p className="text-xs text-white/40 mt-1.5">
-            PNG, JPG, WEBP · хамгийн ихдээ 2MB
+            PNG, JPG, WEBP · утасны зургийг автоматаар жижигрүүлнэ
           </p>
         </Field>
       </section>
@@ -295,7 +304,7 @@ export function DiagnosticForm({
           ← Цуцлах
         </Link>
         <div className="flex-1">
-          <SubmitButton pending={pending}>Тайлан хадгалах</SubmitButton>
+          <SubmitButton pending={pending || compressing}>Тайлан хадгалах</SubmitButton>
         </div>
       </div>
     </form>
@@ -420,7 +429,7 @@ function FieldInputs({
         <p className="text-xs text-white/40">
           {photoCount > 0
             ? `${photoCount} зураг сонгогдсон`
-            : "PNG, JPG, WEBP · хамгийн ихдээ 2MB"}
+            : "PNG, JPG, WEBP · утасны зургийг автоматаар жижигрүүлнэ"}
         </p>
       ) : null}
 
@@ -434,7 +443,7 @@ function FieldInputs({
             className="block w-full text-sm text-white/60 file:mr-3 file:rounded-lg file:border-0 file:bg-white/[0.08] file:px-3 file:py-2 file:text-sm file:font-medium file:text-white/80 hover:file:bg-white/[0.12] file:cursor-pointer"
           />
           <p className="text-xs text-white/40">
-            PNG, JPG, WEBP · хамгийн ихдээ 2MB
+            PNG, JPG, WEBP · утасны зургийг автоматаар жижигрүүлнэ
           </p>
         </>
       ) : null}

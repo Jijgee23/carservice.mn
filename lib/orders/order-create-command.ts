@@ -7,7 +7,7 @@ import { nextOrderNumber } from "@/lib/order-number";
 import { INTAKE_PATH_CLAIMED_MESSAGE, type IntakeInput } from "@/lib/orders/order-intake-server";
 import { withBookingTransaction, type PrismaTransactionClient } from "@/lib/prisma";
 import { ensureTenantVehicle } from "@/lib/vehicles";
-import { validateOrderAssignee, OrderCommandError } from "@/lib/orders/order-commands";
+import { notifyOrderAssigned, validateOrderAssignee, OrderCommandError } from "@/lib/orders/order-commands";
 import {
   CARRIED_ASSIGNEE_INELIGIBLE_MESSAGE,
   isCarriedAssigneeIneligible,
@@ -115,7 +115,7 @@ export async function createOrderCommand(
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await withBookingTransaction(input.tenantId, async (tx) => {
+      const createdOrder = await withBookingTransaction(input.tenantId, async (tx) => {
         const [branch, customer, vehicle, appointment] = await Promise.all([
           tx.branch.findFirst({
             where: { id: input.branchId, tenantId: input.tenantId },
@@ -386,6 +386,9 @@ export async function createOrderCommand(
 
         return created;
       });
+      // Оноогдсон засварчинд мэдэгдэл (commit-ийн дараа, best-effort).
+      await notifyOrderAssigned(createdOrder.id, input.actorId);
+      return createdOrder;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         // Intake зургийн зам давхардсан (race) — дугаарын retry биш, 422.

@@ -1,5 +1,6 @@
 "use client";
 
+import { compressImage, COMPRESS_FAILED } from "@/lib/client/compress-image";
 import { useEffect, useRef, useState } from "react";
 import { stageIntakeFileAction } from "@/app/_actions/order-intake";
 import { Field } from "@/app/_components/landing-ops-ui";
@@ -39,25 +40,8 @@ const Req = () => <span className="text-red-400"> *</span>;
 // QA #14: захиалга үүсгэх үеийн «Хүлээн авах» хэсэг. Утгууд hidden input-ээр
 // createOrderAction руу явна; үүссэний дараа бүрмөсөн түгжигдэнэ.
 
-const MAX_EDGE = 1600;
-const JPEG_QUALITY = 0.82;
-const COMPRESS_FAILED = "compress failed";
-
-/** Утасны том зургийг илгээхээс өмнө browser дээр жижигрүүлнэ (2MB хязгаар). */
-async function compressImage(file: File): Promise<File> {
-  const bitmap = await createImageBitmap(file).catch(() => {
-    throw new Error(COMPRESS_FAILED);
-  });
-  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY));
-  if (!blob) throw new Error(COMPRESS_FAILED);
-  return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
-}
+// Утасны том зургийг илгээхээс өмнө browser дээр жижигрүүлнэ (2MB хязгаар) —
+// оношилгооны маягттай нэг функц.
 
 async function stage(file: File): Promise<string> {
   const fd = new FormData();

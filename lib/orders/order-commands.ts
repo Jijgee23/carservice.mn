@@ -2,7 +2,7 @@ import { Prisma } from "@/app/generated/prisma/client";
 import { PAID_PAYMENT_LOCKED_ORDER_MESSAGE } from "@/lib/cash/locked-copy";
 import { findLockedPaymentIds } from "@/lib/cash/session-attach";
 import { createNotification } from "@/lib/notifications";
-import { canAssignOrders, canEditOrder, type OrderAccessUser } from "@/lib/auth/order-access";
+import { canAssignOrders, canEditOrder, orderEditScope, type OrderAccessUser } from "@/lib/auth/order-access";
 import { hasPermission, orderAssignableWhere } from "@/lib/auth/roles";
 import { parseDurationInput, MIN_CATEGORY_DURATION_MINUTES, MAX_CATEGORY_DURATION_MINUTES } from "@/lib/category-duration";
 import { calculateServiceItemDurationMinutes, type ServiceDurationItem } from "@/lib/service-duration";
@@ -224,6 +224,46 @@ function assertCanEdit(
   }
 }
 
+/**
+ * Засварын хуудас оноогдсон ажилтанд (засварчин) push + хонхны мэдэгдэл.
+ * Оноосон хүн өөрөө бол илгээхгүй. Best-effort — алдаа гарвал үндсэн урсгалыг
+ * таслахгүй. Хариуцагчийг DB-ээс уншина (create үед цаг захиалгаас ирж болно).
+ */
+export async function notifyOrderAssigned(orderId: string, actorId: string): Promise<void> {
+  try {
+    const order = await prisma.serviceOrder.findUnique({
+      where: { id: orderId },
+      select: {
+        tenantId: true,
+        number: true,
+        assignedToId: true,
+        plateSnapshot: true,
+        vehicle: { select: { plate: true, make: true, model: true } },
+        customer: { select: { fullName: true } },
+      },
+    });
+    if (!order?.assignedToId || order.assignedToId === actorId) return;
+    const vehicle = order.vehicle
+      ? [order.vehicle.plate || order.plateSnapshot, `${order.vehicle.make ?? ""} ${order.vehicle.model ?? ""}`.trim()]
+          .filter(Boolean)
+          .join(" ")
+      : order.plateSnapshot ?? "";
+    await createNotification({
+      type: "order_assigned",
+      recipient: { userId: order.assignedToId },
+      tenantId: order.tenantId,
+      input: {
+        orderId,
+        number: order.number ?? "",
+        vehicle,
+        customer: order.customer?.fullName ?? "",
+      },
+    });
+  } catch (error) {
+    console.warn("[notify] order_assigned:", error);
+  }
+}
+
 async function notifyOrderStatusChange(
   orderId: string,
   type: "order_completed" | "order_cancelled" | "order_in_progress",
@@ -369,8 +409,17 @@ export async function applyOrderPatchCommand(input: {
       assertOrderScope(actor, order.branchId, scope);
       const editsOrderFields = nextStatus != null || input.notes !== undefined || input.isPostpaid !== undefined || input.isInternal !== undefined;
       if (editsOrderFields) assertCanEdit(actor, order);
+      // Зөвхөн өөрт оноогдсоныг засах эрхтэй (засварчин) бүхэл хуудсыг цуцлахгүй —
+      // ажлын мөрөө цуцлах/дуусгах нь хэвээр.
+      if (nextStatus === "CANCELLED" && orderEditScope(actor) === "own") {
+        throw new OrderCommandError(
+          "Засварын хуудсыг цуцлах эрх танд алга. Менежерт хандана уу.",
+          403,
+          "ORDER_CANCEL_FORBIDDEN",
+        );
+      }
       if (input.assignedToId !== undefined && !canAssignOrders(actor)) {
-        throw new OrderCommandError("Зөвхөн orders.assign эрхтэй хэрэглэгч хариуцагч өөрчилж болно.", 403, "ORDER_ASSIGN_FORBIDDEN");
+        throw new OrderCommandError("Хариуцагч солих эрх танд алга. Менежерт хандана уу.", 403, "ORDER_ASSIGN_FORBIDDEN");
       }
       // Хариуцах мастер заавал — оноосон мастерыг арилгахгүй (сольж л болно).
       if (input.assignedToId === null && order.assignedToId) {
@@ -662,6 +711,9 @@ export async function applyOrderPatchCommand(input: {
   if (result.statusChanged && result.toStatus === "COMPLETED") await notifyOrderStatusChange(orderId, "order_completed");
   else if (result.statusChanged && result.toStatus === "CANCELLED") await notifyOrderStatusChange(orderId, "order_cancelled");
   else if (result.statusChanged && result.toStatus === "IN_PROGRESS") await notifyOrderStatusChange(orderId, "order_in_progress");
+  if (input.assignedToId && input.assignedToId !== result.previousAssignedToId) {
+    await notifyOrderAssigned(orderId, actor.id);
+  }
   return result;
 }
 

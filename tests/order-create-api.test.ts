@@ -127,7 +127,7 @@ test("API scheduledAt accepts strict business-local datetimes only", () => {
 });
 
 test("reference validation, assignee locking, and creation share one transaction", () => {
-  const start = commandSource.indexOf("return await withBookingTransaction");
+  const start = commandSource.indexOf("const createdOrder = await withBookingTransaction");
   const end = commandSource.indexOf("    } catch (error)", start);
   assert.ok(start >= 0);
   assert.ok(end > start);
@@ -142,7 +142,7 @@ test("reference validation, assignee locking, and creation share one transaction
 });
 
 test("create transaction takes the number lock before assignee locks", () => {
-  const start = commandSource.indexOf("return await withBookingTransaction");
+  const start = commandSource.indexOf("const createdOrder = await withBookingTransaction");
   const end = commandSource.indexOf("    } catch (error)", start);
   const transactionBody = commandSource.slice(start, end);
   const numberLock = transactionBody.indexOf("const number = await nextOrderNumber");

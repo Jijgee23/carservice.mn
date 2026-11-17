@@ -298,10 +298,10 @@ export function OrderItems({
                           </Link>
                         ) : needsReport && !cancelled ? (
                           <span
-                            title="Захиалга эхлээгүй байна — эхлүүлсний дараа оношилгоо бөглөх боломжтой"
+                            title="Засварын хуудас эхлээгүй байна — эхлүүлсний дараа оношилгоо бөглөх боломжтой"
                             className="shrink-0 text-[11px] font-medium text-[var(--oc-muted3)] cursor-not-allowed"
                           >
-                            Бөглөх →
+                            Эхлүүлсний дараа бөглөнө
                           </span>
                         ) : null}
                       </div>
@@ -347,7 +347,7 @@ export function OrderItems({
                                 statusLocked
                                   ? DIAGNOSTIC_REPORT_LINKED_REASON
                                   : !orderStarted
-                                  ? "Захиалга эхлээгүй байна — эхлүүлсний дараа явц өөрчлөх боломжтой"
+                                  ? "Засварын хуудас эхлээгүй байна — эхлүүлсний дараа явц өөрчлөх боломжтой"
                                   : needsReport && status === "PENDING"
                                     ? "Оношилгоо эхлээгүй байна — бөглөж эхлэхэд автоматаар \"Эхэлсэн\" болно"
                                     : null
@@ -372,7 +372,7 @@ export function OrderItems({
                                 type="submit"
                                 aria-label={`"${it.description}" мөрийг цуцлах`}
                                 title="Цуцлах"
-                                className="w-7 h-7 shrink-0 rounded-lg inline-flex items-center justify-center text-[var(--oc-muted4)] hover:text-red-400 hover:bg-red-500/10 light:hover:text-red-600 transition-colors"
+                                className="w-9 h-9 sm:w-7 sm:h-7 shrink-0 rounded-lg inline-flex items-center justify-center text-[var(--oc-muted4)] hover:text-red-400 hover:bg-red-500/10 light:hover:text-red-600 transition-colors"
                               >
                                 <svg
                                   width="13"
@@ -445,6 +445,7 @@ function ItemStatusSelect({
   const toast = useOptionalToast();
 
   return (
+    <div className="flex flex-col gap-0.5">
     <select
       name="status"
       value={optimisticStatus}
@@ -461,7 +462,8 @@ function ItemStatusSelect({
           if (result?.error) toast?.error(result.error);
         });
       }}
-      className="compact-input !py-1 !px-1.5 !text-[11px] !rounded-lg !w-[9.5rem] disabled:opacity-50 disabled:cursor-not-allowed"
+      // Утсан дээр хуруугаар дарахад хангалттай том; desktop-д нягт.
+      className="compact-input !py-2 !px-2 !text-[13px] sm:!py-1 sm:!px-1.5 sm:!text-[11px] !rounded-lg !w-[9.5rem] disabled:opacity-50 disabled:cursor-not-allowed"
     >
       {statuses.map((s) => (
         <option key={s} value={s}>
@@ -469,6 +471,13 @@ function ItemStatusSelect({
         </option>
       ))}
     </select>
+    {/* Touch дэлгэцэд title tooltip харагддаггүй — шалтгааныг бичгээр. */}
+    {disabledReason ? (
+      <span className="w-[9.5rem] text-[10.5px] leading-snug text-[var(--oc-muted3)] whitespace-normal">
+        {disabledReason.split(" — ")[0]}
+      </span>
+    ) : null}
+    </div>
   );
 }
 

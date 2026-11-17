@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Btn, BtnLink, Chip } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
-import { canEdit } from "@/lib/auth/roles";
+import { canEdit, canView } from "@/lib/auth/roles";
 import { formatTugrik } from "@/lib/orders";
 import { prisma } from "@/lib/prisma";
 import {
@@ -17,8 +17,9 @@ import {
 } from "@/lib/services";
 import { ServiceForm, SERVICE_FORM_ID } from "../service-form";
 import { StockAdjustForm } from "../stock-adjust-form";
+import { ReadOnlyDetails } from "../../read-only-details";
 
-export const metadata = { title: "Үйлчилгээ засах" };
+export const metadata = { title: "Үйлчилгээ" };
 
 const STOCK_TONE: Record<StockLevel, "danger" | "warn" | "ok"> = {
   out: "danger",
@@ -32,7 +33,10 @@ export default async function EditServicePage({
   params: Promise<{ id: string }>;
 }) {
   const user = await requireUser();
-  if (!canEdit(user, "services")) redirect("/dashboard/services");
+  // Харах эрхтэй (засварчин г.м.) ч нээнэ; засах эрхгүй бол маягт, нөөц
+  // тохируулах, өртгийн үнэ харагдахгүй.
+  if (!canView(user, "services")) redirect("/dashboard/services");
+  const editable = canEdit(user, "services");
 
   const { id } = await params;
   const svc = await prisma.service.findFirst({
@@ -45,7 +49,7 @@ export default async function EditServicePage({
   });
   if (!svc) notFound();
 
-  const [categories, units] = await Promise.all([
+  const [categories, units] = editable ? await Promise.all([
     prisma.category.findMany({
       // Өөрийн + системийн (сэлбэгийн) ангилал; төрлөөр формд шүүнэ.
       where: { OR: [{ tenantId: user.tenantId }, { tenantId: null }] },
@@ -57,7 +61,7 @@ export default async function EditServicePage({
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
       select: { id: true, name: true, code: true, isActive: true },
     }),
-  ]);
+  ]) : [[], []];
 
   const type = svc.type as ServiceKind;
   const isGoods = type === "GOODS";
@@ -87,9 +91,11 @@ export default async function EditServicePage({
           <BtnLink href={backHref} variant="ghost">
             ← Буцах
           </BtnLink>
-          <Btn type="submit" form={SERVICE_FORM_ID}>
-            Хадгалах
-          </Btn>
+          {editable ? (
+            <Btn type="submit" form={SERVICE_FORM_ID}>
+              Хадгалах
+            </Btn>
+          ) : null}
         </div>
       </div>
       {svc.code ? (
@@ -99,6 +105,7 @@ export default async function EditServicePage({
       ) : null}
 
       <div className="grid gap-6 lg:grid-cols-3 items-start">
+        {editable ? (
         <div className="lg:col-span-2 rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 sm:p-5">
           <h2 className="font-semibold text-[var(--oc-ink)] mb-4">Мэдээлэл</h2>
           <ServiceForm
@@ -124,6 +131,27 @@ export default async function EditServicePage({
             }}
           />
         </div>
+        ) : (
+          <div className="lg:col-span-2">
+            <ReadOnlyDetails
+              title="Мэдээлэл"
+              rows={[
+                { label: "Нэр", value: svc.name },
+                { label: "Код", value: svc.code, mono: true },
+                { label: "Нэгж", value: svc.unit?.name },
+                {
+                  label: "Хугацаа",
+                  value: svc.durationValue
+                    ? `${svc.durationValue.toString()} ${svc.durationUnit?.name ?? ""}`.trim()
+                    : null,
+                },
+                { label: "Баркод", value: svc.barcode, mono: true },
+                { label: "Тайлбар", value: svc.description },
+              ]}
+              note="Үйлчилгээний мэдээллийг засах эрх танд алга."
+            />
+          </div>
+        )}
 
         <div className="flex flex-col gap-4">
           <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 sm:p-5">
@@ -148,6 +176,7 @@ export default async function EditServicePage({
             <dl className="mt-6 grid grid-cols-2 gap-3 text-sm">
               {isGoods ? (
                 <>
+                  {editable ? (
                   <div>
                     <dt className="text-xs text-[var(--oc-muted3)]">Өртөг</dt>
                     <dd className="mt-0.5 font-plex-mono text-[var(--oc-ink2)]">
@@ -156,6 +185,7 @@ export default async function EditServicePage({
                         : "—"}
                     </dd>
                   </div>
+                  ) : null}
                   <div>
                     <dt className="text-xs text-[var(--oc-muted3)]">Борлуулах</dt>
                     <dd className="mt-0.5 font-plex-mono text-[var(--oc-ink2)]">
@@ -184,7 +214,7 @@ export default async function EditServicePage({
             </dl>
           </div>
 
-          {isGoods ? (
+          {isGoods && editable ? (
             <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 sm:p-5">
               <h2 className="font-semibold text-[var(--oc-ink)] mb-1">Орлого / Зарлага</h2>
               <p className="text-xs text-[var(--oc-muted3)] mb-4">

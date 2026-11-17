@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
 import { getBranchVisibility } from "@/lib/branch-visibility";
-import { canEdit } from "@/lib/auth/roles";
+import { canEdit, canView } from "@/lib/auth/roles";
 import {
   APPOINTMENT_STATUS_BADGE,
   APPOINTMENT_STATUS_LABEL,
@@ -22,6 +22,7 @@ import { vehicleOwnerIsOrganization } from "@/lib/vehicles/owner-kind";
 import { getVinHistory } from "@/lib/vehicles/vin-history";
 import { getVehicleHistory, isOwnerLocked } from "@/lib/vehicles/vehicle-history";
 import { VEHICLE_FORM_ID, VehicleForm } from "../vehicle-form";
+import { ReadOnlyDetails } from "../../read-only-details";
 
 export const metadata = {
   title: "Машины дэлгэрэнгүй",
@@ -43,7 +44,10 @@ export default async function VehicleDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const user = await requireUser();
-  if (!canEdit(user, "vehicles")) redirect("/dashboard/vehicles");
+  // Харах эрхтэй (жишээ нь засварчин) ч нээнэ — засварын түүхийг харах
+  // цорын ганц вэб хуудас. Засах эрхгүй бол маягтын оронд мэдээлэл.
+  if (!canView(user, "vehicles")) redirect("/dashboard/vehicles");
+  const editable = canEdit(user, "vehicles");
   // Энгийн багц (ганц салбар): түүхэнд салбарын нэрийг нууна.
   const { hideBranches } = await getBranchVisibility(user);
 
@@ -58,15 +62,16 @@ export default async function VehicleDetailPage({
       select: {
         customerId: true,
         isPostpaid: true,
-        customer: { select: { isOrganization: true } },
+        customer: { select: { isOrganization: true, fullName: true, phone: true } },
         vehicle: true,
       },
     }),
-    prisma.customer.findMany({
+    // Эзэмшигч сонгох жагсаалт зөвхөн засах маягтад хэрэгтэй.
+    editable ? prisma.customer.findMany({
       where: { tenantId: user.tenantId },
       orderBy: { fullName: "asc" },
       select: { id: true, fullName: true, phone: true, isOrganization: true, orgRegnum: true },
-    }),
+    }) : Promise.resolve([]),
     // Захиалга, цаг захиалгын түүх, оношилгооны тайлангийн тоо — DM-05-ийн
     // дагуу нэг л газар (lib/vehicles/vehicle-history.ts), энэ хуудас болон
     // /api/v1/vehicles/[id]/history route хоёулаа ижилхэн дуудна.
@@ -107,14 +112,17 @@ export default async function VehicleDetailPage({
           <BtnLink href="/dashboard/vehicles" variant="ghost">
             ← Буцах
           </BtnLink>
-          <Btn type="submit" form={VEHICLE_FORM_ID}>
-            Хадгалах
-          </Btn>
+          {editable ? (
+            <Btn type="submit" form={VEHICLE_FORM_ID}>
+              Хадгалах
+            </Btn>
+          ) : null}
         </div>
       </div>
 
       <div className="flex flex-col gap-6">
         {/* Машины бүх мэдээлэл + HUR шинэчлэх (form дотор товчтой) */}
+        {editable ? (
         <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 sm:p-5">
           <h2 className="font-semibold text-[var(--oc-ink)] text-sm mb-4">Машины мэдээлэл</h2>
           <VehicleForm
@@ -139,6 +147,28 @@ export default async function VehicleDetailPage({
             ownerLocked={ownerLocked}
           />
         </div>
+        ) : (
+          <ReadOnlyDetails
+            title="Машины мэдээлэл"
+            rows={[
+              { label: "Улсын дугаар", value: vehicle.plate, mono: true },
+              { label: "VIN", value: vehicle.vin, mono: true },
+              { label: "Марк, модель", value: `${vehicle.make} ${vehicle.model}`.trim() },
+              { label: "Үйлдвэрлэсэн он", value: vehicle.year },
+              { label: "Гүйлт (км)", value: vehicle.mileage?.toLocaleString("mn-MN") },
+              { label: "Шатахуун", value: vehicle.fuelType },
+              { label: "Өнгө", value: vehicle.colorName },
+              { label: "Моторын хэмжээ (см³)", value: vehicle.capacity },
+              {
+                label: "Эзэмшигч",
+                value: link.customer
+                  ? `${link.customer.fullName}${link.customer.phone ? ` · ${link.customer.phone}` : ""}`
+                  : null,
+              },
+            ]}
+            note="Машины мэдээллийг засах эрх танд алга."
+          />
+        )}
 
         {vinHistory &&
         vinHistory.vin &&

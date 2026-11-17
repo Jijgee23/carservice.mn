@@ -2,13 +2,14 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
-import { canEdit } from "@/lib/auth/roles";
+import { canCreate, canEdit, canView } from "@/lib/auth/roles";
 import { customerDisplay, customerLabel } from "@/lib/customers";
 import { prisma } from "@/lib/prisma";
 import { CUSTOMER_FORM_ID, CustomerForm } from "../customer-form";
+import { ReadOnlyDetails } from "../../read-only-details";
 
 export const metadata = {
-  title: "Үйлчлүүлэгч засах",
+  title: "Үйлчлүүлэгч",
 };
 
 export default async function EditCustomerPage({
@@ -17,7 +18,9 @@ export default async function EditCustomerPage({
   params: Promise<{ id: string }>;
 }) {
   const user = await requireUser();
-  if (!canEdit(user, "customers")) redirect("/dashboard/customers");
+  // Харах эрхтэй (засварчин г.м.) ч нээнэ; засах эрхгүй бол маягтын оронд мэдээлэл.
+  if (!canView(user, "customers")) redirect("/dashboard/customers");
+  const editable = canEdit(user, "customers");
 
   const { id } = await params;
   const customer = await prisma.customer.findFirst({
@@ -71,13 +74,16 @@ export default async function EditCustomerPage({
           <BtnLink href="/dashboard/customers" variant="ghost">
             ← Буцах
           </BtnLink>
-          <Btn type="submit" form={CUSTOMER_FORM_ID}>
-            Хадгалах
-          </Btn>
+          {editable ? (
+            <Btn type="submit" form={CUSTOMER_FORM_ID}>
+              Хадгалах
+            </Btn>
+          ) : null}
         </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_400px] items-start">
+        {editable ? (
         <CustomerForm
           initial={{
             id: customer.id,
@@ -91,16 +97,36 @@ export default async function EditCustomerPage({
             orgEmail: customer.orgEmail,
           }}
         />
+        ) : (
+          <ReadOnlyDetails
+            title="Мэдээлэл"
+            rows={[
+              { label: "Нэр", value: customer.fullName },
+              { label: "Утас", value: customer.phone, mono: true },
+              { label: "И-мэйл", value: customer.email },
+              ...(customer.isOrganization
+                ? [
+                    { label: "Байгууллагын нэр", value: customer.orgName },
+                    { label: "Регистр", value: customer.orgRegnum, mono: true },
+                  ]
+                : []),
+              { label: "Тэмдэглэл", value: customer.note },
+            ]}
+            note="Үйлчлүүлэгчийн мэдээллийг засах эрх танд алга."
+          />
+        )}
 
         <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--oc-line)]">
             <h2 className="font-semibold text-[var(--oc-ink)]">Машинууд</h2>
-            <BtnLink
-              href={`/dashboard/vehicles/new?customerId=${customer.id}`}
-              size="sm"
-            >
-              + Машин
-            </BtnLink>
+            {canCreate(user, "vehicles") ? (
+              <BtnLink
+                href={`/dashboard/vehicles/new?customerId=${customer.id}`}
+                size="sm"
+              >
+                + Машин
+              </BtnLink>
+            ) : null}
           </div>
 
           {customer.tenantVehicles.length === 0 ? (

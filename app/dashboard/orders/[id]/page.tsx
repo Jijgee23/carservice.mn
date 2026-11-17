@@ -17,7 +17,7 @@ import {
   hasPermission,
   workingBranchScopeId,
 } from "@/lib/auth/roles";
-import { canEditOrder as canEditAssignedOrder, canViewOrder } from "@/lib/auth/order-access";
+import { canEditOrder as canEditAssignedOrder, canViewOrder, orderEditScope } from "@/lib/auth/order-access";
 import { redirect } from "next/navigation";
 import { tenantVisibleTemplateWhere } from "@/lib/diagnostics";
 import { customerLabel } from "@/lib/customers";
@@ -83,6 +83,10 @@ export default async function OrderDetailPage({
   // Энгийн багц (ганц салбар): салбарыг нууна.
   const { hideBranches } = await getBranchVisibility(user);
   const { id } = await params;
+  // Бүх (салбарын) засварыг засах эрхтэй — менежер/эзэн. Зөвхөн өөрт оноогдсоныг
+  // засагч (засварчин) товч харагдацтай: бүтэн маягтгүй, хуудсыг цуцлахгүй,
+  // «Статус» карт утсан дээр дээр гарна.
+  const fullOrderEditor = orderEditScope(user) === "branch";
 
   const [order, branches, customers, vehicles, technicians, services, diagnosticTemplates] = await Promise.all([
     prisma.serviceOrder.findFirst({
@@ -135,12 +139,13 @@ export default async function OrderDetailPage({
       orderBy: { createdAt: "asc" },
       select: { id: true, name: true },
     }),
-    prisma.customer.findMany({
+    // Бүтэн маягтын сонголтууд — засварчинд хэрэггүй (утсанд хүнд).
+    !fullOrderEditor ? Promise.resolve([]) : prisma.customer.findMany({
       where: { tenantId: user.tenantId },
       orderBy: { fullName: "asc" },
       select: { id: true, fullName: true, phone: true, isOrganization: true, orgName: true, orgRegnum: true },
     }),
-    prisma.tenantVehicle
+    !fullOrderEditor ? Promise.resolve([]) : prisma.tenantVehicle
       .findMany({
         where: { tenantId: user.tenantId, isActive: true },
         orderBy: { createdAt: "desc" },
@@ -240,7 +245,9 @@ export default async function OrderDetailPage({
 
   const status = order.status as OrderStatus;
   const paymentStatus = order.paymentStatus as PaymentStatus;
-  const allowedTransitions = ORDER_STATUS_TRANSITIONS[status];
+  const allowedTransitions = fullOrderEditor
+    ? ORDER_STATUS_TRANSITIONS[status]
+    : ORDER_STATUS_TRANSITIONS[status].filter((t) => t !== "CANCELLED");
   const remainingAmount = (order.totalAmount ?? new Prisma.Decimal(0))
     .minus(order.paidAmount ?? new Prisma.Decimal(0))
     .toString();
@@ -474,7 +481,7 @@ export default async function OrderDetailPage({
             ) : null}
           </section>
 
-          {isEditable && canEditOrder ? (
+          {isEditable && canEditOrder && fullOrderEditor ? (
             <section className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 sm:p-5">
               <h2 className="font-semibold text-[var(--oc-ink)] mb-5">Засварын хуудасны мэдээлэл</h2>
               <OrderForm
@@ -501,7 +508,7 @@ export default async function OrderDetailPage({
           ) : null}
         </div>
 
-        <aside className="flex flex-col gap-6">
+        <aside className={`flex flex-col gap-6 ${fullOrderEditor ? "" : "order-first lg:order-none"}`}>
           {/* Эцсийн төлөвт карт харуулахгүй — статус нь дээд badge-д аль
               хэдийн байгаа тул давхардана */}
           {allowedTransitions.length > 0 ? (
