@@ -7,7 +7,7 @@ import { test } from "node:test";
 
 const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
 
-test("isTenantBookable requires the toggle AND a plan with ONLINE_BOOKING", async () => {
+test("isTenantBookable requires the toggle AND a plan with «Цаг захиалга» (enable_appointments)", async () => {
   const { isTenantBookable } = await import("../lib/tenant-visibility");
   const plans = ["BUSINESS", "ENTERPRISE"] as const;
   assert.equal(isTenantBookable({ acceptsOnlineBooking: true, plan: "BUSINESS" }, plans), true);

@@ -272,6 +272,9 @@ function isLightTheme(): boolean {
   );
 }
 
+// Logo-гүй байгууллагад (газрын зургийн pin, popup, карт) carservice-ийн тэмдэг.
+const FALLBACK_LOGO = "/brand/mark.svg";
+
 function ringColor(open: boolean, active: boolean): string {
   return active ? "#e74c3c" : open ? "#22c55e" : "#9ca3af";
 }
@@ -289,18 +292,13 @@ function buildPinElement(m: Marker, active: boolean): HTMLElement {
     active,
   )};box-shadow:0 4px 12px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;overflow:hidden;`;
 
-  if (m.org.logoUrl) {
-    const img = document.createElement("img");
-    img.src = m.org.logoUrl;
-    img.alt = "";
-    img.style.cssText = "width:100%;height:100%;object-fit:contain;";
-    badge.appendChild(img);
-  } else {
-    badge.textContent = m.org.name.slice(0, 1).toUpperCase();
-    badge.style.color = "#2c3e50";
-    badge.style.fontWeight = "700";
-    badge.style.fontSize = "16px";
-  }
+  const img = document.createElement("img");
+  img.src = m.org.logoUrl || FALLBACK_LOGO;
+  img.alt = "";
+  img.style.cssText = m.org.logoUrl
+    ? "width:100%;height:100%;object-fit:contain;"
+    : "width:70%;height:70%;object-fit:contain;";
+  badge.appendChild(img);
 
   // Доош чиглэсэн жижиг үзүүр (pin tail)
   const tail = document.createElement("div");
@@ -1571,22 +1569,13 @@ function FilterChip({
 
 function OrgLogo({ name, logoUrl, size }: { name: string; logoUrl: string | null; size: "md" | "lg" }) {
   const box = size === "lg" ? "w-14 h-14 rounded-2xl text-xl" : "w-12 h-12 rounded-xl text-lg";
-  if (logoUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={logoUrl}
-        alt=""
-        className={`${box} object-contain bg-[#fff] border border-[var(--oc-line)] shrink-0`}
-      />
-    );
-  }
   return (
-    <div
-      className={`${box} shrink-0 flex items-center justify-center font-bold bg-[var(--oc-accent)]/10 text-[var(--oc-accent)] border border-[var(--oc-accent)]/20`}
-    >
-      {name.slice(0, 1).toUpperCase()}
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={logoUrl || FALLBACK_LOGO}
+      alt={logoUrl ? "" : name}
+      className={`${box} object-contain bg-[#fff] border border-[var(--oc-line)] shrink-0 ${logoUrl ? "" : "p-2"}`}
+    />
   );
 }
 

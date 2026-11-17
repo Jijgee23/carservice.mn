@@ -10,8 +10,8 @@ export function isTenantPublic(tenant: { suspended: boolean; isTest: boolean; cr
 }
 
 // Олон нийтэд харагдах тенант онлайн цаг захиалга АВАХ эсэх: эзэн нь
-// «Онлайн цаг захиалга»-г асаасан БА багц нь ONLINE_BOOKING модультай
-// (`allowedPlans` = plansWithFeature(PLAN_LIMIT_CODES.ONLINE_BOOKING)).
+// «Онлайн цаг захиалга»-г асаасан БА багц нь «Цаг захиалга» модультай
+// (`allowedPlans` = plansWithFeature(PLAN_LIMIT_CODES.ENABLE_APPOINTMENTS)).
 // Discover / газрын зураг бүх нийтийн тенантыг харуулж, «Цаг захиалах» товчийг
 // зөвхөн энэ нь true үед гаргана.
 export function isTenantBookable<P>(

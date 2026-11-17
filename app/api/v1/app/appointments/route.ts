@@ -336,7 +336,7 @@ export async function POST(req: Request) {
   if (!branch.tenant.acceptsOnlineBooking || branch.tenant.suspended || branch.tenant.isTest || branch.tenant.creditHidden) {
     return jsonError(403, "Энэ байгууллага онлайн цаг захиалга хүлээн авахгүй.");
   }
-  if (!(await isFeatureEnabled(branch.tenantId, PLAN_LIMIT_CODES.ONLINE_BOOKING))) {
+  if (!(await isFeatureEnabled(branch.tenantId, PLAN_LIMIT_CODES.ENABLE_APPOINTMENTS))) {
     return jsonError(403, "Энэ байгууллага онлайн цаг захиалга хүлээн авахгүй.");
   }
 

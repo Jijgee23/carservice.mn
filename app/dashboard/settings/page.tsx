@@ -89,7 +89,7 @@ export default async function SettingsPage() {
               acceptsOnlineBooking: tenant.acceptsOnlineBooking,
               requireCashSession: tenant.requireCashSession,
             }}
-            onlineBookingInPlan={modules.has("online_booking")}
+            onlineBookingInPlan={modules.has("enable_appointments")}
           />
         </SectionPanel>
 

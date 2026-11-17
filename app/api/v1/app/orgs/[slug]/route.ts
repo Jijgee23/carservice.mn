@@ -19,7 +19,7 @@ export async function GET(
   // Нийтэд нээлттэй, slug-аар Tenant олохоос өмнө tenant тодорхойгүй тул bypass.
   setBypassContext();
   const { slug } = await ctx.params;
-  const allowedPlans = await plansWithFeature(PLAN_LIMIT_CODES.ONLINE_BOOKING);
+  const allowedPlans = await plansWithFeature(PLAN_LIMIT_CODES.ENABLE_APPOINTMENTS);
   const org = await prisma.tenant.findFirst({
     where: {
       slug,

@@ -201,7 +201,7 @@ export async function getDiscoveryCatalog(
 ) {
   const includeFacets = options?.includeFacets ?? true;
   const includeNonBookable = options?.includeNonBookable ?? false;
-  const allowedPlans = await plansWithFeature(PLAN_LIMIT_CODES.ONLINE_BOOKING);
+  const allowedPlans = await plansWithFeature(PLAN_LIMIT_CODES.ENABLE_APPOINTMENTS);
   const tenantVisibilityWhere = includeNonBookable
     ? { ...PUBLIC_TENANT_WHERE }
     : {

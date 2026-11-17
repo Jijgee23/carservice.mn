@@ -130,7 +130,7 @@ Res:  200 { GET-тэй ижил хэлбэр (шинэчлэгдсэн) }
 400 { "error": "Шинэчлэх талбар илгээнэ үү.", "code": "VALIDATION", "fieldErrors": {} }
 403 { "error": "Зөвхөн админ тохиргоог өөрчилнө." }
 403 { "error": "Таны багц онлайн цаг захиалгыг дэмжихгүй байна. ...", "code": "MODULE_DISABLED", "fieldErrors": { "acceptsOnlineBooking": "..." } }
-    // acceptsOnlineBooking (одоогийн эсвэл шинэ утга) true бөгөөд багцад online_booking модуль байхгүй
+    // acceptsOnlineBooking (одоогийн эсвэл шинэ утга) true бөгөөд багцад enable_appointments («Цаг захиалга», онлайн захиалгыг багтаасан) модуль байхгүй
 409 { "error": "...", "code": "CONFLICT", "fieldErrors": { "name" | "registerNumber" | "email": "..." } }   // давхцал
 500 { "error": "Шинэчлэх явцад алдаа гарлаа." }`}</Code>
         </Endpoint>
@@ -456,9 +456,9 @@ Res:  200 { "ok": true, "message": "2/3 салбарт хадгалагдлаа.
   "locked": false, "isTrial": false,
   "daysLeft": 23 | null, "expiresAt": "ISO" | null,          // хугацаагүй (FREE) бол null
   "expiringSoon": false, "warnDays": 7, "hasPendingPayment": false,
-  "modules": ["enable_appointments", "online_booking", ...],  // одоогийн багцад нээлттэй модулиуд
+  "modules": ["enable_appointments", "enable_diagnostics", ...],  // одоогийн багцад нээлттэй модулиуд
   "moduleCatalog": [{ "code": "enable_appointments", "label": "...", "description": "..." }, ...],   // бүх модуль
-      // code: enable_appointments | enable_diagnostics | online_booking | enable_finance | enable_inventory | enable_staff_schedule
+      // code: enable_appointments (онлайн цаг захиалгыг багтаана; online_booking 2026-11-17-нд нэгдсэн) | enable_diagnostics | enable_finance | enable_inventory | enable_staff_schedule
       //       | enable_customer_broadcast | enable_reports | enable_multi_branch | enable_audit | enable_api
   "planModules": { "FREE": [...], "BUSINESS": [...], "ENTERPRISE": [...] },
   "prices": [{ "id": "...", "plan": "BUSINESS", "period": "MONTH" | "QUARTER" | "YEAR", "periodLabel": "Сар",

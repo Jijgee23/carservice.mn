@@ -26,7 +26,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // хуудас нь зөвхөн онлайн захиалга авдаг (bookable) тенантад — бусад нь
   // салбарын дэлгэрэнгүй рүү redirect хийдэг.
   setBypassContext();
-  const allowedPlans = await plansWithFeature(PLAN_LIMIT_CODES.ONLINE_BOOKING);
+  const allowedPlans = await plansWithFeature(PLAN_LIMIT_CODES.ENABLE_APPOINTMENTS);
   const tenants = await prisma.tenant.findMany({
     where: { ...PUBLIC_TENANT_WHERE },
     select: {

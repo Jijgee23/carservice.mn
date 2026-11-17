@@ -12,7 +12,7 @@
 //   - branch fetched with isActive: true (previously missing — reservation
 //     creation already rejects inactive branches, public availability did
 //     not).
-//   - tenant.suspended / tenant.acceptsOnlineBooking / ONLINE_BOOKING plan
+//   - tenant.suspended / tenant.acceptsOnlineBooking / enable_appointments plan module
 //     feature all checked consistently (getBranchDaySlots was missing all
 //     three; the API route had them).
 //   - requested categoryIds deduped, then re-validated against tenantId +
@@ -95,7 +95,7 @@ export async function resolvePublicAvailability(
     branch.tenant.creditHidden ||
     branch.tenant.isTest ||
     !branch.tenant.acceptsOnlineBooking ||
-    !(await isFeatureEnabled(branch.tenantId, PLAN_LIMIT_CODES.ONLINE_BOOKING))
+    !(await isFeatureEnabled(branch.tenantId, PLAN_LIMIT_CODES.ENABLE_APPOINTMENTS))
   ) {
     return {
       ok: false,

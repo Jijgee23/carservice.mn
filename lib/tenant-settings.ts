@@ -126,7 +126,7 @@ export async function checkTenantProfile(
   if (data.acceptsOnlineBooking) {
     const allowed = await isFeatureEnabled(
       actor.tenantId,
-      PLAN_LIMIT_CODES.ONLINE_BOOKING,
+      PLAN_LIMIT_CODES.ENABLE_APPOINTMENTS,
     );
     if (!allowed) {
       return {

@@ -1623,13 +1623,13 @@ test("resolvePublicAvailability fetches the branch with isActive: true (previous
   );
 });
 
-test("resolvePublicAvailability checks tenant.suspended, acceptsOnlineBooking, and the ONLINE_BOOKING plan feature together", () => {
+test("resolvePublicAvailability checks tenant.suspended, acceptsOnlineBooking, and the enable_appointments plan module (incl. online booking) together", () => {
   const src = fs.readFileSync(path.join(__dirname, "..", "lib", "public-availability.ts"), "utf8");
   assert.ok(src.includes("branch.tenant.suspended"), "expected a suspended-tenant check");
   assert.ok(src.includes("branch.tenant.acceptsOnlineBooking"), "expected an acceptsOnlineBooking check");
   assert.ok(
-    src.includes("isFeatureEnabled(branch.tenantId, PLAN_LIMIT_CODES.ONLINE_BOOKING)"),
-    "expected the ONLINE_BOOKING plan-limit gate to be checked",
+    src.includes("isFeatureEnabled(branch.tenantId, PLAN_LIMIT_CODES.ENABLE_APPOINTMENTS)"),
+    "expected the enable_appointments plan-module gate to be checked",
   );
 });
 

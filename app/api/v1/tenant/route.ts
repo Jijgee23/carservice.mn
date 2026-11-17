@@ -78,7 +78,8 @@ async function buildResponse(user: ApiUser) {
       creditBlocked: creditSuspended ? "suspended" : creditHidden ? "hidden" : null,
     },
     modules: {
-      onlineBooking: modules.has("online_booking"),
+      // online_booking модуль enable_appointments-д нэгдсэн (2026-11-17) — талбар хуучин апп-д зориулж үлдэв.
+      onlineBooking: modules.has("enable_appointments"),
       appointments: modules.has("enable_appointments"),
     },
     canEdit: user.isOwner,

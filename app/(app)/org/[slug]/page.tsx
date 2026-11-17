@@ -100,7 +100,7 @@ export default async function OrgPage({
   if (!org) notFound();
   const bookable = isTenantBookable(
     org,
-    await plansWithFeature(PLAN_LIMIT_CODES.ONLINE_BOOKING),
+    await plansWithFeature(PLAN_LIMIT_CODES.ENABLE_APPOINTMENTS),
   );
   if (!bookable) {
     // Захиалга авдаггүй — захиалгын маягтын оронд салбарын мэдээлэл (утас,

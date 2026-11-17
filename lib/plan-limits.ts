@@ -16,7 +16,6 @@ import type { Plan } from "@/app/generated/prisma/enums";
 export const PLAN_LIMIT_CODES = {
   ENABLE_APPOINTMENTS: "enable_appointments",
   ENABLE_DIAGNOSTICS: "enable_diagnostics",
-  ONLINE_BOOKING: "online_booking",
   ENABLE_FINANCE: "enable_finance",
   ENABLE_INVENTORY: "enable_inventory",
   ENABLE_STAFF_SCHEDULE: "enable_staff_schedule",
@@ -43,7 +42,10 @@ export const PLAN_LIMIT_META: Record<
 > = {
   enable_appointments: {
     label: "Цаг захиалга",
-    description: "Цаг захиалгын календар, захиалга бүртгэх, баталгаажуулах",
+    // Онлайн цаг захиалга (/discover каталог, үйлчлүүлэгч өөрөө цаг авах) энэ
+    // модульд багтана — 2026-11-17 хүртэл тусдаа `online_booking` модуль байсан.
+    // Байгууллага онлайнаар авах эсэхээ Tenant.acceptsOnlineBooking-оор шийднэ.
+    description: "Цаг захиалгын календар, захиалга бүртгэх, баталгаажуулах, онлайн цаг захиалга (каталогт харагдах)",
     kind: "BOOLEAN",
     sortOrder: 100,
   },
@@ -52,12 +54,6 @@ export const PLAN_LIMIT_META: Record<
     description: "Оношилгооны загвар, үйлчилгээ, тайлан",
     kind: "BOOLEAN",
     sortOrder: 105,
-  },
-  online_booking: {
-    label: "Онлайн цаг захиалга",
-    description: "Хэрэглэгчийн вэб/апп каталогт харагдаж, онлайнаар цаг авах",
-    kind: "BOOLEAN",
-    sortOrder: 110,
   },
   enable_finance: {
     label: "Санхүү",
@@ -117,7 +113,6 @@ type DefaultValue = { intValue: number | null; boolValue: boolean | null };
 export const MODULE_LIMIT_CODES = [
   "enable_appointments",
   "enable_diagnostics",
-  "online_booking",
   "enable_finance",
   "enable_inventory",
   "enable_staff_schedule",
@@ -152,7 +147,6 @@ export const DEFAULT_PLAN_LIMITS: Record<
   FREE: planDefaults({
     enable_appointments: true,
     enable_diagnostics: true,
-    online_booking: false,
     enable_finance: false,
     enable_inventory: false,
     enable_staff_schedule: false,
@@ -165,7 +159,6 @@ export const DEFAULT_PLAN_LIMITS: Record<
   BUSINESS: planDefaults({
     enable_appointments: true,
     enable_diagnostics: true,
-    online_booking: true,
     enable_finance: true,
     enable_inventory: true,
     enable_staff_schedule: true,
@@ -178,7 +171,6 @@ export const DEFAULT_PLAN_LIMITS: Record<
   ENTERPRISE: planDefaults({
     enable_appointments: true,
     enable_diagnostics: true,
-    online_booking: true,
     enable_finance: true,
     enable_inventory: true,
     enable_staff_schedule: true,

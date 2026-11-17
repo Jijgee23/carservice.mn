@@ -33,7 +33,7 @@ export async function isFeatureEnabled(
 /**
  * Тухайн BOOLEAN feature идэвхтэй байгаа бүх plan-уудыг буцаана (override +
  * default). Каталог гэх мэт олон тенантыг нэг where-ээр шүүхэд:
- *   where: { plan: { in: await plansWithFeature("online_booking") } }
+ *   where: { plan: { in: await plansWithFeature("enable_appointments") } }
  */
 export async function plansWithFeature(code: PlanLimitCode): Promise<Plan[]> {
   const overrides = await prisma.planLimit.findMany({

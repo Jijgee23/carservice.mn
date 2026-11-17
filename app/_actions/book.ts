@@ -46,7 +46,7 @@ export async function getBookingBranchResults(
   if (ids.length > MAX_SELECTED_SERVICE_KEYS) return [];
   setBypassContext();
 
-  const allowedPlans = await plansWithFeature(PLAN_LIMIT_CODES.ONLINE_BOOKING);
+  const allowedPlans = await plansWithFeature(PLAN_LIMIT_CODES.ENABLE_APPOINTMENTS);
   const now = new Date();
   const tenants = await prisma.tenant.findMany({
     where: {

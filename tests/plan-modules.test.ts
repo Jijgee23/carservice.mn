@@ -23,12 +23,17 @@ test("there are no numeric limits at all — every plan code is a module", () =>
 test("default module split: FREE ⊂ BUSINESS ⊂ ENTERPRISE as agreed", () => {
   assert.deepEqual([...enabled("FREE")].sort(), ["enable_appointments", "enable_diagnostics"]);
   const business = enabled("BUSINESS");
-  for (const c of ["online_booking", "enable_finance", "enable_inventory", "enable_staff_schedule", "enable_customer_broadcast", "enable_reports", "enable_multi_branch"] as PlanModuleCode[]) {
+  for (const c of ["enable_finance", "enable_inventory", "enable_staff_schedule", "enable_customer_broadcast", "enable_reports", "enable_multi_branch"] as PlanModuleCode[]) {
     assert.ok(business.has(c), c);
   }
   assert.ok(!business.has("enable_audit"));
   assert.ok(!business.has("enable_api"));
   assert.equal(enabled("ENTERPRISE").size, MODULE_LIMIT_CODES.length);
+});
+
+test("online booking is part of «Цаг захиалга» (no separate online_booking module)", () => {
+  assert.ok(!(MODULE_LIMIT_CODES as readonly string[]).includes("online_booking"));
+  assert.match(PLAN_LIMIT_META.enable_appointments.description, /онлайн цаг захиалга/);
 });
 
 test("core pages and endpoints are never gated", () => {

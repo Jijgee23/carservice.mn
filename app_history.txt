@@ -2335,3 +2335,10 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - UI: газрын зургийн popup bookable бол «Дэлгэрэнгүй» + «Цаг захиалах», үгүй бол «Дэлгэрэнгүй» + «Онлайн захиалга авдаггүй — утсаар». Жагсаалтын карт «Онлайн захиалга / Онлайн захиалгагүй», толгой линк bookable бол захиалга, үгүй бол салбарын дэлгэрэнгүй.
 - /org/[slug]/branch/[id] бүх нийтийн газарт нээгдэнэ, «Цаг захиалах» зөвхөн bookable; бусад нь утсаар холбогдох мэдэгдэл. /org/[slug] (захиалгын хуудас) bookable биш бол салбарын дэлгэрэнгүй рүү redirect (багцын шалгалт энд ч нэмэгдэв).
 - sitemap: бүх нийтийн газрын салбарын хуудас; /org/[slug] зөвхөн bookable. Тест: tests/discover-all-places.test.ts; tenant-is-test, seo тестүүд PUBLIC_TENANT_WHERE-г хүлээн авна.
+
+[2026-11-17] «Онлайн цаг захиалга» багцын модуль «Цаг захиалга»-д нэгдэв
+- online_booking модуль хасагдав (lib/plan-limits.ts); онлайн захиалгын бүх шалгалт PLAN_LIMIT_CODES.ENABLE_APPOINTMENTS (discover, org/branch хуудас, sitemap, discovery-catalog, public-availability, tenant-settings, appointments/book action, /api/v1/app/*). Онлайнаар авах эсэхийг Tenant.acceptsOnlineBooking шийднэ.
+- Migration 20261117120000_merge_online_booking_module: PlanLimit-ээс online_booking мөр устгана (прод дээр бүх багцад хоёулаа асаалттай байсан → зан төлөв өөрчлөгдөхгүй).
+- /api/v1/tenant `modules.onlineBooking` талбар хуучин апп-д зориулж үлдэв (= enable_appointments). API docs, fixture seed, тестүүд шинэчлэгдэв.
+
+[2026-11-17] Discover газрын зураг: logo-гүй байгууллагад carservice тэмдэг (/brand/mark.svg) — pin, popup, жагсаалтын карт.

@@ -309,9 +309,9 @@ async function seedPlans(db: SeedDb) {
     ["FREE", "max_users", "Ажилтны дээд тоо", 3, "COUNT"],
     ["BUSINESS", "max_users", "Ажилтны дээд тоо", 20, "COUNT"],
     ["ENTERPRISE", "max_users", "Ажилтны дээд тоо", null, "COUNT"],
-    ["FREE", "online_booking", "Онлайн цаг захиалга", null, "BOOLEAN"],
-    ["BUSINESS", "online_booking", "Онлайн цаг захиалга", null, "BOOLEAN"],
-    ["ENTERPRISE", "online_booking", "Онлайн цаг захиалга", null, "BOOLEAN"],
+    ["FREE", "enable_appointments", "Цаг захиалга", null, "BOOLEAN"],
+    ["BUSINESS", "enable_appointments", "Цаг захиалга", null, "BOOLEAN"],
+    ["ENTERPRISE", "enable_appointments", "Цаг захиалга", null, "BOOLEAN"],
   ] as const;
   for (const [plan, code, label, intValue, kind] of limits) {
     await db.planLimit.upsert({

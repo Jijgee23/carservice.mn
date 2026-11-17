@@ -30,8 +30,8 @@ export default async function DiscoverPage() {
   setBypassContext();
   // Олон нийтэд харагдах БҮХ tenant (зогсоосон/тест/credit-hidden биш) газрын
   // зураг, жагсаалтад гарна. «Цаг захиалах» нь зөвхөн онлайн захиалга авдаг
-  // (асаасан + багц нь ONLINE_BOOKING дэмждэг) газарт — `bookable`.
-  const allowedPlans = await plansWithFeature(PLAN_LIMIT_CODES.ONLINE_BOOKING);
+  // (асаасан + багц нь «Цаг захиалга» модультай) газарт — `bookable`.
+  const allowedPlans = await plansWithFeature(PLAN_LIMIT_CODES.ENABLE_APPOINTMENTS);
   const now = new Date();
   const tenants = await prisma.tenant.findMany({
     // Идэвхтэй салбаргүй tenant-ыг алгасна (client `org.branches[0]` ашигладаг).

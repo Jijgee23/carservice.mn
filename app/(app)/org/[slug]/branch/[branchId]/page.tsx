@@ -136,7 +136,7 @@ export default async function BranchDetailPage({
   if (!branch) notFound();
   const bookable = isTenantBookable(
     org,
-    await plansWithFeature(PLAN_LIMIT_CODES.ONLINE_BOOKING),
+    await plansWithFeature(PLAN_LIMIT_CODES.ENABLE_APPOINTMENTS),
   );
 
   const categoryRows = await prisma.category.findMany({

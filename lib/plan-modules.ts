@@ -52,7 +52,7 @@ export const DASHBOARD_MODULE_PATHS: readonly (readonly [string, PlanModuleCode]
 /**
  * /api/v1 замын угтвар → модуль. Ажилтны мобайл апп-ын үндсэн endpoint-ууд
  * (orders, customers, cash/sessions г.м.) энд ороогүй — үргэлж нээлттэй.
- * `/api/v1/app/*` (эцсийн хэрэглэгчийн апп) нь online_booking-оор тусад нь шүүгддэг.
+ * `/api/v1/app/*` (эцсийн хэрэглэгчийн апп) нь enable_appointments + Tenant.acceptsOnlineBooking-оор тусад нь шүүгддэг.
  */
 export const API_MODULE_PATHS: readonly (readonly [string, PlanModuleCode])[] = [
   ["/api/v1/appointments", "enable_appointments"],

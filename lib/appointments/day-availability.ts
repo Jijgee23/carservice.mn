@@ -11,7 +11,7 @@
 // boundary and it is NOT the plan-feature gate. Those stay at the two call
 // sites, which is what P2's own correction (TENANT_MOBILE_SLICES.md, "Wave 2
 // spec corrections") requires: the public path runs under
-// `setBypassContext()` and gates on `ONLINE_BOOKING`; the staff path runs
+// `setBypassContext()` and gates on `enable_appointments` (online booking is part of it); the staff path runs
 // under `requireApiUser`/`requirePermission` and must never depend on that
 // plan gate. Both fetch and authorize the branch themselves, then hand the
 // already-fetched row here.

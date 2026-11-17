@@ -174,7 +174,7 @@ export async function createAppointment(
   // Багц дэмжихгүй болсон (downgrade) тохиолдолд блоклоно.
   const bookingEnabled = await isFeatureEnabled(
     branch.tenantId,
-    PLAN_LIMIT_CODES.ONLINE_BOOKING,
+    PLAN_LIMIT_CODES.ENABLE_APPOINTMENTS,
   );
   if (!bookingEnabled) {
     return {
