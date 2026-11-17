@@ -2324,3 +2324,7 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - Ажилтны (admin) sidebar-аас «Апп татах» холбоос хасагдсан (dashboard layout getAppStoreLinks татахаа болив); tests/app-store-links.test.ts шинэчлэгдэв.
 
 [2026-11-17] Файл цэгцлэлт: md/постер/танилцуулга/лого → docs/ (docs/marketing/), _tmp-shot-dashboard.mjs → scripts/.
+
+[2026-11-17] System admin web push bar засвар + landing үнийн картууд
+- WebPushBar wrapper-т албадан `h-full` нэмэгддэг байсныг хасав — /system layout-д (min-h-screen flex багана) bar дэлгэцийн бүтэн өндрөөр сунаж контентыг доош түлхэж байсан. Dashboard `self-stretch`-ээр өндрөө авсан хэвээр. Коммент болсон хуучин UI устгагдав.
+- Pricing: картууд ижил өндөр (items-stretch + flex h-full flex-col, тайлбар min-h), FREE-ийн «үргэлж» хасагдав; hero «Үндсэн багц үргэлж үнэгүй» → «Үндсэн багц үнэгүй».

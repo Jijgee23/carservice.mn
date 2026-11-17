@@ -66,7 +66,7 @@ export async function Pricing() {
 
   const plans = PLAN_ORDER.map((plan) => {
     const meta = PLAN_META[plan];
-    // Зөвхөн тогтсон үнэтэй багц (BUSINESS) DB-ийн үнийг харуулна: FREE үргэлж
+    // Зөвхөн тогтсон үнэтэй багц (BUSINESS) DB-ийн үнийг харуулна: FREE
     // үнэгүй, ENTERPRISE тохиролцоно (lib/subscription.ts SELF_SERVE_PLANS).
     const amount = isSelfServePlan(plan) ? priceByPlan.get(plan) : undefined;
     const hasPaidPrice = amount != null && Number(amount.toString()) > 0;
@@ -75,7 +75,7 @@ export async function Pricing() {
     let period: string;
     if (plan === "FREE") {
       price = "Үнэгүй";
-      period = "үргэлж";
+      period = "";
     } else if (hasPaidPrice) {
       price = formatTugrik(amount.toString());
       period = "/сар";
@@ -109,14 +109,14 @@ export async function Pricing() {
         <p className="mb-10 text-[15.5px] text-[var(--oc-muted2)]">
           Хэдхэн машинаар эхэлж, бизнесийнхээ хэмжээгээр өс. Үнэ ил тод, нуугдмал төлбөргүй.
         </p>
-        <div className="grid items-start gap-6 lg:grid-cols-3">
+        <div className="grid items-stretch gap-6 lg:grid-cols-3">
           {plans.map((p) => (
             <div
               key={p.key}
               className={
                 p.highlighted
-                  ? "rounded-[10px] border border-[var(--oc-accent)] bg-[var(--oc-panel2)] px-8 py-[30px] shadow-[0_24px_60px_-30px_rgba(192,57,43,0.3)]"
-                  : "rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] px-8 py-[30px]"
+                  ? "flex h-full flex-col rounded-[10px] border border-[var(--oc-accent)] bg-[var(--oc-panel2)] px-8 py-[30px] shadow-[0_24px_60px_-30px_rgba(192,57,43,0.3)]"
+                  : "flex h-full flex-col rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] px-8 py-[30px]"
               }
             >
               <div className="flex items-center justify-between">
@@ -127,10 +127,12 @@ export async function Pricing() {
                   </span>
                 ) : null}
               </div>
-              <div className="mt-1.5 text-[14px] text-[var(--oc-muted2)]">{p.desc}</div>
+              <div className="mt-1.5 min-h-[42px] text-[14px] text-[var(--oc-muted2)]">{p.desc}</div>
               <div className="mt-[22px] font-plex-mono text-[32px] font-semibold text-[var(--oc-ink)]">
                 {p.price}
-                <span className="text-[15px] font-normal text-[var(--oc-muted3)]"> {p.period}</span>
+                {p.period ? (
+                  <span className="text-[15px] font-normal text-[var(--oc-muted3)]"> {p.period}</span>
+                ) : null}
               </div>
 
               <Link
