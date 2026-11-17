@@ -107,6 +107,7 @@ export async function GET(req: Request) {
       feeQpayInvoiceId: true,
       feeQrImage: true,
       feeQrText: true,
+      createdAt: true, // payBy (lib/appointment-payments.ts)
       feeQpayUrls: true,
       feeUnderpaidAmount: true,
       payment: { select: { amount: true, currency: true, status: true } },
@@ -373,6 +374,7 @@ export async function POST(req: Request) {
         feeQpayInvoiceId: true,
         feeQrImage: true,
         feeQrText: true,
+        createdAt: true, // payBy (lib/appointment-payments.ts)
         feeQpayUrls: true,
         feeUnderpaidAmount: true,
         payment: { select: { amount: true, currency: true, status: true } },

@@ -2377,3 +2377,4 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - GET /api/v1/tenant: `onboarding: { needsShopName, needsServiceKeys }` (эзэнд; вэбийн dialog-уудтай адил). PATCH { name } нэрийг баталгаажуулна.
 - GET /api/v1/app/booking-fee (нийтийн): { fee: { amount, ttlMinutes } | null } — захиалгаас өмнө харуулах.
 - API docs шинэчлэгдэв; тест tests/tenant-service-keys.test.ts.
+- (2026-11-17) Mobile хураамжийн объект (lib/appointment-payments.ts serializeAppointmentFee) `payBy` (ISO, createdAt + 15 мин; төлөгдсөн бол null) — /api/v1/app/appointments жагсаалт/POST, /[id]/payment, /retry. Апп төлбөрийн дэлгэцийг дахин нээхэд ч хугацааг харуулна.

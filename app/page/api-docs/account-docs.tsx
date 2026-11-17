@@ -415,6 +415,7 @@ payment: {
   urls: [{ "name": "Khan bank", "name_mn": "Хаан банк", "logo": "<url>", "description": "...", "link": "khanbank://..." }],
                                 // банк тус бүрийн deeplink (PAID үед хоосон [])
   underpaidAmount: 500 | null   // зөвхөн UNDERPAID үед: одоог хүртэл ирсэн дутуу дүн
+  payBy: "2026-11-17T06:45:00.000Z" | null   // төлөх эцсийн хугацаа (захиалсан + 15 мин); PAID/REFUNDED үед null — хэтэрвэл цаг чөлөөлөгдөнө
 }`}</Code>
 
         <Endpoint

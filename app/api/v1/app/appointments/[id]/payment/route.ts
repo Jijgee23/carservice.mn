@@ -22,6 +22,7 @@ export async function GET(
       feeQpayInvoiceId: true,
       feeQrImage: true,
       feeQrText: true,
+      createdAt: true, // payBy (lib/appointment-payments.ts)
       feeQpayUrls: true,
       feeUnderpaidAmount: true,
       payment: { select: { amount: true, currency: true, status: true } },

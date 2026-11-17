@@ -3,7 +3,7 @@ import "server-only";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@/app/generated/prisma/client";
 import { formatWhen } from "@/lib/appointments";
-import { isPendingAppointmentPaymentExpired } from "@/lib/appointment-payment-status";
+import { isPendingAppointmentPaymentExpired, PENDING_APPOINTMENT_PAYMENT_TTL_MINUTES } from "@/lib/appointment-payment-status";
 import { isSlotAvailable } from "@/lib/category-duration";
 import { DEFAULT_SLOT_MINUTES } from "@/lib/appointment-slots";
 import { notifyStaff } from "@/lib/notifications";
@@ -66,6 +66,9 @@ export type AppointmentFeeInfo = {
   qrText: string | null;
   urls: QPayBankUrl[];
   underpaidAmount: number | null;
+  /** Төлөх эцсийн хугацаа (ISO) — createdAt + PENDING_APPOINTMENT_PAYMENT_TTL_MINUTES.
+   * Төлөгдөөгүй (PENDING/UNDERPAID/FAILED) үед л; createdAt өгөөгүй бол null. */
+  payBy: string | null;
 } | null;
 
 /**
@@ -83,7 +86,12 @@ export function serializeAppointmentFee(appt: {
   feeQpayUrls: Prisma.JsonValue | null;
   feeUnderpaidAmount: Prisma.Decimal | null;
   payment: { amount: Prisma.Decimal; currency: string; status: string } | null;
+  /** Захиалга үүссэн огноо — `payBy` тооцоход (mobile апп хугацааг харуулна). */
+  createdAt?: Date | null;
 }): AppointmentFeeInfo {
+  const payBy = appt.createdAt
+    ? new Date(appt.createdAt.getTime() + PENDING_APPOINTMENT_PAYMENT_TTL_MINUTES * 60_000).toISOString()
+    : null;
   if (appt.payment) {
     return {
       status: appt.payment.status === "REFUNDED" ? "REFUNDED" : "PAID",
@@ -93,6 +101,7 @@ export function serializeAppointmentFee(appt: {
       qrText: null,
       urls: [],
       underpaidAmount: null,
+      payBy: null,
     };
   }
   if (!appt.feeAmount) return null; // хураамж шаардлагагүй (үнэгүй/идэвхгүй үед захиалсан)
@@ -112,6 +121,7 @@ export function serializeAppointmentFee(appt: {
       qrText: appt.feeQrText,
       urls,
       underpaidAmount: Number.parseFloat(appt.feeUnderpaidAmount.toString()),
+      payBy,
     };
   }
   if (appt.feeQpayInvoiceId) {
@@ -123,6 +133,7 @@ export function serializeAppointmentFee(appt: {
       qrText: appt.feeQrText,
       urls,
       underpaidAmount: null,
+      payBy,
     };
   }
   // feeAmount тавигдсан ч invoice татагдаагүй (эсвэл алдаа өгсөн) — дахин оролдоно.
@@ -134,6 +145,7 @@ export function serializeAppointmentFee(appt: {
     qrText: null,
     urls: [],
     underpaidAmount: null,
+    payBy,
   };
 }
 

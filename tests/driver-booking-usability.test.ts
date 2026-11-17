@@ -72,3 +72,16 @@ test("after booking (no fee) the driver lands on the new appointment with a conf
   assert.match(page, /const justCreated = \(await searchParams\)\.created === "1";/);
   assert.match(page, /Цаг захиалга илгээгдлээ/);
 });
+
+test("mobile fee object carries a server-computed payBy deadline", () => {
+  const lib = read("lib/appointment-payments.ts");
+  assert.match(lib, /payBy: string \| null;/);
+  assert.match(lib, /appt\.createdAt\.getTime\(\) \+ PENDING_APPOINTMENT_PAYMENT_TTL_MINUTES \* 60_000/);
+  for (const f of [
+    "app/api/v1/app/appointments/route.ts",
+    "app/api/v1/app/appointments/[id]/payment/route.ts",
+    "app/api/v1/app/appointments/[id]/payment/retry/route.ts",
+  ]) {
+    assert.match(read(f), /createdAt: true, \/\/ payBy/, f);
+  }
+});
