@@ -266,6 +266,8 @@ export async function createTenantWithOwner(
         data: {
           slug: makeSlug(data.orgName),
           name: data.orgName,
+          // Хувь хүн бол нэр нь эзний овог нэр — dashboard-д засварын нэрээ асууна.
+          shopNameConfirmedAt: data.isPerson ? null : new Date(),
           registerNumber: data.registerNumber,
           email: data.orgEmail || null,
           phone1: data.phone,

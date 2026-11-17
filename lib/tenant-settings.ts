@@ -149,7 +149,8 @@ export async function saveTenantProfile(
   try {
     await prisma.tenant.update({
       where: { id: actor.tenantId },
-      data,
+      // Эзэн нэрийн талбартай маягтыг хадгалсан — засварын нэр баталгаажсан.
+      data: { ...data, shopNameConfirmedAt: new Date() },
     });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {

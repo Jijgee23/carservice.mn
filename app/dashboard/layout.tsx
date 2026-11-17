@@ -21,6 +21,7 @@ import { getSubscriptionState } from "@/lib/subscription-server";
 import { setTenantContext } from "@/lib/tenant-context";
 import { loadServiceKeyChoices } from "@/lib/tenant-service-keys";
 import { ServiceKeysGate } from "./_components/service-keys-gate";
+import { ShopNameGate } from "./_components/shop-name-gate";
 
 // Ops Console дизайны фонт — landing/auth хуудсуудтай ижил механизм, зөвхөн
 // dashboard route-д scoped (бусад апп — account/system — Geist хэвээр).
@@ -93,7 +94,17 @@ export default async function DashboardLayout({
   // Эзэн «үзүүлдэг үйлчилгээ»-гээ баталгаажуулаагүй бол (шинэ бүртгэл эсвэл
   // хуучин байгууллага) хааж болохгүй dialog — /book, /discover хайлтад хэрэгтэй.
   const serviceKeyChoices = user.isOwner ? await loadServiceKeyChoices(user.tenantId) : null;
+  // Хувь хүний регистрээр бүртгүүлсэн бол нэр нь эзний овог нэр — эхлээд
+  // засварын нэрээ оруулна (дараа нь үйлчилгээний сонголт).
+  const shopNameRow = user.isOwner
+    ? await prisma.tenant.findUnique({
+        where: { id: user.tenantId },
+        select: { name: true, shopNameConfirmedAt: true },
+      })
+    : null;
+  const showShopNameGate = shopNameRow != null && shopNameRow.shopNameConfirmedAt == null;
   const showServiceKeysGate =
+    !showShopNameGate &&
     serviceKeyChoices != null && !serviceKeyChoices.confirmed && serviceKeyChoices.keys.length > 0;
 
   return (
@@ -173,6 +184,7 @@ export default async function DashboardLayout({
 
 
           <main className="flex-1 flex flex-col min-w-0">{children}</main>
+          {showShopNameGate ? <ShopNameGate currentName={shopNameRow.name} /> : null}
           {showServiceKeysGate ? (
             <ServiceKeysGate
               keys={serviceKeyChoices.keys}

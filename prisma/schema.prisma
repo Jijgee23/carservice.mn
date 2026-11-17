@@ -54,6 +54,11 @@ model Tenant {
   // Эзэн «танайх ямар үйлчилгээ үзүүлдэг вэ?» сонголтоо хадгалсан огноо — null бол
   // эзэн dashboard-д нэвтрэхэд заавал сонгуулна (/dashboard/onboarding/services).
   serviceKeysConfirmedAt         DateTime?
+  // Засварын (харагдах) нэрээ эзэн баталгаажуулсан огноо. Хувь хүний регистрээр
+  // бүртгүүлэхэд нэр = эзний овог нэр тул null → dashboard-д заавал засварын
+  // нэрээ оруулна (app/dashboard/_components/shop-name-gate.tsx). Байгууллага
+  // (7 оронтой регистр) бүртгүүлэхэд «Засварын нэр»-ээ оруулсан тул шууд тавина.
+  shopNameConfirmedAt            DateTime?
   createdAt                      DateTime  @default(now())
   updatedAt                      DateTime  @updatedAt
 

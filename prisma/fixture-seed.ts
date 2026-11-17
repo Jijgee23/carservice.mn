@@ -379,10 +379,13 @@ export async function seedFixtureData(db: SeedDb) {
 
   for (let tenantIndex = 0; tenantIndex < tenants.length; tenantIndex++) {
     const tenant = tenants[tenantIndex];
+    // Fixture-ийн эзэд dashboard-ын заавал бөглөх dialog-уудыг (засварын нэр,
+    // үйлчилгээ) харахгүй — нэр нь бодит засварын нэр.
+    const confirmed = { shopNameConfirmedAt: new Date(), serviceKeysConfirmedAt: new Date() };
     await db.tenant.upsert({
       where: { id: tenant.id },
-      update: { slug: tenant.slug, name: tenant.name, registerNumber: tenant.registerNumber, email: tenant.email, phone1: tenant.phone1, phone2: tenant.phone2, plan: tenant.plan, acceptsOnlineBooking: tenant.acceptsOnlineBooking, suspended: false },
-      create: tenant,
+      update: { slug: tenant.slug, name: tenant.name, registerNumber: tenant.registerNumber, email: tenant.email, phone1: tenant.phone1, phone2: tenant.phone2, plan: tenant.plan, acceptsOnlineBooking: tenant.acceptsOnlineBooking, suspended: false, ...confirmed },
+      create: { ...tenant, ...confirmed },
     });
 
     const userIds: string[] = [];

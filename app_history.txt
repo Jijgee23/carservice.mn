@@ -2365,3 +2365,9 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - /book: системийн бүх идэвхтэй ангилал (21). Сонгоход тухайн ажлыг хийдэг БҮХ нийтийн газар (Tenant.serviceKeys ЭСВЭЛ Category.systemServiceKeyId) — захиалга авдагт «Цаг авах» (ангиллаар бүрэн таарвал /book/branch?keys, үгүй бол /org?branch), бусдад «Онлайн захиалга авдаггүй · утас» + «Дэлгэрэнгүй»; захиалга авдаг эхэнд.
 - Discovery (web /discover, mobile orgs): serviceKey шүүлт ба чөлөөт текст хайлт байгууллагын сонгосон үйлчилгээг тооцно. Mobile service-keys захиалга авдаг газраар шүүсэн хэвээр (tenants OR categories).
 - Тест: tests/tenant-service-keys.test.ts (4); driver-booking тест mobile-д тааруулав.
+
+[2026-11-17] Хувь хүний бүртгэл: засварын нэрээ оруулах заавал dialog
+- Хувь хүний регистрээр бүртгүүлэхэд «Овог нэр» нь засварын нэр (Tenant.name) болдог байсан — газрын зураг/«/book» дээр хүний нэр харагдана.
+- Tenant.shopNameConfirmedAt (migration 20261117150000_tenant_shop_name_confirmed): хувь хүн биш бүртгэлд backfill; хувь хүн null. Бүртгэлд байгууллага → шууд тавина, хувь хүн → null. Тохиргооноос үндсэн мэдээлэл хадгалахад тавина. Fixture seed баталгаажсан.
+- Эзэнд хааж болохгүй dialog «Засварын газрынхаа нэрийг оруулна уу» (app/dashboard/_components/shop-name-gate.tsx, action app/_actions/tenant-shop-name.ts: эзэн, 2–100 тэмдэгт, давхцалгүй, slug өөрчлөхгүй, audit) — үйлчилгээний dialog-оос өмнө.
+- Тест: tests/tenant-shop-name.test.ts (3).
