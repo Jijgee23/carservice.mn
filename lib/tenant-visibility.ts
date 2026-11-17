@@ -8,3 +8,15 @@ export const PUBLIC_TENANT_WHERE = { suspended: false, isTest: false, creditHidd
 export function isTenantPublic(tenant: { suspended: boolean; isTest: boolean; creditHidden: boolean }): boolean {
   return !tenant.suspended && !tenant.isTest && !tenant.creditHidden;
 }
+
+// Олон нийтэд харагдах тенант онлайн цаг захиалга АВАХ эсэх: эзэн нь
+// «Онлайн цаг захиалга»-г асаасан БА багц нь ONLINE_BOOKING модультай
+// (`allowedPlans` = plansWithFeature(PLAN_LIMIT_CODES.ONLINE_BOOKING)).
+// Discover / газрын зураг бүх нийтийн тенантыг харуулж, «Цаг захиалах» товчийг
+// зөвхөн энэ нь true үед гаргана.
+export function isTenantBookable<P>(
+  tenant: { acceptsOnlineBooking: boolean; plan: P },
+  allowedPlans: readonly P[],
+): boolean {
+  return tenant.acceptsOnlineBooking && allowedPlans.includes(tenant.plan);
+}

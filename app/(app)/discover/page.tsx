@@ -9,6 +9,7 @@ import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
 import { plansWithFeature } from "@/lib/plan-limits-server";
 import { prisma } from "@/lib/prisma";
 import { setBypassContext } from "@/lib/tenant-context";
+import { isTenantBookable, PUBLIC_TENANT_WHERE } from "@/lib/tenant-visibility";
 import { getAccount } from "@/lib/auth/account";
 import { customerOwnershipFilters } from "@/lib/vehicles";
 import type { MyBranchReview, PendingReview } from "./discover-review-modal";
@@ -27,20 +28,19 @@ export const dynamic = "force-dynamic";
 export default async function DiscoverPage() {
   // Олон tenant-ийн нийтэд нээлттэй каталог — цор ганц tenant гэж байхгүй.
   setBypassContext();
-  // Багц нь онлайн захиалга дэмждэг tenant-уудыг л харуулна.
+  // Олон нийтэд харагдах БҮХ tenant (зогсоосон/тест/credit-hidden биш) газрын
+  // зураг, жагсаалтад гарна. «Цаг захиалах» нь зөвхөн онлайн захиалга авдаг
+  // (асаасан + багц нь ONLINE_BOOKING дэмждэг) газарт — `bookable`.
   const allowedPlans = await plansWithFeature(PLAN_LIMIT_CODES.ONLINE_BOOKING);
   const now = new Date();
   const tenants = await prisma.tenant.findMany({
-    where: {
-      acceptsOnlineBooking: true,
-      suspended: false,
-      isTest: false, // тест/демо тенант олон нийтэд харагдахгүй (lib/tenant-visibility.ts)
-      creditHidden: false, // credit score бага тул нуугдсан (lib/credit-score.ts)
-      plan: { in: allowedPlans },
-    },
+    // Идэвхтэй салбаргүй tenant-ыг алгасна (client `org.branches[0]` ашигладаг).
+    where: { ...PUBLIC_TENANT_WHERE, branches: { some: { isActive: true } } },
     orderBy: { name: "asc" },
     select: {
       slug: true,
+      acceptsOnlineBooking: true,
+      plan: true,
       name: true,
       logoUrl: true,
       phone1: true,
@@ -79,6 +79,7 @@ export default async function DiscoverPage() {
 
   const orgs: DiscoverOrg[] = tenants.map((t) => ({
     slug: t.slug,
+    bookable: isTenantBookable(t, allowedPlans),
     name: t.name,
     logoUrl: t.logoUrl,
     phone: t.phone1,
@@ -200,14 +201,14 @@ export default async function DiscoverPage() {
         <div className="relative flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div className="max-w-xl">
             <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--oc-accent)]">
-              Онлайн цаг захиалга
+              Авто засвар, сервисүүд
             </div>
             <h1 className="mt-1.5 text-2xl sm:text-3xl font-bold text-[var(--oc-ink)]">
               Ойролцоох авто засвараа олоорой
             </h1>
             <p className="mt-2 text-sm text-[var(--oc-muted)]">
-              Үйлчилгээний газраа газрын зураг эсвэл жагсаалтаас сонгож, онлайнаар
-              цаг захиална уу.
+              Үйлчилгээний газраа газрын зураг эсвэл жагсаалтаас олоорой. Онлайн
+              захиалга авдаг газарт шууд цаг захиална.
             </p>
           </div>
           <dl className="grid grid-cols-3 gap-2 sm:gap-3 shrink-0">

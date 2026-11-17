@@ -5,13 +5,16 @@ import {
   Panel,
   PlaceHeader,
 } from "@/app/(app)/_components/consumer-ui";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { loadAccountVehicles } from "@/lib/account-vehicles-catalog";
 import { getAccount } from "@/lib/auth/account";
 import { openWeekdaysOf } from "@/lib/branches";
 import { branchScheduleDisplaySelect } from "@/lib/branch-effective-schedule-server";
 import { resolveCategoryDurationMinutes } from "@/lib/category-duration";
+import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
+import { plansWithFeature } from "@/lib/plan-limits-server";
 import { prisma } from "@/lib/prisma";
+import { isTenantBookable, PUBLIC_TENANT_WHERE } from "@/lib/tenant-visibility";
 import { setBypassContext } from "@/lib/tenant-context";
 import { absoluteUrl, orgDescription, orgJsonLd, orgUrl } from "@/lib/seo";
 import { JsonLd } from "@/app/_components/json-ld";
@@ -19,12 +22,16 @@ import { BookingForm } from "./booking-form";
 
 export const dynamic = "force-dynamic";
 
+// Олон нийтэд харагдах газар. Онлайн захиалга авдаггүй (`bookable` false)
+// бол энэ (захиалгын) хуудас салбарын дэлгэрэнгүй рүү шилжүүлнэ.
 async function loadOrg(slug: string) {
   return await prisma.tenant.findFirst({
-    where: { slug, acceptsOnlineBooking: true, suspended: false, isTest: false, creditHidden: false },
+    where: { slug, ...PUBLIC_TENANT_WHERE },
     select: {
       id: true,
       slug: true,
+      acceptsOnlineBooking: true,
+      plan: true,
       name: true,
       logoUrl: true,
       phone1: true,
@@ -91,6 +98,18 @@ export default async function OrgPage({
   setBypassContext();
   const org = await loadOrg(slug);
   if (!org) notFound();
+  const bookable = isTenantBookable(
+    org,
+    await plansWithFeature(PLAN_LIMIT_CODES.ONLINE_BOOKING),
+  );
+  if (!bookable) {
+    // Захиалга авдаггүй — захиалгын маягтын оронд салбарын мэдээлэл (утас,
+    // хаяг, цаг) руу. redirect() exception шиддэг тул try/catch-гүй.
+    const target =
+      org.branches.find((b) => b.id === branchParam) ?? org.branches[0];
+    if (!target) notFound();
+    redirect(`/org/${org.slug}/branch/${encodeURIComponent(target.id)}`);
+  }
 
   // Discover-ийн салбарын дэлгэрэнгүйгээс тодорхой салбар сонгож ирсэн бол
   // (`?branch=`) байгууллага/салбарын сонголтыг ТҮГЖИНЭ — хэрэглэгч зөвхөн

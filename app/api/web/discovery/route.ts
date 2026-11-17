@@ -9,6 +9,6 @@ export async function GET(request: Request) {
   setBypassContext();
   const parsed = parseDiscoveryFilters(new URL(request.url).searchParams);
   if (parsed.error || !parsed.filters) return jsonError(400, parsed.error ?? "Шүүлтүүр буруу байна.");
-  const catalog = await getDiscoveryCatalog(parsed.filters);
+  const catalog = await getDiscoveryCatalog(parsed.filters, { includeNonBookable: true });
   return jsonOk({ orgs: catalog.organizations, facets: catalog.facets });
 }

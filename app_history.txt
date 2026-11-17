@@ -2328,3 +2328,10 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 [2026-11-17] System admin web push bar засвар + landing үнийн картууд
 - WebPushBar wrapper-т албадан `h-full` нэмэгддэг байсныг хасав — /system layout-д (min-h-screen flex багана) bar дэлгэцийн бүтэн өндрөөр сунаж контентыг доош түлхэж байсан. Dashboard `self-stretch`-ээр өндрөө авсан хэвээр. Коммент болсон хуучин UI устгагдав.
 - Pricing: картууд ижил өндөр (items-stretch + flex h-full flex-col, тайлбар min-h), FREE-ийн «үргэлж» хасагдав; hero «Үндсэн багц үргэлж үнэгүй» → «Үндсэн багц үнэгүй».
+
+[2026-11-17] Discover / газрын зураг: бүх газрыг харуулж, «Цаг захиалах» зөвхөн онлайн захиалга авдаг газарт
+- lib/tenant-visibility.ts isTenantBookable(tenant, plansWithFeature(ONLINE_BOOKING)) = acceptsOnlineBooking && багц дэмждэг.
+- /discover (page + /api/web/discovery[,/map]) олон нийтэд харагдах (PUBLIC_TENANT_WHERE) идэвхтэй салбартай БҮХ газрыг гаргана; DiscoverOrg/DiscoveryOrganization/marker-т `bookable`. lib/discovery-catalog.ts `includeNonBookable` сонголт (web=true); mobile /api/v1/app/orgs[,/map] хуучин гэрээгээр (зөвхөн bookable, `bookable: true` талбар нэмэгдсэн).
+- UI: газрын зургийн popup bookable бол «Дэлгэрэнгүй» + «Цаг захиалах», үгүй бол «Дэлгэрэнгүй» + «Онлайн захиалга авдаггүй — утсаар». Жагсаалтын карт «Онлайн захиалга / Онлайн захиалгагүй», толгой линк bookable бол захиалга, үгүй бол салбарын дэлгэрэнгүй.
+- /org/[slug]/branch/[id] бүх нийтийн газарт нээгдэнэ, «Цаг захиалах» зөвхөн bookable; бусад нь утсаар холбогдох мэдэгдэл. /org/[slug] (захиалгын хуудас) bookable биш бол салбарын дэлгэрэнгүй рүү redirect (багцын шалгалт энд ч нэмэгдэв).
+- sitemap: бүх нийтийн газрын салбарын хуудас; /org/[slug] зөвхөн bookable. Тест: tests/discover-all-places.test.ts; tenant-is-test, seo тестүүд PUBLIC_TENANT_WHERE-г хүлээн авна.

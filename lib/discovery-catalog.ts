@@ -16,6 +16,7 @@ import {
 import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
 import { plansWithFeature } from "@/lib/plan-limits-server";
 import { prisma } from "@/lib/prisma";
+import { isTenantBookable, PUBLIC_TENANT_WHERE } from "@/lib/tenant-visibility";
 
 export const DISCOVERY_MAX_MARKERS = 500;
 export const DISCOVERY_MAX_RADIUS_KM = 100;
@@ -128,6 +129,8 @@ type DiscoveryBranch = {
 
 type DiscoveryTenant = {
   slug: string;
+  acceptsOnlineBooking: boolean;
+  plan: string;
   name: string;
   logoUrl: string | null;
   phone1: string;
@@ -141,6 +144,8 @@ type DiscoveryTenant = {
 
 export type DiscoveryOrganization = {
   slug: string;
+  /** Онлайн цаг захиалга авдаг эсэх — false бол «Цаг захиалах» товч гаргахгүй. */
+  bookable: boolean;
   name: string;
   logoUrl: string | null;
   phone: string;
@@ -171,6 +176,7 @@ export type DiscoveryMarker = {
   orgSlug: string;
   orgName: string;
   logoUrl: string | null;
+  bookable: boolean;
   branchName: string;
   city: string | null;
   district: string | null;
@@ -183,10 +189,28 @@ export type DiscoveryMarker = {
 
 export async function getDiscoveryCatalog(
   filters: DiscoveryFilters,
-  options?: { includeFacets?: boolean },
+  options?: {
+    includeFacets?: boolean;
+    /**
+     * true бол онлайн захиалга авдаггүй (гэхдээ олон нийтэд харагдах) тенантыг
+     * ч оруулна — web /discover бүх газрыг газрын зураг дээр харуулдаг.
+     * Mobile API анхдагч (false) хэвээр: хуучин апп `bookable`-ийг мэдэхгүй.
+     */
+    includeNonBookable?: boolean;
+  },
 ) {
   const includeFacets = options?.includeFacets ?? true;
+  const includeNonBookable = options?.includeNonBookable ?? false;
   const allowedPlans = await plansWithFeature(PLAN_LIMIT_CODES.ONLINE_BOOKING);
+  const tenantVisibilityWhere = includeNonBookable
+    ? { ...PUBLIC_TENANT_WHERE }
+    : {
+        acceptsOnlineBooking: true,
+        suspended: false,
+        isTest: false, // тест/демо тенант олон нийтэд харагдахгүй (lib/tenant-visibility.ts)
+        creditHidden: false, // credit score бага тул нуугдсан (lib/credit-score.ts)
+        plan: { in: allowedPlans },
+      };
   const hasCoordinates = filters.lat != null && filters.lng != null;
   const viewportWhere = filters.viewport
     ? filters.viewport.east >= filters.viewport.west
@@ -224,11 +248,7 @@ export async function getDiscoveryCatalog(
 
   const tenants = (await prisma.tenant.findMany({
     where: {
-      acceptsOnlineBooking: true,
-      suspended: false,
-      isTest: false, // тест/демо тенант олон нийтэд харагдахгүй (lib/tenant-visibility.ts)
-      creditHidden: false, // credit score бага тул нуугдсан (lib/credit-score.ts)
-      plan: { in: allowedPlans },
+      ...tenantVisibilityWhere,
       branches: { some: branchWhere },
       ...(filters.query
         ? {
@@ -243,6 +263,8 @@ export async function getDiscoveryCatalog(
     orderBy: { name: "asc" },
     select: {
       slug: true,
+      acceptsOnlineBooking: true,
+      plan: true,
       name: true,
       logoUrl: true,
       phone1: true,
@@ -358,7 +380,8 @@ export async function getDiscoveryCatalog(
     }
     if (visible.length === 0 || (filters.weekend && !weekendMatch)) continue;
     if (hasCoordinates) visible.sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
-    filtered.push({ slug: tenant.slug, name: tenant.name, logoUrl: tenant.logoUrl, phone: tenant.phone1, branches: visible });
+    const bookable = isTenantBookable(tenant, allowedPlans as readonly string[]);
+    filtered.push({ slug: tenant.slug, bookable, name: tenant.name, logoUrl: tenant.logoUrl, phone: tenant.phone1, branches: visible });
     nearestByOrg.push(nearest);
     for (const branch of visible) {
       if (branch.lat == null || branch.lng == null) continue;
@@ -367,6 +390,7 @@ export async function getDiscoveryCatalog(
         orgSlug: tenant.slug,
         orgName: tenant.name,
         logoUrl: tenant.logoUrl,
+        bookable,
         branchName: branch.name,
         city: branch.city,
         district: branch.district,
@@ -390,7 +414,7 @@ export async function getDiscoveryCatalog(
   // since otherwise it re-runs on every map pan/zoom for no reason.
   const facetBranches = includeFacets
     ? await prisma.branch.findMany({
-        where: { isActive: true, tenant: { acceptsOnlineBooking: true, suspended: false, isTest: false, creditHidden: false, plan: { in: allowedPlans } } },
+        where: { isActive: true, tenant: tenantVisibilityWhere },
         select: { city: true, district: true },
       })
     : [];

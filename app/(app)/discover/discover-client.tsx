@@ -34,6 +34,8 @@ const DEFAULT_CITY = "Улаанбаатар";
 
 export type DiscoverOrg = {
   slug: string;
+  /** Онлайн цаг захиалга авдаг эсэх — «Цаг захиалах» товч зөвхөн энэ үед. */
+  bookable: boolean;
   name: string;
   logoUrl: string | null;
   phone: string;
@@ -1153,7 +1155,7 @@ export function DiscoverClient({
       </div>
 
       {orgs.length === 0 ? (
-        <EmptyState>Одоогоор онлайн цаг захиалга нээсэн газар алга.</EmptyState>
+        <EmptyState>Одоогоор бүртгэлтэй газар алга.</EmptyState>
       ) : view === "map" && hasMap ? (
         // Шүүлтийн үр дүн хоосон болсон ч (`visibleOrgs.length === 0`) энэ
         // `<div ref={mapRef}>`-г ЗААВАЛ mount хэвээр үлдээнэ (доор overlay-аар
@@ -1351,13 +1353,36 @@ export function DiscoverClient({
                       ? `Таны үнэлгээ${mine[selected.branch.id].rating ? ` ${mine[selected.branch.id].rating}` : ""} — засах`
                       : "Үнэлгээ өгөх"}
                   </button>
-                  <Link
-                    href={branchDetailHref(selected.org.slug, selected.branch.id)}
-                    className="inline-flex w-full items-center justify-center gap-2 bg-[var(--oc-accent)] text-[var(--oc-on-accent)] hover:bg-[var(--oc-accent-hi)] transition-colors px-4 py-3 rounded-xl text-sm font-semibold"
-                  >
-                    Дэлгэрэнгүй
-                    <span aria-hidden>→</span>
-                  </Link>
+                  {selected.org.bookable ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      <Link
+                        href={branchDetailHref(selected.org.slug, selected.branch.id)}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--oc-line)] px-4 py-3 text-sm font-semibold text-[var(--oc-ink2)] transition-colors hover:border-[var(--oc-muted4)] hover:bg-[var(--oc-panel2)]"
+                      >
+                        Дэлгэрэнгүй
+                      </Link>
+                      <Link
+                        href={bookingHref(selected.org.slug, selected.branch.id)}
+                        className="inline-flex items-center justify-center gap-2 bg-[var(--oc-accent)] text-[var(--oc-on-accent)] hover:bg-[var(--oc-accent-hi)] transition-colors px-4 py-3 rounded-xl text-sm font-semibold"
+                      >
+                        Цаг захиалах
+                        <span aria-hidden>→</span>
+                      </Link>
+                    </div>
+                  ) : (
+                    <>
+                      <Link
+                        href={branchDetailHref(selected.org.slug, selected.branch.id)}
+                        className="inline-flex w-full items-center justify-center gap-2 bg-[var(--oc-accent)] text-[var(--oc-on-accent)] hover:bg-[var(--oc-accent-hi)] transition-colors px-4 py-3 rounded-xl text-sm font-semibold"
+                      >
+                        Дэлгэрэнгүй
+                        <span aria-hidden>→</span>
+                      </Link>
+                      <p className="text-center text-xs text-[var(--oc-muted3)]">
+                        Онлайн захиалга авдаггүй — утсаар холбогдоно уу.
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -1373,7 +1398,11 @@ export function DiscoverClient({
               className="group/card rounded-2xl border border-[var(--oc-line)] bg-[var(--oc-panel)] overflow-hidden shadow-sm transition-all hover:shadow-lg hover:border-[var(--oc-muted4)]"
             >
               <Link
-                href={bookingHref(org.slug, org.branches[0].id)}
+                href={
+                  org.bookable
+                    ? bookingHref(org.slug, org.branches[0].id)
+                    : branchDetailHref(org.slug, org.branches[0].id)
+                }
                 className="flex items-center gap-3 px-4 pt-4 pb-3"
               >
                 <OrgLogo name={org.name} logoUrl={org.logoUrl} size="md" />
@@ -1383,6 +1412,12 @@ export function DiscoverClient({
                   </div>
                   <div className="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--oc-muted3)]">
                     <span>{org.branches.length} салбар</span>
+                    <span aria-hidden>·</span>
+                    {org.bookable ? (
+                      <span className="font-medium text-emerald-500 light:text-emerald-700">Онлайн захиалга</span>
+                    ) : (
+                      <span>Онлайн захиалгагүй</span>
+                    )}
                     {org.branches[0].distanceKm != null ? (
                       <>
                         <span aria-hidden>·</span>

@@ -25,7 +25,10 @@ import {
   weekdayOfDateStr,
   WEEK_DAYS,
 } from "@/lib/branches";
+import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
+import { plansWithFeature } from "@/lib/plan-limits-server";
 import { prisma } from "@/lib/prisma";
+import { isTenantBookable, PUBLIC_TENANT_WHERE } from "@/lib/tenant-visibility";
 import { setBypassContext } from "@/lib/tenant-context";
 import { absoluteUrl, branchDescription, branchJsonLd, branchUrl } from "@/lib/seo";
 import { JsonLd } from "@/app/_components/json-ld";
@@ -33,10 +36,20 @@ import { HoursDisclosure } from "./hours-disclosure";
 
 export const dynamic = "force-dynamic";
 
+// Олон нийтэд харагдах бүх газар (онлайн захиалга авдаггүй ч) дэлгэрэнгүйтэй;
+// «Цаг захиалах» товч зөвхөн `isTenantBookable` үед (доор).
 async function loadOrg(slug: string) {
   return await prisma.tenant.findFirst({
-    where: { slug, acceptsOnlineBooking: true, suspended: false, isTest: false, creditHidden: false },
-    select: { id: true, slug: true, name: true, logoUrl: true, phone1: true },
+    where: { slug, ...PUBLIC_TENANT_WHERE },
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      logoUrl: true,
+      phone1: true,
+      acceptsOnlineBooking: true,
+      plan: true,
+    },
   });
 }
 
@@ -121,6 +134,10 @@ export default async function BranchDetailPage({
   if (!org) notFound();
   const branch = await loadBranch(org.id, branchId);
   if (!branch) notFound();
+  const bookable = isTenantBookable(
+    org,
+    await plansWithFeature(PLAN_LIMIT_CODES.ONLINE_BOOKING),
+  );
 
   const categoryRows = await prisma.category.findMany({
     where: { tenantId: org.id, isActive: true, ...BOOKABLE_CATEGORY_WHERE },
@@ -216,12 +233,14 @@ export default async function BranchDetailPage({
           </>
         }
         aside={
-          <Link
-            href={bookingHref}
-            className="hidden sm:inline-flex items-center gap-2 rounded-xl bg-[var(--oc-accent)] px-5 py-3 text-sm font-semibold text-[var(--oc-on-accent)] shadow-sm hover:bg-[var(--oc-accent-hi)] transition-colors"
-          >
-            Цаг захиалах <span aria-hidden>→</span>
-          </Link>
+          bookable ? (
+            <Link
+              href={bookingHref}
+              className="hidden sm:inline-flex items-center gap-2 rounded-xl bg-[var(--oc-accent)] px-5 py-3 text-sm font-semibold text-[var(--oc-on-accent)] shadow-sm hover:bg-[var(--oc-accent-hi)] transition-colors"
+            >
+              Цаг захиалах <span aria-hidden>→</span>
+            </Link>
+          ) : null
         }
       />
 
@@ -291,12 +310,29 @@ export default async function BranchDetailPage({
               notices={notices}
             />
           </Panel>
-          <Link
-            href={bookingHref}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--oc-accent)] px-5 py-3.5 text-sm font-semibold text-[var(--oc-on-accent)] shadow-sm hover:bg-[var(--oc-accent-hi)] transition-colors"
-          >
-            Цаг захиалах <span aria-hidden>→</span>
-          </Link>
+          {bookable ? (
+            <Link
+              href={bookingHref}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--oc-accent)] px-5 py-3.5 text-sm font-semibold text-[var(--oc-on-accent)] shadow-sm hover:bg-[var(--oc-accent-hi)] transition-colors"
+            >
+              Цаг захиалах <span aria-hidden>→</span>
+            </Link>
+          ) : (
+            <div className="rounded-xl border border-[var(--oc-line)] bg-[var(--oc-panel)] px-4 py-3.5 text-sm text-[var(--oc-muted)]">
+              Энэ газар онлайн цаг захиалга авдаггүй.
+              {branch.phone || org.phone1 ? (
+                <>
+                  {" "}Утсаар холбогдоно уу:{" "}
+                  <a
+                    href={`tel:${branch.phone ?? org.phone1}`}
+                    className="font-semibold tabular-nums text-[var(--oc-ink2)] hover:text-[var(--oc-accent)] transition-colors"
+                  >
+                    {branch.phone ?? org.phone1}
+                  </a>
+                </>
+              ) : null}
+            </div>
+          )}
         </aside>
       </div>
     </div>

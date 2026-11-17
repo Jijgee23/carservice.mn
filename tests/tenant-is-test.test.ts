@@ -30,7 +30,8 @@ for (const file of [
     const src = read(file);
     const all = src.match(/acceptsOnlineBooking: true,?\s*suspended: false/g) ?? [];
     const hidden = src.match(/acceptsOnlineBooking: true,?\s*suspended: false,?\s*isTest: false,?(?:\s*\/\/[^\n]*)?\s*creditHidden: false/g) ?? [];
-    assert.ok(all.length > 0);
+    // PUBLIC_TENANT_WHERE = { suspended, isTest, creditHidden } бүгдийг агуулна.
+    assert.ok(all.length > 0 || src.includes("...PUBLIC_TENANT_WHERE"), file);
     assert.equal(hidden.length, all.length, file);
   });
 }
@@ -58,7 +59,7 @@ for (const file of PUBLIC_QUERIES) {
     const src = read(file);
     const filters = src.match(/acceptsOnlineBooking: true,?\s*suspended: false,?\s*isTest: false/g) ?? [];
     const all = src.match(/acceptsOnlineBooking: true,?\s*suspended: false/g) ?? [];
-    assert.ok(all.length > 0, "expected a public tenant filter");
+    assert.ok(all.length > 0 || src.includes("...PUBLIC_TENANT_WHERE"), "expected a public tenant filter");
     assert.equal(filters.length, all.length, "every public tenant filter must carry isTest: false");
   });
 }

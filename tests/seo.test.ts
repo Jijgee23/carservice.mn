@@ -79,9 +79,10 @@ test("robots disallows private areas and points to the sitemap", () => {
   assert.match(src, /sitemap: `\$\{SITE_URL\}\/sitemap\.xml`/);
 });
 
-test("sitemap lists only public, bookable tenants (same rule as discover)", () => {
+test("sitemap lists all public tenants' branches; org (booking) page only when bookable", () => {
   const src = read("app/sitemap.ts");
-  assert.match(src, /\.\.\.PUBLIC_TENANT_WHERE, acceptsOnlineBooking: true, plan: \{ in: allowedPlans \}/);
+  assert.match(src, /where: \{ \.\.\.PUBLIC_TENANT_WHERE \}/);
+  assert.match(src, /isTenantBookable\(t, allowedPlans\)\s*\?\s*\[\{ url: orgUrl\(t\)/);
   assert.match(src, /branches: \{ where: \{ isActive: true \}/);
   assert.match(src, /export const revalidate = 3600;/);
 });

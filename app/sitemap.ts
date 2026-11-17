@@ -4,7 +4,7 @@ import { plansWithFeature } from "@/lib/plan-limits-server";
 import { prisma } from "@/lib/prisma";
 import { branchUrl, orgUrl, SITE_URL } from "@/lib/seo";
 import { setBypassContext } from "@/lib/tenant-context";
-import { PUBLIC_TENANT_WHERE } from "@/lib/tenant-visibility";
+import { isTenantBookable, PUBLIC_TENANT_WHERE } from "@/lib/tenant-visibility";
 
 // Цаг тутам дахин үүсгэнэ — шинэ байгууллага/салбар нэмэгдэхэд sitemap-д орно.
 export const revalidate = 3600;
@@ -21,21 +21,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/terms`, changeFrequency: "yearly", priority: 0.2 },
   ];
 
-  // Discover-тэй ижил нөхцөл: онлайн захиалга авдаг, олон нийтэд харагдах
-  // (suspended/isTest биш), ONLINE_BOOKING багцтай тенант.
+  // Discover-тэй ижил нөхцөл: олон нийтэд харагдах (suspended/isTest/
+  // creditHidden биш) БҮХ тенантын салбарын хуудас. Байгууллагын (захиалгын)
+  // хуудас нь зөвхөн онлайн захиалга авдаг (bookable) тенантад — бусад нь
+  // салбарын дэлгэрэнгүй рүү redirect хийдэг.
   setBypassContext();
   const allowedPlans = await plansWithFeature(PLAN_LIMIT_CODES.ONLINE_BOOKING);
   const tenants = await prisma.tenant.findMany({
-    where: { ...PUBLIC_TENANT_WHERE, acceptsOnlineBooking: true, plan: { in: allowedPlans } },
+    where: { ...PUBLIC_TENANT_WHERE },
     select: {
       slug: true,
+      acceptsOnlineBooking: true,
+      plan: true,
       updatedAt: true,
       branches: { where: { isActive: true }, select: { id: true, updatedAt: true } },
     },
   });
 
   const dynamicPages: MetadataRoute.Sitemap = tenants.flatMap((t) => [
-    { url: orgUrl(t), lastModified: t.updatedAt, changeFrequency: "weekly" as const, priority: 0.8 },
+    ...(isTenantBookable(t, allowedPlans)
+      ? [{ url: orgUrl(t), lastModified: t.updatedAt, changeFrequency: "weekly" as const, priority: 0.8 }]
+      : []),
     ...t.branches.map((b) => ({
       url: branchUrl(t, b),
       lastModified: b.updatedAt > t.updatedAt ? b.updatedAt : t.updatedAt,
