@@ -85,3 +85,9 @@ test("mobile fee object carries a server-computed payBy deadline", () => {
     assert.match(read(f), /createdAt: true, \/\/ payBy/, f);
   }
 });
+
+test("booking-fee helper sets a bypass context when called from a context-less public API route", () => {
+  const src = read("lib/platform-settings.ts");
+  const fn = src.slice(src.indexOf("export async function getBookingFeeNotice("));
+  assert.match(fn.slice(0, 600), /if \(!getTenantContext\(\)\) setBypassContext\(\);\s*const settings = await readPlatformSettings\(\);/);
+});

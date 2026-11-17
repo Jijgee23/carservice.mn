@@ -89,7 +89,10 @@ export async function getContactPhones(): Promise<string[]> {
  * `ensureAppointmentFeeCheckout`-тай ижил нөхцөл (идэвхтэй ба дүн > 0); үгүй бол null.
  */
 export async function getBookingFeeNotice(): Promise<{ amount: number; ttlMinutes: number } | null> {
-  // Context өөрчлөхгүй (PlatformSetting нь RLS-гүй глобал мөр).
+  // Байгаа (tenant/bypass) context-ыг өөрчлөхгүй; context-гүй дуудлагад
+  // (нийтийн API route — /api/v1/app/booking-fee) bypass тавина — prisma
+  // middleware context шаарддаг (getAppStoreLinks-тэй ижил).
+  if (!getTenantContext()) setBypassContext();
   const settings = await readPlatformSettings();
   if (!settings.appointmentFeeEnabled || settings.appointmentFeeAmount <= 0) return null;
   return { amount: settings.appointmentFeeAmount, ttlMinutes: PENDING_APPOINTMENT_PAYMENT_TTL_MINUTES };
