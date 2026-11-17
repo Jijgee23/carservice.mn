@@ -1,4 +1,5 @@
 import { BOOKABLE_CATEGORY_WHERE } from "@/lib/categories";
+import { getBookingFeeNotice } from "@/lib/platform-settings";
 import {
   BackLink,
   LoginPrompt,
@@ -71,7 +72,7 @@ export default async function BookBranchPage({
     .filter(Boolean);
 
   const account = await getAccount();
-  const [vehicles, categoryRows] = await Promise.all([
+  const [vehicles, categoryRows, bookingFee] = await Promise.all([
     account ? loadAccountVehicles(account.id, account.phone) : Promise.resolve([]),
     prisma.category.findMany({
       // Онлайн захиалга — зөвхөн ажил үйлчилгээний (эсвэл бүх төрлийн) ангилал.
@@ -85,6 +86,7 @@ export default async function BookBranchPage({
         branches: { select: { id: true } },
       },
     }),
+    getBookingFeeNotice(),
   ]);
   const branchCategories = categoryRows
     .filter((c) => c.branches.length === 0 || c.branches.some((b) => b.id === branch.id))
@@ -138,9 +140,12 @@ export default async function BookBranchPage({
             initialBranchId={branch.id}
             initialCategoryIds={preselectedCategoryIds}
             lockCategories
+            bookingFee={bookingFee}
           />
         ) : (
-          <LoginPrompt />
+          <LoginPrompt
+            next={`/book/branch/${encodeURIComponent(branch.id)}${keysParam ? `?keys=${encodeURIComponent(keysParam)}` : ""}`}
+          />
         )}
       </Panel>
     </div>

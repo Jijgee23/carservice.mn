@@ -16,6 +16,7 @@ import { formatPhone, maskPhone, normalizePhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
 import { sendOtpSms } from "@/lib/sms";
 import { setBypassContext } from "@/lib/tenant-context";
+import { safeConsumerNext } from "@/lib/safe-redirect";
 
 export type AccountAuthState = {
   ok: boolean;
@@ -70,7 +71,8 @@ export async function accountLoginAction(
     if (!result.ok) return { ok: false, phone, message: result.message };
     const account = await finishAccountLogin(result.account.id);
     await setAccountSessionCookie(await signAccountSession({ accountId: account.id, phone: account.phone }));
-    redirect("/account");
+    // Захиалгын дундаас нэвтэрсэн бол тэр хуудас руу буцна (сонголт алдагдахгүй).
+    redirect(safeConsumerNext(s(formData, "next")));
   }
 
   // --- 1-р шат: OTP илгээх ---
@@ -164,7 +166,7 @@ export async function accountLoginAction(
   });
   await setAccountSessionCookie(token);
 
-  redirect("/account");
+  redirect(safeConsumerNext(s(formData, "next")));
 }
 
 /** Account-аас гарах. */

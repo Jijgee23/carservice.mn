@@ -59,11 +59,15 @@ function qtyText(q: string): string {
 
 export default async function AccountAppointmentDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ created?: string }>;
 }) {
   const account = await requireAccount();
   const { id } = await params;
+  // Захиалга сая илгээгдсэн (createAppointment-ийн redirect) — баталгаажуулалт.
+  const justCreated = (await searchParams).created === "1";
 
   const apptRaw = await prisma.appointment.findFirst({
     where: { id, accountId: account.id },
@@ -166,6 +170,18 @@ export default async function AccountAppointmentDetailPage({
 
   return (
     <div className="w-full max-w-full flex flex-col gap-5">
+      {justCreated && appt.status === "PENDING" ? (
+        <div
+          role="status"
+          className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-[var(--oc-ink2)]"
+        >
+          <div className="font-semibold text-emerald-500 light:text-emerald-700">✓ Цаг захиалга илгээгдлээ</div>
+          <div className="mt-0.5 text-[var(--oc-muted)]">
+            Газар баталгаажуулахад танд мэдэгдэл ирнэ. Энэ хуудаснаас захиалгаа харах,
+            шилжүүлэх, цуцлах боломжтой.
+          </div>
+        </div>
+      ) : null}
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold truncate">{appt.tenant.name}</h1>

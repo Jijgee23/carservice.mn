@@ -125,7 +125,8 @@ export function RatingPill({ rating, count }: { rating: number | null; count: nu
   );
 }
 
-export function LoginPrompt() {
+/** `next` — нэвтэрсний дараа буцах хуудас (сонгосон газар/ажил хадгалагдана). */
+export function LoginPrompt({ next }: { next?: string } = {}) {
   return (
     <div className="flex flex-col items-start gap-4 rounded-xl border border-dashed border-[var(--oc-line)] bg-[var(--oc-panel2)] p-5 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-3">
@@ -141,7 +142,7 @@ export function LoginPrompt() {
         </div>
       </div>
       <Link
-        href="/login"
+        href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"}
         className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--oc-accent)] px-5 py-2.5 text-sm font-semibold text-[var(--oc-on-accent)] hover:bg-[var(--oc-accent-hi)] transition-colors"
       >
         Нэвтрэх / Бүртгүүлэх <span aria-hidden>→</span>

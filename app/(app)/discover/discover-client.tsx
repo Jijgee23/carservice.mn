@@ -1499,7 +1499,8 @@ export function DiscoverClient({
                           </span>
                         ) : null}
                         <span className="ml-auto inline-flex items-center gap-1 rounded-lg border border-[var(--oc-accent)]/40 px-3 py-1.5 text-xs font-semibold text-[var(--oc-accent)] transition-colors group-hover/branch:border-[var(--oc-accent)] group-hover/branch:bg-[var(--oc-accent)] group-hover/branch:text-[var(--oc-on-accent)]">
-                          Цаг авах <span aria-hidden>→</span>
+                          {/* Захиалга авдаггүй газарт «Цаг авах» биш — дэлгэрэнгүй (утас, хаяг) */}
+                          {org.bookable ? "Цаг авах" : "Дэлгэрэнгүй"} <span aria-hidden>→</span>
                         </span>
                       </div>
                     </Link>

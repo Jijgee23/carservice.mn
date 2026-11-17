@@ -2350,3 +2350,11 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - Зөвхөн өөрт оноогдсоныг засагч (orders.editOwn): засварын хуудасны бүтэн маягт (үйлчлүүлэгч/машин/хариуцагч/төлбөрийн горим) харагдахгүй, тэр сонголтуудыг ачаалахгүй; «Статус» карт утсан дээр дээр (order-first); бүхэл хуудсыг цуцлахгүй — UI + сервер (ORDER_CANCEL_FORBIDDEN 403).
 - Мессеж/touch: «orders.assign эрхтэй…» → «Хариуцагч солих эрх танд алга. Менежерт хандана уу.»; ажлын явцын сонгогчийн идэвхгүй шалтгаан доор нь бичгээр (tooltip touch-д харагддаггүй), утсан дээр сонгогч/✕ товч том; «Төлбөр бүрэн төлөгдөөгүй … Төлбөр авсны дараа (касс) хаана.»
 - Тест: tests/mechanic-usability.test.ts (5); order-commands, order-create-api тестийн anchor шинэчлэгдэв.
+
+[2026-11-17] Жолоочийн онлайн захиалгын саадуудыг засав (5 зүйл)
+- Discover жагсаалтын салбарын мөр: захиалга авдаггүй газарт «Цаг авах →» биш «Дэлгэрэнгүй →» (өмнөх discover засварт орхигдсон).
+- Нэвтрэхэд сонголт алдагдахгүй: LoginPrompt `next` (/org/[slug]?branch= эсвэл /book/branch/[id]?keys=) → /login?next= → hidden input → accountLoginAction (OTP + нууц үг) `redirect(safeConsumerNext(next))`. lib/safe-redirect.ts safeConsumerNext — зөвхөн /account, /org, /book, /discover (open-redirect, /dashboard, /system хориглоно).
+- Хураамж урьдчилан: BookingForm `bookingFee` (lib/platform-settings.ts getBookingFeeNotice — checkout-тай ижил нөхцөл) — «Захиалгын хураамж X₮ — илгээсний дараа QPay-ээр 15 минутын дотор…», товч «Цаг захиалах · X₮ төлөх». Төлбөрийн хуудас «HH:mm-аас өмнө төлнө үү» (createdAt + PENDING_APPOINTMENT_PAYMENT_TTL_MINUTES, Asia/Ulaanbaatar).
+- /book ба mobile /api/v1/app/service-keys: ажлын төрөл зөвхөн онлайн захиалга авдаг (acceptsOnlineBooking + «Цаг захиалга» багц + нийтийн, идэвхтэй салбартай) газрын захиалж болох ангилалтай бол (lib/bookable-service-keys.ts) — сонгоход «салбар олдсонгүй» гарахаа болив; огт байхгүй бол газрын зураг руу чиглүүлнэ.
+- Хураамжгүй захиалсны дараа /account биш /account/appointments/[id]?created=1 — «✓ Цаг захиалга илгээгдлээ» баталгаажуулалт.
+- Тест: tests/driver-booking-usability.test.ts (6).

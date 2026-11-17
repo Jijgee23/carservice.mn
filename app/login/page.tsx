@@ -2,6 +2,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ConsumerAuthShell } from "@/app/_components/consumer-auth-shell";
 import { redirectIfSignedIn } from "@/lib/auth/guest-redirect";
 import { AccountLoginForm } from "./login-form";
+import { safeConsumerNext } from "@/lib/safe-redirect";
 
 const plexSans = Geist({
   subsets: ["latin", "cyrillic"],
@@ -28,6 +29,9 @@ export default async function AccountLoginPage({
   // Аль ч realm-д нэвтэрсэн бол өөрийнх нь нүүр рүү (account бол миний цаг).
   const { next } = await searchParams;
   await redirectIfSignedIn({ prefer: "account", next });
+  const rawNext = Array.isArray(next) ? next[0] : next;
+  // Зөвхөн хэрэглэгчийн хэсгийн зам (захиалгын урсгал) — бусдыг алгасна.
+  const consumerNext = rawNext && safeConsumerNext(rawNext) !== "/account" ? safeConsumerNext(rawNext) : "";
 
   return (
     <div className={`${plexSans.variable} ${plexMono.variable}`}>
@@ -35,7 +39,7 @@ export default async function AccountLoginPage({
         title="Нэвтрэх / Бүртгүүлэх"
         subtitle="Утасны дугаараа оруулаад, ирэх 6 оронтой кодоор нэвтэрнэ."
       >
-        <AccountLoginForm />
+        <AccountLoginForm next={consumerNext} />
       </ConsumerAuthShell>
     </div>
   );

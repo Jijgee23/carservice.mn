@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getTenantContext, setBypassContext } from "@/lib/tenant-context";
 import type { AppStoreLinks } from "@/lib/app-store-links";
 import { CONTACT } from "@/lib/contact";
+import { PENDING_APPOINTMENT_PAYMENT_TTL_MINUTES } from "@/lib/appointment-payment-status";
 
 export type PlatformSettings = {
   facebookUrl: string | null;
@@ -81,4 +82,15 @@ export function contactPhonesOrDefault(phones: readonly string[] | null | undefi
 export async function getContactPhones(): Promise<string[]> {
   if (!getTenantContext()) setBypassContext();
   return contactPhonesOrDefault((await readPlatformSettings()).contactPhones);
+}
+
+/**
+ * Хэрэглэгчийн онлайн захиалгын хураамж — захиалгын маягтад урьдчилан харуулах.
+ * `ensureAppointmentFeeCheckout`-тай ижил нөхцөл (идэвхтэй ба дүн > 0); үгүй бол null.
+ */
+export async function getBookingFeeNotice(): Promise<{ amount: number; ttlMinutes: number } | null> {
+  // Context өөрчлөхгүй (PlatformSetting нь RLS-гүй глобал мөр).
+  const settings = await readPlatformSettings();
+  if (!settings.appointmentFeeEnabled || settings.appointmentFeeAmount <= 0) return null;
+  return { amount: settings.appointmentFeeAmount, ttlMinutes: PENDING_APPOINTMENT_PAYMENT_TTL_MINUTES };
 }

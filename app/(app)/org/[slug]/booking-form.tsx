@@ -40,6 +40,7 @@ export function BookingForm({
   initialBranchId = "",
   initialCategoryIds,
   lockCategories = false,
+  bookingFee = null,
 }: {
   branches: Branch[];
   vehicles: Vehicle[];
@@ -51,6 +52,9 @@ export function BookingForm({
   /** Ангилалыг `/book`-д аль хэдийн сонгосон тул энд дахин харуулж,
    * өөрчлүүлэхгүй — `initialCategoryIds`-ийг тогтмол ашиглана. */
   lockCategories?: boolean;
+  /** Онлайн захиалгын хураамж (платформын тохиргоо) — илгээхээс өмнө
+   * урьдчилан харуулна. null бол үнэгүй. */
+  bookingFee?: { amount: number; ttlMinutes: number } | null;
 }) {
   const [state, formAction, pending] = useActionState<
     AppointmentActionState,
@@ -315,12 +319,23 @@ export function BookingForm({
         />
       </div>
 
+      {bookingFee ? (
+        <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-3 text-sm text-[var(--oc-ink2)]">
+          <span className="font-semibold">
+            Захиалгын хураамж: {bookingFee.amount.toLocaleString("mn-MN")}₮
+          </span>{" "}
+          — илгээсний дараа QPay-ээр{" "}
+          <span className="font-semibold">{bookingFee.ttlMinutes} минутын дотор</span>{" "}
+          төлнө. Хугацаандаа төлөхгүй бол цаг чөлөөлөгдөнө.
+        </div>
+      ) : null}
+
       <button
         type="submit"
         disabled={pending || !selectedIso || !branchId}
         className="w-full sm:w-auto sm:self-end inline-flex items-center justify-center gap-2 bg-[var(--oc-accent)] text-[var(--oc-on-accent)] hover:bg-[var(--oc-accent-hi)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors px-8 py-3 rounded-xl font-semibold text-sm shadow-sm"
       >
-        {pending ? "Илгээж байна..." : !selectedIso ? "Өдөр, цагаа сонгоно уу" : <>Цаг захиалах <span aria-hidden>→</span></>}
+        {pending ? "Илгээж байна..." : !selectedIso ? "Өдөр, цагаа сонгоно уу" : bookingFee ? <>Цаг захиалах · {bookingFee.amount.toLocaleString("mn-MN")}₮ төлөх <span aria-hidden>→</span></> : <>Цаг захиалах <span aria-hidden>→</span></>}
       </button>
     </form>
   );

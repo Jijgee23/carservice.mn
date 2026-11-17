@@ -1,4 +1,5 @@
 import { BOOKABLE_CATEGORY_WHERE } from "@/lib/categories";
+import { getBookingFeeNotice } from "@/lib/platform-settings";
 import {
   BackLink,
   LoginPrompt,
@@ -126,7 +127,7 @@ export default async function OrgPage({
   const bookingBranches = lockedBranch ? [lockedBranch] : org.branches;
 
   const account = await getAccount();
-  const [vehicles, categoryRows] = await Promise.all([
+  const [vehicles, categoryRows, bookingFee] = await Promise.all([
     // Хэрэглэгчийн бүх машин — өөрөө нэмсэн (AccountVehicle) дээр нэмээд
     // сервисүүдэд бүртгэлтэй, энэ хэрэглэгчид холбогдсон машинууд
     // (/account/vehicles хуудастай ижил логик). Утга нь global Vehicle id.
@@ -143,6 +144,7 @@ export default async function OrgPage({
         branches: { select: { id: true } },
       },
     }),
+    getBookingFeeNotice(),
   ]);
   // Салбар бүрд: тухайн салбарт хамаарах ангилалуудыг шийдэгдсэн хугацаатай нь
   // (category default ?? 30).
@@ -203,9 +205,12 @@ export default async function OrgPage({
             }))}
             vehicles={vehicles}
             initialBranchId={initialBranchId}
+            bookingFee={bookingFee}
           />
         ) : (
-          <LoginPrompt />
+          <LoginPrompt
+            next={`/org/${org.slug}${lockedBranch ? `?branch=${encodeURIComponent(lockedBranch.id)}` : ""}`}
+          />
         )}
       </Panel>
     </div>

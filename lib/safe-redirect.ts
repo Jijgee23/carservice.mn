@@ -27,3 +27,17 @@ export function safeNextWithin(
   const path = next.split(/[?#]/)[0];
   return path === prefix || path.startsWith(`${prefix}/`) ? next : fallback;
 }
+
+// Эцсийн хэрэглэгч (Account) нэвтэрсний дараа буцаж болох хэсгүүд — захиалгын
+// урсгал (/org, /book), каталог, өөрийн хэсэг. Ажилтан/систем рүү биш.
+const CONSUMER_NEXT_PREFIXES = ["/account", "/org", "/book", "/discover"] as const;
+
+/** Account login-ийн `next` — зөвхөн хэрэглэгчийн хэсэг; бусад тохиолдолд /account. */
+export function safeConsumerNext(raw: string | null | undefined): string {
+  const fallback = "/account";
+  const next = safeNext(raw, fallback);
+  const path = next.split(/[?#]/)[0];
+  return CONSUMER_NEXT_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))
+    ? next
+    : fallback;
+}

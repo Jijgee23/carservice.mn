@@ -8,7 +8,7 @@ import {
 import { Field, FormError, SubmitButton } from "@/app/_components/landing-ops-ui";
 import { ResendOtpButton } from "@/app/_components/resend-otp-button";
 
-export function AccountLoginForm() {
+export function AccountLoginForm({ next = "" }: { next?: string }) {
   const [state, formAction, pending] = useActionState<AccountAuthState, FormData>(
     accountLoginAction,
     null,
@@ -27,6 +27,8 @@ export function AccountLoginForm() {
 
   return (
     <form action={formAction} className="flex flex-col gap-5" noValidate>
+      {/* Нэвтэрсний дараа буцах хуудас (захиалгын урсгал) — сервер дахин шалгана. */}
+      {next ? <input type="hidden" name="next" value={next} /> : null}
       {awaiting && state?.message ? (
         <div className="bg-[var(--oc-accent)]/10 border border-[var(--oc-accent)]/25 rounded-[10px] px-4 py-3 text-sm text-[var(--oc-ink2)]">
           {state.message}
@@ -135,11 +137,12 @@ export function AccountLoginForm() {
               setCode("");
               const fd = new FormData();
               fd.set("phone", lockedPhone);
+              if (next) fd.set("next", next);
               startTransition(() => formAction(fd));
             }}
           />
           <a
-            href="/login"
+            href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"}
             className="text-center text-xs text-[var(--oc-muted3)] hover:text-[var(--oc-accent-hi)] transition-colors"
           >
             ← Өөр дугаар оруулах

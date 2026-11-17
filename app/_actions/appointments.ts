@@ -267,7 +267,8 @@ export async function createAppointment(
   if (requiresPayment) {
     redirect(`/account/appointments/${created.id}/pay`);
   }
-  redirect("/account");
+  // Шинэ захиалгын хуудас — «илгээгдлээ» баталгаажуулалттай (created=1).
+  redirect(`/account/appointments/${created.id}?created=1`);
 }
 
 /**

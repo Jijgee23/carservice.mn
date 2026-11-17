@@ -154,7 +154,16 @@ export function BookingFlow({
       />
 
       <div className={`transition-opacity ${isPending ? "opacity-50" : ""}`}>
-        {selectedIds.length === 0 ? (
+        {serviceKeys.length === 0 ? (
+          // Онлайн захиалга авдаг газарт холбогдсон ажил хараахан алга —
+          // хоосон сонголт биш, газрын зураг руу чиглүүлнэ.
+          <EmptyState dashed>
+            Ажлын төрлөөр онлайн захиалах боломжтой газар одоогоор алга.{" "}
+            <Link href="/discover" className="font-semibold text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)]">
+              Газрын зургаас хайх →
+            </Link>
+          </EmptyState>
+        ) : selectedIds.length === 0 ? (
           <EmptyState dashed>
             Ажлын төрлөө сонгоход тохирох салбарууд эндээс харагдана.
           </EmptyState>

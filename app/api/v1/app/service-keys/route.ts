@@ -1,4 +1,5 @@
 import { enforceRateLimit, jsonOk, PUBLIC_CATALOG_RATE_LIMIT } from "@/lib/api";
+import { bookableServiceKeyWhere } from "@/lib/bookable-service-keys";
 import { prisma } from "@/lib/prisma";
 import { setBypassContext } from "@/lib/tenant-context";
 
@@ -11,11 +12,11 @@ export async function GET(req: Request) {
   const limited = enforceRateLimit(req, "public-catalog", PUBLIC_CATALOG_RATE_LIMIT);
   if (limited) return limited;
   setBypassContext();
-  // Ямар ч ангилалд холбогдоогүй түлхүүрийг ШҮҮНЭ ГАРГАНА — сонговол
+  // Онлайн захиалга авдаг газарт байхгүй түлхүүрийг ШҮҮНЭ ГАРГАНА — сонговол
   // баталгаатай хоосон салбарын жагсаалт буцаах сонголтыг харуулахгүй (харах:
   // web-ийн app/(app)/discover/page.tsx-ийн ижил шийдвэр).
   const serviceKeys = await prisma.systemServiceKey.findMany({
-    where: { isActive: true, categories: { some: { isActive: true } } },
+    where: await bookableServiceKeyWhere(),
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });
