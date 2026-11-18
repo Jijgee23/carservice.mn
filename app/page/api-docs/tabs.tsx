@@ -4,14 +4,15 @@ import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { TabButton } from "@/app/_components/landing-ops-ui";
 import { AccountDocs } from "./account-docs";
+import { SystemDocs } from "./system-docs";
 import { TenantDocs } from "./tenant-docs";
 
-type Tab = "account" | "tenant";
+type Tab = "account" | "tenant" | "system";
 
 export function ApiDocsTabs() {
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>(
-    searchParams.get("tab") === "tenant" ? "tenant" : "account",
+    searchParams.get("tab") === "tenant" ? "tenant" : searchParams.get("tab") === "system" ? "system" : "account",
   );
 
   return (
@@ -22,6 +23,9 @@ export function ApiDocsTabs() {
         </TabButton>
         <TabButton active={tab === "tenant"} onClick={() => setTab("tenant")}>
           Байгууллага
+        </TabButton>
+        <TabButton active={tab === "system"} onClick={() => setTab("system")}>
+          System
         </TabButton>
       </div>
 
@@ -36,6 +40,12 @@ export function ApiDocsTabs() {
             загвар) ашигладаг тусдаа realm — &quot;Байгууллага&quot; таб-аас үзнэ үү.
           </p>
         </>
+      ) : tab === "system" ? (
+        <p className="text-[var(--oc-muted)] text-sm mt-4 max-w-2xl leading-relaxed">
+          Энэ хуудас нь платформын <strong className="text-[var(--oc-ink2)]">System</strong> realm-ийн (root админ, System
+          ажилтан) мобайл API-г баримтжуулна — имэйл + нууц үгээр нэвтэрч, харилцагч (байгууллага) бүртгэх, мэдээллийг нь
+          засах, түр хаах/нээх. Бусад realm-оос тусдаа token.
+        </p>
       ) : (
         <p className="text-[var(--oc-muted)] text-sm mt-4 max-w-2xl leading-relaxed">
           Энэ хуудас нь байгууллагын ажилтны (менежер/мастер) мобайл аппаас
@@ -71,7 +81,7 @@ export function ApiDocsTabs() {
         </div>
       </div>
 
-      {tab === "account" ? <AccountDocs /> : <TenantDocs />}
+      {tab === "account" ? <AccountDocs /> : tab === "system" ? <SystemDocs /> : <TenantDocs />}
     </>
   );
 }
