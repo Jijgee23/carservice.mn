@@ -212,7 +212,7 @@ export default async function OrdersPage({
       ? prisma.user.findMany({
           // Хариуцагч оноох сонголт — ажлаас гарсан / хугацаа дууссан /
           // orders.assignable эрхгүй ажилтныг харуулахгүй (сервер ч татгалзана).
-          where: { tenantId: user.tenantId, isActive: true, ...orderAssignableWhere() },
+          where: { tenantId: user.tenantId, isActive: true, ...orderAssignableWhere(user.tenantId) },
           orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
           select: { id: true, firstName: true, lastName: true },
         })

@@ -133,7 +133,9 @@ test("assignee query excludes expired staff and unchanged assignees are not reva
     resolve(dirname(fileURLToPath(import.meta.url)), "../lib/orders/order-commands.ts"),
     "utf8",
   );
-  assert.match(source, /isActive: true, \.\.\.orderAssignableWhere\(\) \}/);
+  assert.match(source, /isActive: true, \.\.\.orderAssignableWhere\(input\.tenantId\) \}/);
+  // Эрхийг ҮР ДҮНТЭЙ эрхээр шалгана (DB predicate-тэй нэг томьёо).
+  assert.match(source, /resolveEffectiveRole\(assignee, tx\)/);
   assert.match(source, /deactivatedAt: true,\s+activeUntil: true,/);
   assert.match(source, /input\.assignedToId && input\.assignedToId !== order\.assignedToId/);
 });

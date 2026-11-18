@@ -64,7 +64,7 @@ export function buildAssignableUserWhere(options: {
   now?: Date;
 }): Prisma.UserWhereInput {
   const predicates: Prisma.UserWhereInput[] = [
-    orderAssignableWhere(options.now),
+    orderAssignableWhere(options.tenantId, options.now),
     // orderAssignableWhere predates role deactivation. Keep its owner path,
     // but do not expose users whose role has since been disabled.
     { OR: [{ isOwner: true }, { role: { isActive: true } }] },

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { holdsEffectivePermissionWhere } from "../lib/auth/effective-where";
 import test from "node:test";
 import { hasPermission } from "../lib/auth/roles";
 import {
@@ -100,7 +101,8 @@ test("Prisma predicate keeps tenant, active, assignable role and branch lock con
       AND: [{ OR: [{ activeUntil: null }, { activeUntil: { gt: now } }] }],
       OR: [
         { isOwner: true },
-        { role: { isActive: true, permissions: { has: "orders.assignable" } } },
+        // Эрх нь ҮР ДҮНТЭЙ (роль + байгууллагын override − ажилтны хязгаарлалт).
+        holdsEffectivePermissionWhere("orders.assignable", TENANT),
       ],
     },
     { OR: [{ isOwner: true }, { role: { isActive: true } }] },
@@ -142,4 +144,38 @@ test("unverified (invited, not activated) staff are not assignable", () => {
   assert.equal(isAssignableUserEligible(user({ verified: true }), TENANT, BRANCH), true);
   const where = buildAssignableUserWhere({ tenantId: TENANT });
   assert.equal((where.AND as Array<Record<string, unknown>>)[0].verified, true);
+});
+
+// --- effective-permission predicate (role delegation) ----------------------------
+
+test("holdsEffectivePermissionWhere: structure encodes role/override/denial and scopes override by tenant", () => {
+  const w = holdsEffectivePermissionWhere("orders.assignable", TENANT);
+  assert.deepEqual(w, {
+    NOT: { deniedPermissions: { has: "orders.assignable" } },
+    role: {
+      isActive: true,
+      OR: [
+        {
+          permissions: { has: "orders.assignable" },
+          NOT: {
+            AND: [
+              { tenantEditablePermissions: { has: "orders.assignable" } },
+              { tenantOverrides: { some: { tenantId: TENANT, removePermissions: { has: "orders.assignable" } } } },
+            ],
+          },
+        },
+        {
+          tenantEditablePermissions: { has: "orders.assignable" },
+          tenantOverrides: { some: { tenantId: TENANT, addPermissions: { has: "orders.assignable" } } },
+        },
+      ],
+    },
+  });
+});
+
+test("assignable predicate threads the tenant into the override scope", () => {
+  const where = buildAssignableUserWhere({ tenantId: "tenant-xyz" });
+  const first = (where.AND as Array<{ OR: unknown[] }>)[0];
+  assert.deepEqual(first.OR[1], holdsEffectivePermissionWhere("orders.assignable", "tenant-xyz"));
+  assert.notDeepEqual(first.OR[1], holdsEffectivePermissionWhere("orders.assignable", TENANT));
 });

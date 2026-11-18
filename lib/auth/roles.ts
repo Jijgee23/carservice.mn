@@ -1,4 +1,5 @@
 import type { Prisma } from "@/app/generated/prisma/client";
+import { holdsEffectivePermissionWhere } from "./effective-where";
 import { ALL_BRANCHES } from "./session";
 import type { PermissionCode, ResourceKey } from "./permissions";
 import { orderEditScope, orderViewScope } from "./order-access";
@@ -163,8 +164,10 @@ export function workingBranchScopeId(user: {
  * Ажлаас гарсан (isActive=false / устгагдсан) шүүлтийг дуудагч `isActive: true`-ээр
  * нэмнэ; энд өөрөө хаасан болон хугацаа (activeUntil) дууссан ажилтныг хасна.
  * `now`-оос хамаарах тул тогтмол биш функц — дуудах бүрт шинэ огноо.
+ * `tenantId` заавал: орлого болон хязгаарлалтыг (lib/auth/effective-where.ts) тухайн
+ * байгууллагаар тооцно.
  */
-export function orderAssignableWhere(now: Date = new Date()) {
+export function orderAssignableWhere(tenantId: string, now: Date = new Date()) {
   return {
     // Өөрөө хаасан ажилтан isActive=true хэвээр (админ блокоос тусдаа) тул
     // тусад нь хасна — эс бөгөөс нэвтэрч чадахгүй хүнд захиалга оноогдоно.
@@ -175,7 +178,7 @@ export function orderAssignableWhere(now: Date = new Date()) {
     AND: [{ OR: [{ activeUntil: null }, { activeUntil: { gt: now } }] }],
     OR: [
       { isOwner: true },
-      { role: { isActive: true, permissions: { has: "orders.assignable" } } },
+      holdsEffectivePermissionWhere("orders.assignable", tenantId),
     ],
   } satisfies Prisma.UserWhereInput;
 }

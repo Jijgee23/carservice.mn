@@ -1,6 +1,7 @@
 import { formatTugrik } from "@/lib/orders";
 import { Prisma, prisma } from "@/lib/prisma";
 import { sendPushToAccount, sendPushToSuperAdmin, sendPushToTokens, sendPushToUser } from "@/lib/push";
+import { holdsEffectivePermissionWhere } from "@/lib/auth/effective-where";
 import { setBypassContext } from "@/lib/tenant-context";
 
 // Мэдэгдэлийн төв — илгээгдсэн мэдэгдэл бүрийг DB-д хадгалж (Notification), дараа нь
@@ -640,7 +641,8 @@ export function staffRecipientWhere(
     OR: [
       { isOwner: true },
       {
-        role: { permissions: { has: "appointments.view" } },
+        // Эрх нь ҮР ДҮНТЭЙ (роль + байгууллагын override − ажилтны хязгаарлалт).
+        ...holdsEffectivePermissionWhere("appointments.view", tenantId),
         OR: [{ branchId: null }, { branchId }],
       },
     ],

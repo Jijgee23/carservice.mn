@@ -4,6 +4,7 @@ import { findLockedPaymentIds } from "@/lib/cash/session-attach";
 import { createNotification } from "@/lib/notifications";
 import { canAssignOrders, canEditOrder, orderEditScope, type OrderAccessUser } from "@/lib/auth/order-access";
 import { hasPermission, orderAssignableWhere } from "@/lib/auth/roles";
+import { EFFECTIVE_ROLE_SELECT, resolveEffectiveRole } from "@/lib/auth/load-effective";
 import { parseDurationInput, MIN_CATEGORY_DURATION_MINUTES, MAX_CATEGORY_DURATION_MINUTES } from "@/lib/category-duration";
 import { calculateServiceItemDurationMinutes, type ServiceDurationItem } from "@/lib/service-duration";
 import { closeOpenOrderTimeBooking, openOrderTimeBooking, withOrderTransaction } from "@/lib/order-time-booking";
@@ -175,7 +176,7 @@ export async function validateOrderAssignee(
     }
   }
   const assignee = await tx.user.findFirst({
-    where: { id: input.assigneeId, tenantId: input.tenantId, isActive: true, ...orderAssignableWhere() },
+    where: { id: input.assigneeId, tenantId: input.tenantId, isActive: true, ...orderAssignableWhere(input.tenantId) },
     select: {
       id: true,
       tenantId: true,
@@ -188,13 +189,28 @@ export async function validateOrderAssignee(
       assignableBranchIds: true,
       firstName: true,
       lastName: true,
-      role: { select: { permissions: true, isActive: true } },
+      deniedPermissions: true,
+      role: { select: EFFECTIVE_ROLE_SELECT },
     },
-  }) as (AssigneeEligibilityInput & { id: string; firstName: string | null; lastName: string | null }) | null;
-  if (!assignee || !isAssigneeEligible(assignee, input.tenantId, input.orderBranchId)) {
+  }) as
+    | (Omit<AssigneeEligibilityInput, "role"> & {
+        id: string;
+        firstName: string | null;
+        lastName: string | null;
+        deniedPermissions: string[];
+        role: Parameters<typeof resolveEffectiveRole>[0]["role"];
+      })
+    | null;
+  if (!assignee) {
     throw new OrderCommandError("Сонгосон ажилтан энэ салбарт хариуцагч болж болохгүй.", 422, "ASSIGNEE_INELIGIBLE");
   }
-  return assignee;
+  // Хариуцагч болох эрхийг ҮР ДҮНТЭЙ эрхээр шалгана (DB predicate-тэй нэг томьёо).
+  const effectiveRole = await resolveEffectiveRole(assignee, tx);
+  const eligible = { ...assignee, role: effectiveRole };
+  if (!isAssigneeEligible(eligible, input.tenantId, input.orderBranchId)) {
+    throw new OrderCommandError("Сонгосон ажилтан энэ салбарт хариуцагч болж болохгүй.", 422, "ASSIGNEE_INELIGIBLE");
+  }
+  return eligible;
 }
 
 function assertOrderScope(

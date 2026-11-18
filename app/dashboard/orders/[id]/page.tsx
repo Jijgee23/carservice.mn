@@ -170,7 +170,7 @@ export default async function OrderDetailPage({
       where: {
         tenantId: user.tenantId,
         isActive: true,
-        ...orderAssignableWhere(),
+        ...orderAssignableWhere(user.tenantId),
       },
       orderBy: { firstName: "asc" },
       select: {

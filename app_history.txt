@@ -2401,3 +2401,10 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - /system/roles форм: шинэ 3-р хэсэг «Байгууллагад өөрчлөх эрх» — бүх эрхийн мөр бүрд checkbox (ролид байгаа бол «байгууллага хасч болно», байхгүй бол «нэмж болно»). Hidden input `tenantEditable` → lib/roles/validate.ts → core create/update (Role.tenantEditablePermissions). Тэмдэглээгүй эрх түгжигдсэн.
 - lib/roles/dto.ts: ROLE_SELECT + RoleDto.editablePermissions (GET /api/v1/roles[/id] хариунд нэмэгдсэн). Системийн роль default = хоосон (бүгд түгжигдсэн) — прод дээр админ өөрөө нээнэ.
 - Тест: roles-core +5, одоогийн 3 exact-shape assertion шинэ талбарт тааруулав.
+
+[2026-11-18] Ролийн эрхийн 3 давхарга — 3-р үе шат (байгууллагын роль override)
+- lib/roles/tenant-overrides.ts: listTenantRoleOverrides / getTenantRoleOverrideView / saveTenantRoleOverride (sanitizeOverride-ээр editable-аар хязгаарлана; хоосон = мөр устгаж анхдагч руу; logAudit entity "Role" before/after). Вэб action (app/_actions/tenant-role-overrides.ts, зөвхөн эзэн, revalidate dashboard layout) болон мобайл API нэг логик.
+- UI: /dashboard/settings/roles («Ролийн эрх», Тохиргоо цэсэнд) — роль бүрийн өөрчилж болох эрхүүд toggle, «Анхдагч руу буцаах». API: GET /api/v1/roles/overrides, GET/PUT /api/v1/roles/[id]/override (PUT зөвхөн эзэн; LOCKED 403, VALIDATION 422).
+- DB-түвшний шүүлт: lib/auth/effective-where.ts holdsEffectivePermissionWhere(code, tenantId) — роль/override add-remove/ажилтны хязгаарлалтыг relation filter-ээр. orderAssignableWhere(tenantId, now) (tenantId заавал → 7 дуудагч шинэчлэгдсэн), staffRecipientWhere (appointments.view; одоо role.isActive-г мөн шалгана), order-commands хариуцагчийн шалгалт effective эрхээр. Бодит локал DB дээр 13 хувилбар шалгав.
+- ТАНАМЖ: probe-ийн үеэр prisma.$transaction rollback хийдэггүй гэдгийг (extension query бүрийг тусад нь tx-д ажиллуулна) мэдээгүй локал DB-д sysrole_mechanic-г түр өөрчилсөн → SYSTEM_ROLE_DEFAULTS-аар сэргээв. memory-д тэмдэглэв.
+- Тест: tenant-role-overrides (8), role-delegation-routes (5), order-assignable-users (+2), одоо байгаа 2 source-pattern assertion шинэчлэв.
