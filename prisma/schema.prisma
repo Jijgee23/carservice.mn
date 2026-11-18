@@ -64,7 +64,7 @@ model Tenant {
 
   // Байгууллагын үзүүлдэг үйлчилгээний төрлүүд (системийн ангилал) — /book,
   // /discover-ийн «ямар ажил хийлгэх вэ?» хайлтад (lib/tenant-service-keys.ts).
-  serviceKeys              SystemServiceKey[] @relation("TenantServiceKeys")
+  serviceKeys SystemServiceKey[] @relation("TenantServiceKeys")
 
   users                    User[]
   branches                 Branch[]
@@ -86,6 +86,7 @@ model Tenant {
   auditLogs                AuditLog[]
   qpaySettings             TenantQPaySettings?
   orderSettings            TenantOrderSettings?
+  roleOverrides            TenantRoleOverride[]
   orderPayments            OrderPayment[]
   cashTransactionTypes     CashTransactionType[]
   cashTransactions         CashTransaction[]
@@ -130,6 +131,10 @@ model User {
   // Тенант доторх өөрийн үүсгэсэн Role-той холбоо. isOwner=true бол null байж болно.
   roleId String?
   role   Role?   @relation(fields: [roleId], references: [id], onDelete: SetNull)
+
+  // Ажилтан тус бүрийн ХЯЗГААРЛАЛТ: ролиос хасах эрхийн кодууд (зөвхөн хасна, нэмэхгүй).
+  // lib/auth/effective-permissions.ts. Эзэнд (isOwner) нөлөөлөхгүй.
+  deniedPermissions String[] @default([])
 
   // Buffer-аас бус нэвтрэх алдааны тоо. 5 алдаа нэрсэн үед lockedAt тогтоосноор
   // нэвтрэх боломжгүй болж, нууц үгээ сэргээх замаар л сэргэдэг.
@@ -205,24 +210,46 @@ model User {
 // биш, үргэлж бүх эрхтэй. Глобал хүснэгт тул RLS-гүй.
 
 model Role {
-  id          String   @id @default(cuid())
+  id                        String   @id @default(cuid())
   // Үндсэн ролийн тогтмол түлхүүр (MECHANIC|ENGINEER|ACCOUNTANT|CASHIER|MANAGER).
   // null = супер админы нэмсэн роль.
-  key         String?  @unique
-  name        String   @unique
-  description String?
+  key                       String?  @unique
+  name                      String   @unique
+  description               String?
   // Permission code-уудын массив. Кодын жагсаалт нь `lib/auth/permissions.ts`
   // дотор төвлөрсөн (ж: "orders.view", "audit.view").
-  permissions String[]
-  isActive    Boolean  @default(true)
-  sortOrder   Int      @default(0)
+  permissions               String[]
+  // Систем админ «байгууллага өөрчилж болно» гэж тэмдэглэсэн эрхийн кодууд — зөвхөн эдгээрийг
+  // байгууллага (TenantRoleOverride-аар) нэмж/хасч болно. Хоосон = бүгд түгжигдсэн.
+  tenantEditablePermissions String[] @default([])
+  isActive                  Boolean  @default(true)
+  sortOrder                 Int      @default(0)
 
-  users User[]
+  users           User[]
+  tenantOverrides TenantRoleOverride[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([isActive])
+}
+
+// Байгууллагын нийтийн роль дээрх нэмэлт/хасалт. Мөр байхгүй = роль яг анхдагчаар.
+// Зөвхөн Role.tenantEditablePermissions доторх кодод хүчинтэй (уншихад дахин шүүнэ).
+model TenantRoleOverride {
+  id                String   @id @default(cuid())
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roleId            String
+  role              Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  addPermissions    String[] @default([])
+  removePermissions String[] @default([])
+  updatedById       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([tenantId, roleId])
+  @@index([roleId])
 }
 
 // --- Branch ---------------------------------------------------------------

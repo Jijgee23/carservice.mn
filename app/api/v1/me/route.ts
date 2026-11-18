@@ -14,6 +14,7 @@
 //        fieldErrors } (invalid field or duplicate email/phone).
 
 import { jsonError, jsonOk, requireApiUser } from "@/lib/api";
+import { EFFECTIVE_ROLE_SELECT, resolveEffectiveRole } from "@/lib/auth/load-effective";
 import { logAudit } from "@/lib/audit";
 import { updateProfile } from "@/lib/account/profile";
 import { prisma } from "@/lib/prisma";
@@ -29,12 +30,20 @@ async function buildMeResponse(userId: string, tenantId: string) {
       phone: true,
       isOwner: true,
       branchId: true,
+      deniedPermissions: true,
       role: {
-        select: { id: true, name: true, permissions: true, isActive: true },
+        select: EFFECTIVE_ROLE_SELECT,
       },
     },
   });
   if (!user) return null;
+  // ҮР ДҮНТЭЙ эрх (GET /me-тэй ижил) — tenant context requireApiUser-аар тавигдсан.
+  const role = await resolveEffectiveRole({
+    isOwner: user.isOwner,
+    tenantId,
+    deniedPermissions: user.deniedPermissions,
+    role: user.role,
+  });
 
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
@@ -54,13 +63,7 @@ async function buildMeResponse(userId: string, tenantId: string) {
     lastName: user.lastName,
     phone: user.phone,
     isOwner: user.isOwner,
-    role: user.role
-      ? {
-          id: user.role.id,
-          name: user.role.name,
-          permissions: user.role.isActive ? user.role.permissions : [],
-        }
-      : null,
+    role: role ? { id: role.id, name: role.name, permissions: role.permissions } : null,
     tenant,
     branch,
   };

@@ -2389,3 +2389,10 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - app/dashboard/page.tsx layout-аар зурагдана: KPI шүүлт, main/side widget дараалал, income/base нуух, дүрийн үндсэн үйлдэл («Төлбөр авах», «Миний ажил»). Өгөгдөл өмнөх шигээ эрх+салбараар тасалддаг (loadDashboardFocus) — дүр зөвхөн байрлал.
 - GET /api/v1/home (app/api/v1/home/route.ts, lib/dashboard-home-dto.ts): вэбтэй ижил persona/layout + focus (Decimal→string, Date→ISO), X-Working-Branch хүндэтгэнэ. lib/dashboard-focus.ts FocusUser бүтцийн төрөл (вэб+API хоёул таарна). API docs шинэчлэгдэв.
 - Тест: tests/dashboard-persona.test.ts (8), tests/dashboard-home-dto.test.ts (3).
+
+[2026-11-18] Ролийн эрхийн 3 давхарга — 1-р үе шат (суурь, зан төлөв өөрчлөгдөхгүй)
+- Schema + migration 20261118100000_role_delegation: Role.tenantEditablePermissions (систем админ «байгууллага өөрчилж болно» гэж тэмдэглэх эрх), TenantRoleOverride (tenantId+roleId, add/remove; RLS tenant_isolation), User.deniedPermissions (ажилтны хязгаарлалт). Бүх default хоосон → одоогийн зан төлөв хэвээр, backfill шаардлагагүй. Локал DB дээр migrate + carcare_local RLS шалгав (cross-tenant insert хаагдсан).
+- lib/auth/effective-permissions.ts (pure): effective = ((role ∪ add) ∖ remove) ∖ denied, add/remove ∈ editable (хуучирсан override автоматаар үл тоогдоно); order scope тохируулга (override/denial байгаа үед л); sanitizeOverride / sanitizeUserDenials.
+- lib/auth/load-effective.ts resolveEffectiveRole: вэб loader (lib/auth/index.ts) + API loader (api-token.ts) + login/activate/signup (api-login.ts) + /me PATCH — role.permissions = effective. Эзэн хөндөгдөхгүй; роль дээр «өөрчилж болох» эрх байхгүй бол override query 0.
+- Үлдсэн raw уншилт (дараагийн үе шатанд): lib/orders/order-commands.ts:191, order-assignable, notifications:643, employees/core+guards.
+- Тест: effective-permissions (12), load-effective (8).

@@ -1,4 +1,5 @@
 import { enforceRateLimit, jsonError, jsonOk } from "@/lib/api";
+import { EFFECTIVE_ROLE_SELECT } from "@/lib/auth/load-effective";
 import { checkUserActive } from "@/lib/auth/active";
 import { buildApiLoginResponse } from "@/lib/auth/api-login";
 import { parseLoginDevice } from "@/lib/auth/login-device";
@@ -61,7 +62,7 @@ export async function POST(req: Request) {
     where: id,
     include: {
       tenant: { select: { id: true, name: true, suspended: true } },
-      role: { select: { id: true, name: true, permissions: true, isActive: true } },
+      role: { select: EFFECTIVE_ROLE_SELECT },
     },
   });
   // Бүртгэлгүй нэвтрэх нэрийг "код буруу"-тай адил харуулна (enumeration-аас сэргийлнэ).

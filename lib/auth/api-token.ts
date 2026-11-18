@@ -1,4 +1,5 @@
 import { checkUserActive } from "@/lib/auth/active";
+import { EFFECTIVE_ROLE_SELECT, resolveEffectiveRole } from "@/lib/auth/load-effective";
 import { prisma } from "@/lib/prisma";
 import { setBypassContext, setTenantContext } from "@/lib/tenant-context";
 import { createJwtSession } from "@/lib/auth/jwt-session";
@@ -73,8 +74,9 @@ export async function getApiUserFromRequest(req: Request) {
       tenantId: true,
       branchId: true,
       assignableBranchIds: true,
+      deniedPermissions: true,
       role: {
-        select: { id: true, name: true, permissions: true, isActive: true },
+        select: EFFECTIVE_ROLE_SELECT,
       },
       isActive: true,
       activeUntil: true,
@@ -89,7 +91,7 @@ export async function getApiUserFromRequest(req: Request) {
   // the rest of the 24h access token and could refresh indefinitely.
   // Returning null makes the route answer 401, and the refresh that follows
   // is rejected too (auth/refresh), so the app signs out.
-  const { isActive, activeUntil, deactivatedAt, lockedAt, tenant, ...profile } = user;
+  const { isActive, activeUntil, deactivatedAt, lockedAt, tenant, role: rawRole, deniedPermissions, ...rest } = user;
   if (
     lockedAt ||
     tenant.suspended ||
@@ -100,11 +102,17 @@ export async function getApiUserFromRequest(req: Request) {
   // D-180: nullable for tokens signed before this claim existed.
   // tenantPlan: /api/v1 модулийн хаалтад (requireApiUser → lib/plan-modules-server).
   // Идэвхгүй (глобал) роль = эрхгүй — lib/auth/index.ts-тэй ижил.
-  if (profile.role && !profile.role.isActive) {
-    profile.role = { ...profile.role, permissions: [] };
-  }
+  // role.permissions = ҮР ДҮНТЭЙ эрх (роль + байгууллагын override − ажилтны хязгаарлалт);
+  // tenant context дээр (63-р мөр) тавигдсан тул TenantRoleOverride RLS-ээр уншигдана.
+  const role = await resolveEffectiveRole({
+    isOwner: rest.isOwner,
+    tenantId: rest.tenantId,
+    deniedPermissions,
+    role: rawRole,
+  });
   return {
-    ...profile,
+    ...rest,
+    role,
     tenantPlan: tenant.plan,
     refreshTokenId: payload.refreshTokenId ?? null,
   };

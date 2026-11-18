@@ -9,6 +9,7 @@ import {
   ACCESS_TOKEN_MAX_AGE_SECONDS,
   signApiToken,
 } from "@/lib/auth/api-token";
+import { resolveEffectiveRole } from "@/lib/auth/load-effective";
 import { ipOrNull } from "@/lib/rate-limit";
 import { createHash } from "node:crypto";
 import type { LoginDevice } from "@/lib/auth/login-device";
@@ -45,8 +46,21 @@ export type ApiLoginUser = {
   tenantId: string;
   branchId: string | null;
   tenant: { id: string; name: string };
-  role: { id: string; name: string; permissions: unknown; isActive?: boolean } | null;
+  role: {
+    id: string;
+    name: string;
+    permissions: unknown;
+    isActive?: boolean;
+    /** Систем админ байгууллагад өөрчлөхийг зөвшөөрсөн эрх (EFFECTIVE_ROLE_SELECT). */
+    tenantEditablePermissions?: string[];
+  } | null;
+  /** Ажилтны хязгаарлалт (User.deniedPermissions). */
+  deniedPermissions?: string[];
 };
+
+function asCodes(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+}
 
 function requestMeta(req: Request): {
   userAgent: string | null;
@@ -91,6 +105,23 @@ export async function buildApiLoginResponse(
       : null,
   });
 
+  // Апп-д харагдах эрх = ҮР ДҮНТЭЙ эрх (роль + байгууллагын override − ажилтны хязгаарлалт),
+  // GET /me болон бусад API-ийн шалгалттай яг ижил. Дуудагч route-ууд bypass context-тэй.
+  const effectiveRole = user.role
+    ? await resolveEffectiveRole({
+        isOwner: user.isOwner,
+        tenantId: user.tenantId,
+        deniedPermissions: user.deniedPermissions ?? [],
+        role: {
+          id: user.role.id,
+          name: user.role.name,
+          isActive: user.role.isActive !== false,
+          permissions: asCodes(user.role.permissions),
+          tenantEditablePermissions: user.role.tenantEditablePermissions ?? [],
+        },
+      })
+    : null;
+
   const accessToken = await signApiToken({
     userId: user.id,
     tenantId: user.tenantId,
@@ -113,12 +144,8 @@ export async function buildApiLoginResponse(
       lastName: user.lastName,
       phone: user.phone,
       isOwner: user.isOwner,
-      role: user.role
-        ? {
-            id: user.role.id,
-            name: user.role.name,
-            permissions: user.role.isActive === false ? [] : user.role.permissions,
-          }
+      role: effectiveRole
+        ? { id: effectiveRole.id, name: effectiveRole.name, permissions: effectiveRole.permissions }
         : null,
       branchId: user.branchId,
       tenant: { id: user.tenant.id, name: user.tenant.name },

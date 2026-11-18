@@ -1,4 +1,5 @@
 import { enforceRateLimit, jsonError, jsonOk } from "@/lib/api";
+import { EFFECTIVE_ROLE_SELECT } from "@/lib/auth/load-effective";
 import { buildApiLoginResponse } from "@/lib/auth/api-login";
 import { parseLoginDevice } from "@/lib/auth/login-device";
 import { revokeAllOtps, verifyOtp } from "@/lib/auth/otp";
@@ -100,7 +101,7 @@ export async function POST(req: Request) {
     where: { id: userId },
     include: {
       tenant: { select: { id: true, name: true } },
-      role: { select: { id: true, name: true, permissions: true, isActive: true } },
+      role: { select: EFFECTIVE_ROLE_SELECT },
     },
   });
 

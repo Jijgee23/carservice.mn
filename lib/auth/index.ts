@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { setBypassContext, setTenantContext } from "@/lib/tenant-context";
 import { checkUserActive } from "./active";
+import { EFFECTIVE_ROLE_SELECT, resolveEffectiveRole } from "./load-effective";
 import { clearSessionCookie, getSessionCookie } from "./cookies";
 import { ALL_BRANCHES, verifySession, type SessionPayload } from "./session";
 import { validateUserSession } from "./user-session";
@@ -49,29 +50,31 @@ const loadCurrentUser = cache(async () => {
   // (найдвартай, сервэрийн session-оос гарсан id) нэг мөр татахад л bypass —
   // доор tenantId олдмогц бүх дараагийн query-г тухайн tenant-д хязгаарлана.
   setBypassContext();
-  const user = await prisma.user.findUnique({
+  const dbUser = await prisma.user.findUnique({
     where: { id: session.userId },
     include: {
       tenant: true,
-      role: { select: { id: true, name: true, permissions: true, isActive: true } },
+      role: { select: EFFECTIVE_ROLE_SELECT },
     },
   });
-  if (!user) redirect("/page/login");
-  // Роль глобал: супер админ идэвхгүй болгосон бол бүх tenant-ийн эзэмшигчид
-  // нь шууд эрхгүй болно (sidebar, order-access зэрэг role.permissions-ийг шууд уншдаг).
-  if (user.role && !user.role.isActive) user.role = { ...user.role, permissions: [] };
+  if (!dbUser) redirect("/page/login");
 
   // Идэвхгүй / хугацаа дууссан хэрэглэгчийг session-оос гаргана
   const active = checkUserActive({
-    isActive: user.isActive,
-    activeUntil: user.activeUntil,
-    deactivatedAt: user.deactivatedAt,
+    isActive: dbUser.isActive,
+    activeUntil: dbUser.activeUntil,
+    deactivatedAt: dbUser.deactivatedAt,
   });
   if (!active.ok) {
     await clearSessionCookie();
     redirect("/page/login");
   }
-  setTenantContext(user.tenantId);
+  setTenantContext(dbUser.tenantId);
+  // Роль глобал: супер админ идэвхгүй болгосон бол бүх tenant-ийн эзэмшигчид шууд эрхгүй болно.
+  // role.permissions нь ҮР ДҮНТЭЙ эрх (роль + байгууллагын override − ажилтны хязгаарлалт) —
+  // sidebar, order-access, hasPermission зэрэг бүх уншигч өөрчлөлтгүй зөв ажиллана.
+  // Tenant context тавигдсаны ДАРАА (TenantRoleOverride RLS-тэй; await-аас өмнө context тавих дүрэм).
+  const user = { ...dbUser, role: await resolveEffectiveRole(dbUser) };
 
   // Тухайн нэвтрэлтэд сонгосон ажиллах салбарыг тодруулна (harах:
   // lib/auth/session.ts). Жинхэнэ Branch.id бол нэрийг нь татаж баннерт
