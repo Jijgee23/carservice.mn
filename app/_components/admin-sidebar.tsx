@@ -264,6 +264,31 @@ const secondaryItems: NavItem[] = [
   },
 ];
 
+// Өдөр тутмын ажил (хуудас, цаг захиалга, үйлчлүүлэгч, касс) дээр, удирдлагын
+// (үйлчилгээ, ажилтан, салбар) доор. Жагсаалтад байхгүй href хамгийн сүүлд.
+// Array.prototype.sort тогтвортой тул ижил зэрэглэлийн дараалал хадгалагдана.
+const NAV_PRIORITY = [
+  "/dashboard",
+  "/dashboard/orders",
+  "/dashboard/appointments",
+  "/dashboard/customers",
+  "/dashboard/cash",
+  "/dashboard/services",
+  "/dashboard/employees",
+  "/dashboard/branches",
+];
+
+function navRank(item: NavItem): number {
+  const i = NAV_PRIORITY.findIndex((p) =>
+    p === "/dashboard" ? item.href === p : item.href === p || item.href.startsWith(`${p}/`),
+  );
+  return i === -1 ? NAV_PRIORITY.length : i;
+}
+
+function compareNavPriority(a: NavItem, b: NavItem): number {
+  return navRank(a) - navRank(b);
+}
+
 const STORAGE_KEY = "carcare:sidebar:open";
 
 function isLeafActive(pathname: string, item: NavLeaf): boolean {
@@ -385,7 +410,8 @@ function SidebarNavList({
     .filter(isVisible)
     .map(filterChildren)
     .map(applyPlan)
-    .filter((it): it is NavItem => it !== null);
+    .filter((it): it is NavItem => it !== null)
+    .sort(compareNavPriority);
   const visibleSecondary = secondaryItems
     .filter(isVisible)
     .map(filterChildren)

@@ -642,6 +642,24 @@ Res:  200 { "review": { "id": "...", "created": true, "verified": false } }
           тогтмол (upsert) тул дахин дуудахад давхардахгүй.
         </p>
 
+        <Endpoint method="GET" path="/api/v1/app/me" auth="bearer" title="Миний профайл.">
+          <Code>{`Res: 200 { "account": { "id": "...", "phone": "99112233", "name": "Бат" | null, "email": null, "avatarUrl": null, "hasPassword": false } }
+401 { "error": "Нэвтрэх шаардлагатай." }`}</Code>
+        </Endpoint>
+
+        <Endpoint
+          method="PATCH"
+          path="/api/v1/app/me"
+          auth="bearer"
+          tags={["Rate limit: 30/10 мин (Account)"]}
+          title="Профайл засах — ирсэн талбарыг л өөрчилнө. Хоосон мөр/null = арилгана. Утасны дугаар энд солигдохгүй."
+        >
+          <Code>{`Req:  { "name": "Бат Эрдэнэ", "email": "bat@mail.mn" }   // аль нэг нь ч болно; name ≤ 100 тэмдэгт
+Res:  200 { "account": { ... } }
+422   { "error": "Хүсэлт буруу.", "fieldErrors": { "email": "И-мэйл хаяг буруу байна." } }
+429   { "error": "Хэт олон хүсэлт илгээлээ. Түр хүлээгээд дахин оролдоно уу." }`}</Code>
+        </Endpoint>
+
         <Endpoint method="POST" path="/api/v1/app/devices" auth="bearer" title="Push токен бүртгэх/шинэчлэх.">
           <Code>{`Req:  {
   "deviceId":      "<тогтвортой install id, uuid>",   // ЗААВАЛ
