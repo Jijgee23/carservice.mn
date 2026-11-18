@@ -6,7 +6,7 @@
  * Дуудагч тал `setBypassContext()`-ийг урьдчилан тавина (session/tenant алга).
  */
 
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { Prisma } from "@/app/generated/prisma/client";
 import { hashPassword } from "@/lib/auth/password";
 import { ALL_WEEKDAYS, DEFAULT_OPEN_DAYS } from "@/lib/branches";
@@ -16,7 +16,8 @@ import {
 } from "@/lib/diagnostics";
 import { ensureCashAccount } from "@/lib/payment-accounts";
 import { isValidPhone, normalizePhone } from "@/lib/phone";
-import { prisma } from "@/lib/prisma";
+import { prisma, withBookingTransaction } from "@/lib/prisma";
+import { setBypassContext } from "@/lib/tenant-context";
 import {
   mapPersonAdminErrors,
   normalizeRegno,
@@ -122,10 +123,16 @@ export function tenantSignupInputFromBody(body: unknown): TenantSignupInput {
   };
 }
 
-/** Талбаруудыг шалгаж, хэвийн болгоно. Нууц үгийн шалгалт орно. */
+/**
+ * Талбаруудыг шалгаж, хэвийн болгоно. Анхдагчаар нууц үгийн шалгалт орно (өөрөө бүртгүүлэх);
+ * `requirePassword: false` бол нууц үг шаардахгүй, огт уншихгүй (System ажилтан харилцагч бүртгэх —
+ * эзэн өөрөө SMS кодоор нууц үгээ тохируулна, lib/system/tenant-registration.ts).
+ */
 export function validateTenantSignup(
   input: TenantSignupInput,
+  opts: { requirePassword?: boolean } = {},
 ): { ok: true; data: TenantSignupData } | { ok: false; fieldErrors: FieldErrors } {
+  const requirePassword = opts.requirePassword !== false;
   const orgName = input.orgName.trim();
   const registerNumber = normalizeRegno(input.registerNumber);
   const orgEmail = input.orgEmail.trim().toLowerCase();
@@ -157,10 +164,12 @@ export function validateTenantSignup(
 
   // Хувь хүний нэрийг регистрийн нэрээс авдаг тул зөвхөн байгууллагад.
   if (!isPerson && !firstName) fieldErrors.ownerName = "Эзний овог нэрийг оруулна уу.";
-  if (input.password.length < 8)
-    fieldErrors.password = "Нууц үг хамгийн багадаа 8 тэмдэгт байна.";
-  if (input.password !== input.passwordConfirm)
-    fieldErrors.passwordConfirm = "Нууц үг таарахгүй байна.";
+  if (requirePassword) {
+    if (input.password.length < 8)
+      fieldErrors.password = "Нууц үг хамгийн багадаа 8 тэмдэгт байна.";
+    if (input.password !== input.passwordConfirm)
+      fieldErrors.passwordConfirm = "Нууц үг таарахгүй байна.";
+  }
 
   if (Object.keys(fieldErrors).length > 0) return { ok: false, fieldErrors };
 
@@ -176,7 +185,7 @@ export function validateTenantSignup(
       lastName,
       phone: normalizePhone(phone1) ?? phone1,
       adminEmail: orgEmail || null,
-      password: input.password,
+      password: requirePassword ? input.password : "",
       branch: {
         city: input.city.trim() || null,
         district: input.district.trim() || null,
@@ -248,22 +257,34 @@ export type CreatedTenant = {
 
 /**
  * Tenant + үндсэн салбар (+7 өдрийн хуваарь) + анхдагч нэгж/касс/оношилгооны
- * загвар + OWNER хэрэглэгчийг нэг transaction-д үүсгэнэ. OTP баталгаажсаны
- * дараа л дуудна. Unique зөрчлийг талбарын алдаа болгон буцаана.
+ * загвар + OWNER хэрэглэгчийг нэг transaction-д үүсгэнэ. Unique зөрчлийг талбарын алдаа болгон буцаана.
+ *
+ * Өөрөө бүртгүүлэх: OTP баталгаажсаны дараа дуудна, эзэн нууц үгтэй, `verified: true`.
+ * `ownerActivation: true` (System ажилтан бүртгэх): эзэн `passwordHash: null`, `verified: false` — ажилтны
+ * урсгалтай ижил; эзэн өөрөө /auth/activate-аар SMS кодоор нууц үгээ тохируулна (ажилтан нууц үг мэдэхгүй).
+ *
+ * ЖИНХЭНЭ transaction (withBookingTransaction): lib/prisma.ts-ийн extension нь `prisma.$transaction` доторх алдааг
+ * rollback хийдэггүй тул өмнө нь дундуур алдаа гарвал tenant хагас үүссэн хэвээр үлдэж болох байсан.
+ * Үүсгэх нь cross-tenant үйлдэл тул bypass context-ийг энд өөрөө баталгаажуулна.
  */
 export async function createTenantWithOwner(
   data: TenantSignupData,
+  opts: { ownerActivation?: boolean } = {},
 ): Promise<
   | { ok: true; created: CreatedTenant }
   | { ok: false; fieldErrors: FieldErrors }
   | { ok: false; message: string }
 > {
   try {
-    const passwordHash = await hashPassword(data.password);
+    setBypassContext();
+    const activation = opts.ownerActivation === true;
+    const passwordHash = activation ? null : await hashPassword(data.password);
+    const tenantId = randomUUID();
 
-    const created = await prisma.$transaction(async (tx) => {
+    const created = await withBookingTransaction(tenantId, async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
+          id: tenantId,
           slug: makeSlug(data.orgName),
           name: data.orgName,
           // Хувь хүн бол нэр нь эзний овог нэр — dashboard-д засварын нэрээ асууна.
@@ -331,8 +352,9 @@ export async function createTenantWithOwner(
           lastName: data.lastName,
           phone: data.phone,
           passwordHash,
-          // Админ өөрөө нууц үгээ үүсгэж, OTP-ээр баталгаажсан тул шууд verified.
-          verified: true,
+          // Өөрөө бүртгүүлэхэд: нууц үгээ үүсгэж, OTP-ээр баталгаажсан тул шууд verified.
+          // Ажилтан бүртгэхэд (ownerActivation): идэвхжүүлэх хүртэл verified=false.
+          verified: !activation,
           isOwner: true,
           tenantId: tenant.id,
           branchId: branch.id,
