@@ -56,8 +56,13 @@ test("account password set/remove and reactivating login bump tokenVersion; logi
   assert.equal(pw.match(/tokenVersion: \{ increment: 1 \}/g)?.length, 3);
   assert.match(pw, /where: \{ id: accountId, deactivatedAt: \{ not: null \} \}/);
   for (const rel of ["app/api/v1/app/auth/verify-otp/route.ts", "app/api/v1/app/auth/login-password/route.ts"]) {
-    assert.match(await src(rel), /tv: account\.tokenVersion/, rel);
+    // Logins sign through the shared issuer now (not inline)…
+    assert.match(await src(rel), /issueAccountSession\(account, /, rel);
   }
+  // …which signs, and binds the refresh token, with the account's CURRENT tokenVersion.
+  const issuer = await src("lib/auth/account-session-issue.ts");
+  assert.match(issuer, /tv: account\.tokenVersion/);
+  assert.match(issuer, /tokenVersion: account\.tokenVersion/);
 });
 
 test("login lockout, refresh rotation, reset revocation, signup re-check", async () => {

@@ -57,7 +57,9 @@ test("mobile: login-password, password GET / PUT / DELETE and request-otp; verif
   assert.doesNotMatch(login, /account\.create/);
   const pw = await src("app/api/v1/app/account/password/route.ts");
   for (const m of ["GET", "PUT", "DELETE"]) assert.match(pw, new RegExp(`export async function ${m}\\(req: Request\\)`));
-  assert.equal(pw.match(/getApiAccountFromRequest\(req\)/g)?.length, 3);
+  // GET reads the account; PUT/DELETE authenticate via the token-mode-aware helper (to re-issue in the same mode)
+  assert.equal(pw.match(/getApiAccountFromRequest\(req\)/g)?.length, 1);
+  assert.equal(pw.match(/authenticateAccountRequest\(req\)/g)?.length, 2);
   assert.doesNotMatch(pw, /passwordHash: account\.passwordHash|"passwordHash"/);
   assert.match(await src("app/api/v1/app/account/password/request-otp/route.ts"), /type: "ACCOUNT_PASSWORD"/);
   assert.match(await src("app/api/v1/app/auth/verify-otp/route.ts"), /hasPassword: Boolean\(account\.passwordHash\)/);

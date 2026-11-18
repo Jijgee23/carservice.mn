@@ -1,5 +1,6 @@
 import { enforceRateLimit, jsonError, jsonOk } from "@/lib/api";
-import { getApiAccountFromRequest, signAccountApiToken } from "@/lib/auth/account-api-token";
+import { authenticateAccountRequest, getApiAccountFromRequest } from "@/lib/auth/account-api-token";
+import { issueAccountSession, modeForExistingToken } from "@/lib/auth/account-session-issue";
 import { removeAccountPassword, setAccountPassword } from "@/lib/auth/account-password";
 
 // Үйлчлүүлэгчийн нууц үг. PUT / DELETE нь POST /account/password/request-otp-оор авсан шинэ кодыг шаардана.
@@ -24,8 +25,9 @@ const str = (v: unknown) => (typeof v === "string" ? v : "");
 
 /** PUT { code, password } → тохируулах / солих. */
 export async function PUT(req: Request) {
-  const account = await getApiAccountFromRequest(req);
-  if (!account) return jsonError(401, "Нэвтрэх шаардлагатай.");
+  const authed = await authenticateAccountRequest(req);
+  if (!authed) return jsonError(401, "Нэвтрэх шаардлагатай.");
+  const { account, tokenExp } = authed;
   const limited = enforceRateLimit(req, "app-account-password", { limit: 10, windowMs: 10 * 60_000 });
   if (limited) return limited;
   const body = await readBody(req);
@@ -35,14 +37,17 @@ export async function PUT(req: Request) {
   if (!r.ok) return jsonError(422, r.message, { code: r.field === "code" ? "OTP_INVALID" : "PASSWORD_INVALID", fieldErrors: { [r.field]: r.message } });
   // tokenVersion нэмэгдсэн тул энэ төхөөрөмжийн хуучин token хүчингүй — шинэ token-ыг буцаана
   // (апп хадгалбал нэвтэрсэн хэвээр; хадгалахгүй хуучин хувилбар дахин нэвтэрнэ).
-  const accessToken = await signAccountApiToken({ accountId: account.id, phone: account.phone, tv: r.tokenVersion });
-  return jsonOk({ ok: true, hasPassword: true, accessToken });
+  // Одоогийн token хугацаатай (refresh горим) байсан бол шинэ access + refresh хос олгоно (хуучин refresh token-ууд
+  // tokenVersion өөрчлөгдсөнөөр үхсэн); хуучин апп-д өмнөх шиг хугацаагүй token.
+  const tokens = await issueAccountSession({ id: account.id, phone: account.phone, tokenVersion: r.tokenVersion }, modeForExistingToken(tokenExp), req);
+  return jsonOk({ ok: true, hasPassword: true, ...tokens });
 }
 
 /** DELETE { code } → нууц үг устгаж зөвхөн кодоор нэвтрэх горимд буцна. */
 export async function DELETE(req: Request) {
-  const account = await getApiAccountFromRequest(req);
-  if (!account) return jsonError(401, "Нэвтрэх шаардлагатай.");
+  const authed = await authenticateAccountRequest(req);
+  if (!authed) return jsonError(401, "Нэвтрэх шаардлагатай.");
+  const { account, tokenExp } = authed;
   const limited = enforceRateLimit(req, "app-account-password", { limit: 10, windowMs: 10 * 60_000 });
   if (limited) return limited;
   const body = await readBody(req);
@@ -50,6 +55,6 @@ export async function DELETE(req: Request) {
 
   const r = await removeAccountPassword({ account, code: str(body.code) });
   if (!r.ok) return jsonError(422, r.message, { code: "OTP_INVALID", fieldErrors: { code: r.message } });
-  const accessToken = await signAccountApiToken({ accountId: account.id, phone: account.phone, tv: r.tokenVersion });
-  return jsonOk({ ok: true, hasPassword: false, accessToken });
+  const tokens = await issueAccountSession({ id: account.id, phone: account.phone, tokenVersion: r.tokenVersion }, modeForExistingToken(tokenExp), req);
+  return jsonOk({ ok: true, hasPassword: false, ...tokens });
 }

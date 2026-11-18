@@ -1855,6 +1855,34 @@ model Account {
   feedback      Feedback[]
   payments      AppointmentPayment[]
   reviews       Review[]
+  refreshTokens AccountRefreshToken[]
+}
+
+// Эцсийн хэрэглэгчийн (Account) мобайл refresh token — User-ийн RefreshToken-той ижил зарчим (опак random,
+// DB-д sha256, ротаци, дахин ашиглалтыг илрүүлнэ) гэхдээ Account-д зориулсан тусдаа хүснэгт. Account глобал
+// объект тул RLS-гүй. `tokenVersion` нь олгох үеийн Account.tokenVersion — нууц үг солих/устгах/сэргээхэд
+// Account.tokenVersion нэмэгдэж, энэ token-ууд автоматаар хүчингүй болно. lib/auth/account-refresh-token.ts.
+model AccountRefreshToken {
+  id           String  @id @default(cuid())
+  tokenHash    String  @unique
+  accountId    String
+  account      Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  tokenVersion Int
+
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  // Ротацийн хэлхээ: энэ token-ийг ямар token орлоосон. Зориуд revoke (logout) бол null.
+  replacedById String?              @unique
+  replacedBy   AccountRefreshToken? @relation("AccountTokenRotation", fields: [replacedById], references: [id], onDelete: SetNull)
+  replacedFrom AccountRefreshToken? @relation("AccountTokenRotation")
+  userAgent    String?
+  ip           String?
+
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  @@index([accountId])
+  @@index([expiresAt])
 }
 
 // --- AccountVehicle (Account ↔ global Vehicle холбоо) --------------------

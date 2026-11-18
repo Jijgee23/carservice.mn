@@ -1,11 +1,11 @@
 import { enforceRateLimit, jsonError, jsonOk } from "@/lib/api";
-import { signAccountApiToken } from "@/lib/auth/account-api-token";
+import { issueAccountSession, wantsRefreshSession } from "@/lib/auth/account-session-issue";
 import { finishAccountLogin, verifyAccountPassword } from "@/lib/auth/account-password";
 import { normalizePhone } from "@/lib/phone";
 import { LOGIN_WINDOW_MS } from "@/lib/rate-limit";
 import { setBypassContext } from "@/lib/tenant-context";
 
-// POST /api/v1/app/auth/login-password  { phone, password } → accessToken (verify-otp-той ижил хариу).
+// POST /api/v1/app/auth/login-password  { phone, password, supportsRefresh? } → accessToken (+ refreshToken) (verify-otp-той ижил хариу).
 // Нууц үг тохируулсан Account л нэвтэрнэ; шинэ Account үүсгэхгүй (кодоор нэвтрэх нь үүсгэдэг).
 export async function POST(req: Request) {
   const limited = enforceRateLimit(req, "app-login-password", { limit: 30, windowMs: LOGIN_WINDOW_MS });
@@ -35,9 +35,9 @@ export async function POST(req: Request) {
   const reactivated = Boolean(result.account.deactivatedAt);
   const account = await finishAccountLogin(result.account.id);
   // Хаасан аккаунт сэргэсэн бол finishAccountLogin tokenVersion-г нэмсэн — шинэ хувилбараар олгоно.
-  const accessToken = await signAccountApiToken({ accountId: account.id, phone: account.phone, tv: account.tokenVersion });
+  const tokens = await issueAccountSession(account, wantsRefreshSession(body) ? "refresh" : "legacy", req);
   return jsonOk({
-    accessToken,
+    ...tokens,
     reactivated,
     account: { id: account.id, phone: account.phone, name: account.name, hasPassword: Boolean(account.passwordHash) },
   });

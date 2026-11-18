@@ -22,7 +22,7 @@ function routeFiles(dir: string): string[] {
 }
 
 const HANDLER_RE = /export (?:async )?function (GET|POST|PUT|PATCH|DELETE)\b/g;
-const AUTH_CALL = /\b(requireApiUser|requireCashApiUser|getApiUserFromRequest|getApiAccountFromRequest)\(/;
+const AUTH_CALL = /\b(requireApiUser|requireCashApiUser|getApiUserFromRequest|getApiAccountFromRequest|authenticateAccountRequest)\(/;
 
 type Handler = { route: string; method: string; body: string; file: string; source: string };
 
@@ -54,6 +54,8 @@ const PUBLIC: Record<string, string> = {
   "POST app/auth/login-password": "customer password login",
   "POST app/auth/request-otp": "customer OTP request",
   "POST app/auth/verify-otp": "customer OTP verify",
+  "POST app/auth/refresh": "customer refresh-token rotation (the opaque refresh token IS the credential)",
+  "POST app/auth/logout": "revokes the customer refresh token supplied in the body",
   "POST auth/login": "staff login",
   "POST auth/logout": "revokes the refresh token supplied in the body",
   "POST auth/refresh": "exchanges a refresh token",
@@ -162,12 +164,12 @@ test("customer-realm /api/v1/app routes authenticate with the ACCOUNT token, sta
     const isApp = h.route.startsWith("app/");
     if (isApp) {
       assert.ok(
-        /getApiAccountFromRequest\(/.test(h.body) || /requireApiAccount\(/.test(h.body) || AUTH_HELPERS.some((n) => h.body.includes(`${n}(`)),
+        /getApiAccountFromRequest\(|authenticateAccountRequest\(/.test(h.body) || /requireApiAccount\(/.test(h.body) || AUTH_HELPERS.some((n) => h.body.includes(`${n}(`)),
         `${h.method} ${h.route}: customer route must use the account token`,
       );
       assert.doesNotMatch(h.body, /requireApiUser\(/, `${h.method} ${h.route}: customer route must not accept a staff token`);
     } else {
-      assert.doesNotMatch(h.body, /getApiAccountFromRequest\(/, `${h.method} ${h.route}: staff route must not accept an account token`);
+      assert.doesNotMatch(h.body, /getApiAccountFromRequest\(|authenticateAccountRequest\(/, `${h.method} ${h.route}: staff route must not accept an account token`);
     }
   }
 });

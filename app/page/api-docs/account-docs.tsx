@@ -30,9 +30,10 @@ Res:  200 { "ok": true }
           tags={["Rate limit: 30/15 мин (IP)"]}
           title="Алхам 2 — кодыг баталгаажуулж accessToken авах. Account шинэ бол автоматаар үүснэ."
         >
-          <Code>{`Req:  { "phone": "99112233", "code": "123456", "name": "Бат" }  // name заавал биш (зөвхөн нэргүй Account-д хадгалагдана)
+          <Code>{`Req:  { "phone": "99112233", "code": "123456", "name": "Бат", "supportsRefresh": true }  // name заавал биш (зөвхөн нэргүй Account-д хадгалагдана); supportsRefresh — доорх «Token-ы хугацаа» хэсгийг үз)
 Res:  200 {
-  "accessToken": "<JWT>",
+  "accessToken": "<JWT>",   // supportsRefresh:true бол 1 цагийн хугацаатай + доорх refreshToken талбарууд; үгүй бол өмнөх хугацаагүй token
+  "accessTokenExpiresInSeconds": 3600, "refreshToken": "<opaque>", "refreshTokenExpiresInSeconds": 7776000, "refreshTokenExpiresAt": "ISO",   // зөвхөн supportsRefresh:true үед
   "reactivated": false,   // true = түр хаасан (POST /account/deactivate) бүртгэл энэ нэвтрэлтээр сэргэсэн
   "account": { "id": "...", "phone": "99112233", "name": "Бат" | null, "hasPassword": false }   // hasPassword — «Нууц үгээр нэвтрэх» сонголтыг харуулахад
 }
@@ -49,14 +50,55 @@ Res:  200 {
           tags={["Rate limit: 30/15 мин (IP), 10/15 мин (утас)"]}
           title="Нууц үгээр нэвтрэх (кодын оронд). Зөвхөн нууц үг тохируулсан Account; шинэ Account үүсгэхгүй."
         >
-          <Code>{`Req:  { "phone": "99112233", "password": "..." }
-Res:  200 { "accessToken": "<JWT>", "reactivated": false,
+          <Code>{`Req:  { "phone": "99112233", "password": "...", "supportsRefresh": true }   // supportsRefresh заавал биш (verify-otp-той ижил)
+Res:  200 { "accessToken": "<JWT>", "reactivated": false,   // supportsRefresh:true бол + refreshToken, *ExpiresIn* талбарууд
             "account": { "id": "...", "phone": "99112233", "name": "Бат" | null, "hasPassword": true } }   // verify-otp-той ижил
 400  { "error": "Утасны дугаар буруу." } | { "error": "Нууц үг шаардлагатай." }
 401  { "error": "Утасны дугаар эсвэл нууц үг буруу байна.", "code": "INVALID_CREDENTIALS" }   // дугаар бүртгэлгүй / нууц үггүй ч ижил
 403  { "error": "Энэ дугаар түр хаагдсан байна.", "code": "ACCOUNT_BLOCKED" }
 429  { "error": "...", "code": "RATE_LIMITED" }   // энэ дугаарт хэт олон буруу оролдлого — кодоор нэвтрэх боломжтой хэвээр
 // verify-otp-ийн account-д мөн "hasPassword" ирнэ — апп «Нууц үгээр нэвтрэх» сонголтыг харуулахад ашиглана.`}</Code>
+        </Endpoint>
+
+        <p className="text-sm text-[var(--oc-muted)]">
+          <strong>Token-ы хугацаа.</strong> Нэвтрэхдээ <code className="font-plex-mono text-[var(--oc-muted2)]">supportsRefresh: true</code>{" "}
+          илгээвэл accessToken <strong>1 цаг</strong> хүчинтэй, дээр нь <strong>refreshToken</strong> (90 хоног, ашиглах бүрд
+          шинэчлэгдэнэ) ирнэ. Апп 401 авмагц <code className="font-plex-mono text-[var(--oc-muted2)]">POST /app/auth/refresh</code>{" "}
+          дуудаж ШИНЭ хосыг хадгална (хуучин refreshToken нэг л удаа хүчинтэй). refresh амжилтгүй (401) бол л дахин нэвтрүүлнэ.
+          Нууц үг тохируулах/солих/устгах, аккаунт хаах/устгах/сэргээхэд бүх token автоматаар хүчингүй болно. Энэ талбарыг
+          илгээхгүй хуучин апп өмнөх шигээ хугацаагүй token авна — гэхдээ тэр token-уудыг системийн админ тогтоосон огнооноос
+          хойш хүлээн авахаа болино (ACCOUNT_LEGACY_TOKENS_UNTIL), тиймээс шинэ хувилбарт заавал refresh нэвтэрнэ.
+        </p>
+
+        <Endpoint
+          method="POST"
+          path="/api/v1/app/auth/refresh"
+          auth="public"
+          tags={["Rate limit: 30/мин (IP)"]}
+          title="refreshToken-оор шинэ accessToken + refreshToken авах (ротаци). Нэвтрэх шаардлагагүй."
+        >
+          <Code>{`Req:  { "refreshToken": "<opaque>" }
+Res:  200 { "accessToken": "<JWT, 1 цаг>", "accessTokenExpiresInSeconds": 3600,
+            "refreshToken": "<ШИНЭ opaque>", "refreshTokenExpiresInSeconds": 7776000, "refreshTokenExpiresAt": "ISO" }
+      // хуучин refreshToken-ыг ШУУД устгаж шинийг хадгална — хуучин нь дахин ажиллахгүй
+400  { "error": "refreshToken-ийг текстээр илгээнэ үү." }
+401  { "error": "...", "reason": "invalid" | "expired" | "reused" }   // дахин нэвтэрнэ
+      // invalid = хүчингүй/logout хийсэн/нууц үг солигдсон/аккаунт хаагдсан; expired = 90 хоног ашиглаагүй;
+      // reused = ротаци хийгдсэн token хожим дахин ирсэн (хулгайн шинж) — аккаунтын бүх төхөөрөмж гарсан.
+      // Хариу алдагдаж апп ХУУЧИН token-оор 1 минутын дотор дахин оролдвол «invalid» (бусад төхөөрөмж гарахгүй).
+429  { "error": "Хэт олон хүсэлт илгээлээ. Түр хүлээгээд дахин оролдоно уу." }`}</Code>
+        </Endpoint>
+
+        <Endpoint
+          method="POST"
+          path="/api/v1/app/auth/logout"
+          auth="public"
+          tags={["Rate limit: 30/мин (IP)"]}
+          title="Энэ төхөөрөмжийн refreshToken-ыг хүчингүй болгоно (idempotent). Апп accessToken, refreshToken хоёуланг дотооддоо устгана; push төхөөрөмжийг DELETE /app/devices/{deviceId}-ээр хасна."
+        >
+          <Code>{`Req:  { "refreshToken": "<opaque>" }
+Res:  200 { "ok": true }      // олдохгүй/аль хэдийн хүчингүй ч 200
+400  { "error": "refreshToken-ийг текстээр илгээнэ үү." }`}</Code>
         </Endpoint>
 
         <Endpoint method="GET" path="/api/v1/app/account/password" auth="bearer" title="Нууц үг тохируулсан эсэх.">

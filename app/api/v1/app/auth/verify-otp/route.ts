@@ -1,13 +1,13 @@
 import { enforceRateLimit, jsonError, jsonOk } from "@/lib/api";
 import { LOGIN_WINDOW_MS } from "@/lib/rate-limit";
-import { signAccountApiToken } from "@/lib/auth/account-api-token";
+import { issueAccountSession, wantsRefreshSession } from "@/lib/auth/account-session-issue";
 import { finishAccountLogin } from "@/lib/auth/account-password";
 import { verifyPhoneOtp } from "@/lib/auth/otp";
 import { normalizePhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
 import { setBypassContext } from "@/lib/tenant-context";
 
-// POST /api/v1/app/auth/verify-otp  { phone, code, name? } → accessToken
+// POST /api/v1/app/auth/verify-otp  { phone, code, name?, supportsRefresh? } → accessToken (+ refreshToken)
 export async function POST(req: Request) {
   const limited = enforceRateLimit(req, "app-verify-otp", { limit: 30, windowMs: LOGIN_WINDOW_MS });
   if (limited) return limited;
@@ -56,14 +56,11 @@ export async function POST(req: Request) {
     account = await finishAccountLogin(found.id, { name: name && !found.name ? name : null });
   }
 
-  const accessToken = await signAccountApiToken({
-    accountId: account.id,
-    phone: account.phone,
-    tv: account.tokenVersion,
-  });
+  // supportsRefresh: true → хугацаатай accessToken + refreshToken; үгүй бол өмнөх хугацаагүй token (хуучин апп).
+  const tokens = await issueAccountSession(account, wantsRefreshSession(body) ? "refresh" : "legacy", req);
 
   return jsonOk({
-    accessToken,
+    ...tokens,
     reactivated,
     account: { id: account.id, phone: account.phone, name: account.name, hasPassword: Boolean(account.passwordHash) },
   });

@@ -32,6 +32,12 @@ const envSchema = z.object({
     .string()
     .min(32, "API_TOKEN_SECRET заасан бол 32+ тэмдэгт байх ёстой.")
     .optional(),
+  // Эцсийн хэрэглэгчийн хугацаагүй (legacy) mobile token-ийг энэ огнооноос хойш хүлээн авахаа болино
+  // (lib/auth/account-api-token.ts). Заахгүй бол үргэлж хүлээн авна. Жишээ: 2027-03-01T00:00:00Z
+  ACCOUNT_LEGACY_TOKENS_UNTIL: z
+    .string()
+    .refine((v) => v === "" || Number.isFinite(Date.parse(v)), "ACCOUNT_LEGACY_TOKENS_UNTIL нь ISO огноо байх ёстой (жишээ нь 2027-03-01T00:00:00Z).")
+    .optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
