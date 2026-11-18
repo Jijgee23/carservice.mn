@@ -19,6 +19,8 @@ import { CashOverview } from "./cash-overview";
 import { type Trend, loadOverviewData } from "@/lib/overview";
 import { loadDashboardFocus, type DashboardFocus } from "@/lib/dashboard-focus";
 import { resolveHomeLayout, type HomeKpi, type HomeWidget } from "@/lib/dashboard-persona";
+import { loadOnboardingChecklist } from "@/lib/onboarding-checklist";
+import { GettingStarted } from "./_components/getting-started";
 import { INCOME_QUICK_RANGES, type IncomeRangeKey } from "./income-range";
 import { formatDaysLeft } from "@/lib/subscription";
 import type { AppointmentStatus } from "@/app/generated/prisma/client";
@@ -141,9 +143,13 @@ export default async function DashboardPage({
   const user = await requireUser();
   const params = await searchParams;
 
-  const [overview, focus] = await Promise.all([
-    loadOverviewData({ ...user, orderAccess: user }, params),
+  // Дүр (эрхээс) орлого/«Бааз»-ыг харуулдаггүй бол тэдгээрийн хүнд query-г огт ажиллуулахгүй.
+  const layout = resolveHomeLayout(user);
+  // «Эхлэх алхмууд» — зөвхөн эзэнд, бүрэн бус үед (3 жижиг count).
+  const [overview, focus, checklist] = await Promise.all([
+    loadOverviewData({ ...user, orderAccess: user }, params, { income: layout.income, base: layout.base }),
     loadDashboardFocus(user),
+    user.isOwner ? loadOnboardingChecklist(user.tenantId) : Promise.resolve(null),
   ]);
   const {
     incomeRange,
@@ -171,7 +177,6 @@ export default async function DashboardPage({
     activeSub?.expiresAt && activeSub.daysLeft <= SUBSCRIPTION_WARN_DAYS ? activeSub : null;
   const { orders, appointments, payments, reviews, access } = focus;
   const openOrders = orders.scheduled + orders.inProgress;
-  const layout = resolveHomeLayout(user);
   const kpiOn = (k: HomeKpi) => layout.kpis.includes(k);
   const widgets: Record<HomeWidget, ReactNode> = {
     appointments: access.appointments ? <TodayAppointments items={appointments.today} /> : null,
@@ -242,6 +247,8 @@ export default async function DashboardPage({
           <span className="font-medium text-[var(--oc-warn)]">Багц сунгах →</span>
         </Link>
       ) : null}
+
+      {checklist && !checklist.complete ? <GettingStarted checklist={checklist} /> : null}
 
       {/* Анхаарах */}
       <section aria-labelledby="attention-title">

@@ -1,4 +1,7 @@
 import { formerPlate } from "@/lib/vehicle-plate";
+import { nextOrderAction } from "@/lib/orders/next-action";
+import { orderCompleteBlocker } from "@/lib/orders/order-complete-guard";
+import { NextActionBanner } from "./next-action-banner";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Prisma } from "@/app/generated/prisma/client";
@@ -40,7 +43,6 @@ import {
   formatTugrik,
 } from "@/lib/orders";
 import { canSettlePostpaidOrder } from "@/lib/orders/order-commands";
-import { orderCompleteBlockedReason } from "@/lib/orders/order-complete-guard";
 import { getOrderSettings } from "@/lib/orders/order-settings-server";
 import { prisma } from "@/lib/prisma";
 import { calculateServiceItemDurationMinutes } from "@/lib/service-duration";
@@ -293,7 +295,7 @@ export default async function OrderDetailPage({
   const remainingDecimal = (order.totalAmount ?? new Prisma.Decimal(0)).minus(
     order.paidAmount ?? new Prisma.Decimal(0),
   );
-  const completeBlockedReason = orderCompleteBlockedReason({
+  const completeGuardInput = {
     unfilledDiagnostics: unfilledDiagnosticItems.length,
     unfinishedItems: unfinishedItemsCount,
     isInternal: order.isInternal,
@@ -301,6 +303,21 @@ export default async function OrderDetailPage({
     remaining: remainingDecimal,
     canCloseUnpaidPostpaid: hasPermission(user, "orders.closeUnpaidPostpaid"),
     settings: await getOrderSettings(prisma, user.tenantId),
+  };
+  const completeBlocker = orderCompleteBlocker(completeGuardInput);
+  const completeBlockedReason = completeBlocker?.message ?? null;
+  // «Дараагийн алхам»: одоо яг юу хийхийг толгойн доор нэг мөрөөр хэлнэ.
+  const nextAction = nextOrderAction({
+    status,
+    canEdit: canEditOrder,
+    canTakePayment: canRecordPayments,
+    cashSessionOpen,
+    isInternal: order.isInternal,
+    hasRemaining: remainingDecimal.gt(0),
+    activeItems: activeItems.length,
+    unfilledDiagnostics: unfilledDiagnosticItems.length,
+    unfinishedItems: unfinishedItemsCount,
+    blocker: completeBlocker,
   });
   // Ижил оношилгоо нэг засварын хуудсанд давхардаж болохгүй тул аль хэдийн
   // нэмэгдсэн загваруудыг "+ Мөр нэмэх" сонголтоос хасна.
@@ -371,9 +388,11 @@ export default async function OrderDetailPage({
         </div>
       </div>
 
+      {nextAction ? <NextActionBanner action={nextAction} /> : null}
+
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 flex flex-col gap-6">
-          <section className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] relative z-10">
+          <section id="order-items" className="scroll-mt-20 rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] relative z-10">
             <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-[var(--oc-line)]">
               <div>
                 <h2 className="font-semibold text-[var(--oc-ink)]">Үйлчилгээ</h2>
@@ -512,7 +531,7 @@ export default async function OrderDetailPage({
           {/* Эцсийн төлөвт карт харуулахгүй — статус нь дээд badge-д аль
               хэдийн байгаа тул давхардана */}
           {allowedTransitions.length > 0 ? (
-            <div className="relative rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-5">
+            <div id="order-status" className="scroll-mt-20 relative rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-5">
               <h2 className="font-semibold text-[var(--oc-ink)] mb-4 text-sm">Статус</h2>
               <StatusControls
                 orderId={order.id}
@@ -590,7 +609,7 @@ export default async function OrderDetailPage({
               </p>
             ) : null}
             {(orderPayments.length > 0 || canRecordPayments || (canEditPayments && canSettle && paymentStatus !== "PAID")) ? (
-              <div className="mt-4 pt-4 border-t border-[var(--oc-line)]">
+              <div id="order-payments" className="scroll-mt-20 mt-4 pt-4 border-t border-[var(--oc-line)]">
                 <div className="font-plex-mono text-[10.5px] text-[var(--oc-muted3)] uppercase tracking-[0.1em] mb-2">
                   Төлбөрүүд
                 </div>

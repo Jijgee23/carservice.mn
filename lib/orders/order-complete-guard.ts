@@ -7,7 +7,7 @@ import { POSTPAID_CLOSE_FORBIDDEN_MESSAGE, formatTugrik } from "@/lib/orders";
  * болон жагсаалтын «Төлөв өөрчлөх» хоёулаа үүнийг ашиглана; сервер өөрөө
  * дахин шалгадаг тул энэ нь зөвхөн UX.
  */
-export function orderCompleteBlockedReason(input: {
+export type CompleteBlockerInput = {
   unfilledDiagnostics: number;
   unfinishedItems: number;
   isInternal: boolean;
@@ -16,14 +16,36 @@ export function orderCompleteBlockedReason(input: {
   canCloseUnpaidPostpaid: boolean;
   /** Tenant-ийн засварын хуудасны тохиргоо (байхгүй бол анхдагч = хатуу дүрэм). */
   settings?: { requireDiagnosticsFilled: boolean; requireItemsCompleted: boolean; allowCloseUnpaid: boolean };
-}): string | null {
+};
+
+/** Хаах нөхцөл юунд тээглэж байна (бүтэцтэй) — «дараагийн алхам» чиглүүлэгч ашиглана. */
+export type CompleteBlocker = {
+  kind: "diagnostics" | "items" | "payment" | "postpaid";
+  message: string;
+};
+
+/** Эхний тээг (дараалал: оношилгоо → дуусаагүй ажил → төлбөр → дараа тооцоо) эсвэл null (хаахад бэлэн). */
+export function orderCompleteBlocker(input: CompleteBlockerInput): CompleteBlocker | null {
   const settings = input.settings ?? { requireDiagnosticsFilled: true, requireItemsCompleted: true, allowCloseUnpaid: false };
-  if (settings.requireDiagnosticsFilled && input.unfilledDiagnostics > 0) return "Бөглөгдөөгүй оношилгоо байна.";
-  if (settings.requireItemsCompleted && input.unfinishedItems > 0) return `Дуусаагүй ${input.unfinishedItems} ажил байна.`;
+  if (settings.requireDiagnosticsFilled && input.unfilledDiagnostics > 0) {
+    return { kind: "diagnostics", message: "Бөглөгдөөгүй оношилгоо байна." };
+  }
+  if (settings.requireItemsCompleted && input.unfinishedItems > 0) {
+    return { kind: "items", message: `Дуусаагүй ${input.unfinishedItems} ажил байна.` };
+  }
   if (input.isInternal) return null;
   if (input.remaining.gt(0) && !input.isPostpaid && !settings.allowCloseUnpaid) {
-    return `Төлбөр бүрэн төлөгдөөгүй (үлдэгдэл ${formatTugrik(input.remaining.toString())}). Төлбөр авсны дараа (касс) хаана.`;
+    return {
+      kind: "payment",
+      message: `Төлбөр бүрэн төлөгдөөгүй (үлдэгдэл ${formatTugrik(input.remaining.toString())}). Төлбөр авсны дараа (касс) хаана.`,
+    };
   }
-  if (input.remaining.gt(0) && !input.canCloseUnpaidPostpaid) return POSTPAID_CLOSE_FORBIDDEN_MESSAGE;
+  if (input.remaining.gt(0) && !input.canCloseUnpaidPostpaid) {
+    return { kind: "postpaid", message: POSTPAID_CLOSE_FORBIDDEN_MESSAGE };
+  }
   return null;
+}
+
+export function orderCompleteBlockedReason(input: CompleteBlockerInput): string | null {
+  return orderCompleteBlocker(input)?.message ?? null;
 }

@@ -50,6 +50,19 @@ export type OverviewParams = {
 };
 
 /**
+ * Аль хэсгийг ТООЦООЛОХ вэ. Нүүр дэлгэцийн «дүр» (lib/dashboard-persona.ts) орлого, «Бааз»-ыг
+ * харуулдаггүй бол тэдгээрийн query-г огт ажиллуулахгүй (хамгийн хүнд нь хугацааны бүх дууссан
+ * захиалгыг татдаг). Алгассан хэсэг: тоо 0, жагсаалт хоосон — дуудагч харуулдаггүй тул хамаагүй.
+ * Анхдагч: бүгд true (GET /api/v1/overview өмнөх шигээ).
+ */
+export type OverviewInclude = {
+  /** Орлого (хугацааны дууссан захиалга), дотоод зардал. */
+  income?: boolean;
+  /** Бааз: салбар/ажилтан/үйлчлүүлэгч/машины тоо ба тэдгээрийн 14 хоногийн хандлага, дараа төлбөрт машин. */
+  base?: boolean;
+};
+
+/**
  * Loads every aggregate the dashboard home renders. Branch-scoped where the
  * original page scoped orders/income by `workingBranchScopeId`; tenant-wide
  * for entity counts (branches, employees, customers, vehicles) — unchanged.
@@ -57,7 +70,10 @@ export type OverviewParams = {
 export async function loadOverviewData(
   user: OverviewUser,
   params: OverviewParams = {},
+  include: OverviewInclude = {},
 ) {
+  const withIncome = include.income !== false;
+  const withBase = include.base !== false;
   const incomeRange = resolveIncomeRange(params);
 
   // 14-day window for the stat-card trend sparklines.
@@ -78,6 +94,9 @@ export async function loadOverviewData(
     workingBranchId: user.workingBranchId ?? undefined,
   });
   const orderBranchFilter = scopeBranchId ? { branchId: scopeBranchId } : {};
+  // Зөвхөн ӨӨРИЙН хуудас харах эрхтэй ажилтан (orders.viewOwn) бусдын хуудас, дүнг нүүр дэлгэцээс
+  // харахгүй — жагсаалт (orders/page.tsx)-тай ижил orderReadWhere.
+  const orderRead = user.orderAccess ? orderReadWhere(user.orderAccess) : {};
 
   const [
     branchCount,
@@ -100,14 +119,15 @@ export async function loadOverviewData(
     receivableOrders,
     todayOrderCount,
   ] = await Promise.all([
-    prisma.branch.count({ where: { tenantId: user.tenantId } }),
-    prisma.user.count({ where: { tenantId: user.tenantId, deletedAt: null } }),
-    prisma.customer.count({ where: { tenantId: user.tenantId } }),
-    prisma.tenantVehicle.count({ where: { tenantId: user.tenantId } }),
+    withBase ? prisma.branch.count({ where: { tenantId: user.tenantId } }) : Promise.resolve(0),
+    withBase ? prisma.user.count({ where: { tenantId: user.tenantId, deletedAt: null } }) : Promise.resolve(0),
+    withBase ? prisma.customer.count({ where: { tenantId: user.tenantId } }) : Promise.resolve(0),
+    withBase ? prisma.tenantVehicle.count({ where: { tenantId: user.tenantId } }) : Promise.resolve(0),
     prisma.serviceOrder.count({
       where: {
         tenantId: user.tenantId,
         ...orderBranchFilter,
+        ...orderRead,
         status: { in: ["SCHEDULED", "IN_PROGRESS"] },
       },
     }),
@@ -115,33 +135,36 @@ export async function loadOverviewData(
       where: {
         tenantId: user.tenantId,
         ...orderBranchFilter,
+        ...orderRead,
         status: "COMPLETED",
         completedAt: {
           gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
         },
       },
     }),
-    prisma.serviceOrder.findMany({
+    withIncome ? prisma.serviceOrder.findMany({
       where: {
         tenantId: user.tenantId,
         ...orderBranchFilter,
+        ...orderRead,
         status: "COMPLETED",
         // Дотоод засвар орлогод орохгүй — «Дотоод зардал»-д тусад нь.
         isInternal: false,
         completedAt: { gte: incomeRange.fetchFrom, lte: incomeRange.to },
       },
       select: { completedAt: true, totalAmount: true },
-    }),
-    prisma.serviceOrder.aggregate({
+    }) : Promise.resolve([] as Array<{ completedAt: Date | null; totalAmount: Prisma.Decimal }>),
+    withIncome ? prisma.serviceOrder.aggregate({
       where: {
         tenantId: user.tenantId,
         ...orderBranchFilter,
+        ...orderRead,
         status: "COMPLETED",
         isInternal: true,
         completedAt: { gte: incomeRange.from, lte: incomeRange.to },
       },
       _sum: { totalAmount: true },
-    }),
+    }) : Promise.resolve({ _sum: { totalAmount: null } as { totalAmount: Prisma.Decimal | null } }),
     prisma.subscription.findMany({
       where: { tenantId: user.tenantId },
       orderBy: { startsAt: "desc" },
@@ -154,36 +177,37 @@ export async function loadOverviewData(
       },
     }),
     prisma.serviceOrder.findMany({
-      where: { ...recentWhere, ...orderBranchFilter },
+      where: { ...recentWhere, ...orderBranchFilter, ...orderRead },
       select: { createdAt: true },
     }),
     prisma.serviceOrder.findMany({
       where: {
         tenantId: user.tenantId,
         ...orderBranchFilter,
+        ...orderRead,
         status: "COMPLETED",
         completedAt: { gte: trendStart },
       },
       select: { completedAt: true },
     }),
-    prisma.customer.findMany({
+    withBase ? prisma.customer.findMany({
       where: recentWhere,
       select: { createdAt: true },
-    }),
-    prisma.tenantVehicle.findMany({
+    }) : Promise.resolve([] as Array<{ createdAt: Date }>),
+    withBase ? prisma.tenantVehicle.findMany({
       where: recentWhere,
       select: { createdAt: true },
-    }),
-    prisma.branch.findMany({
+    }) : Promise.resolve([] as Array<{ createdAt: Date }>),
+    withBase ? prisma.branch.findMany({
       where: recentWhere,
       select: { createdAt: true },
-    }),
-    prisma.user.findMany({
+    }) : Promise.resolve([] as Array<{ createdAt: Date }>),
+    withBase ? prisma.user.findMany({
       where: recentWhere,
       select: { createdAt: true },
-    }),
+    }) : Promise.resolve([] as Array<{ createdAt: Date }>),
     prisma.serviceOrder.findMany({
-      where: { tenantId: user.tenantId, ...orderBranchFilter },
+      where: { tenantId: user.tenantId, ...orderBranchFilter, ...orderRead },
       orderBy: { updatedAt: "desc" },
       take: 5,
       select: {
@@ -196,9 +220,9 @@ export async function loadOverviewData(
         items: { select: { status: true, kind: true } },
       },
     }),
-    prisma.tenantVehicle.count({
+    withBase ? prisma.tenantVehicle.count({
       where: { tenantId: user.tenantId, isPostpaid: true },
-    }),
+    }) : Promise.resolve(0),
     // Авлага: бүх дууссан (дотоод биш) захиалгын төлөгдөөгүй үлдэгдэл — дараа төлбөрт эсэхээс үл хамаарна.
     prisma.serviceOrder.findMany({
       where: {
@@ -210,7 +234,7 @@ export async function loadOverviewData(
       select: RECEIVABLE_ORDER_SELECT,
     }),
     prisma.serviceOrder.count({
-      where: { tenantId: user.tenantId, createdAt: { gte: todayStart } },
+      where: { tenantId: user.tenantId, createdAt: { gte: todayStart }, ...orderRead },
     }),
   ]);
   const activeSub = resolveActiveSubscription(subscriptions);

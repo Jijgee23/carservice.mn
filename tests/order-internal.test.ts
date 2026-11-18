@@ -109,10 +109,14 @@ test("completion: internal order completes with zero payment; ordinary order sti
 
 test("order detail page mirrors the completion guard for internal orders", () => {
   const src = read("app/dashboard/orders/[id]/page.tsx");
-  const i = src.indexOf("const completeBlockedReason");
+  const i = src.indexOf("const completeGuardInput");
   assert.ok(i > 0);
+  // The page feeds the shared guard ONE input and derives both the reason string and the
+  // structured blocker (used by the «next step» banner) from it.
+  assert.match(src, /orderCompleteBlocker\(completeGuardInput\)/);
+  assert.match(src, /const completeBlockedReason = completeBlocker\?\.message \?\? null;/);
   // The rule lives in the shared guard (also used by the list's «Төлөв өөрчлөх»).
-  assert.match(src.slice(i, i + 600), /orderCompleteBlockedReason\(\{[\s\S]*isInternal: order\.isInternal/);
+  assert.match(src.slice(i, i + 700), /isInternal: order\.isInternal/);
   const guard = read("lib/orders/order-complete-guard.ts");
   assert.match(guard, /if \(input\.isInternal\) return null;/);
 });

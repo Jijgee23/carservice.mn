@@ -75,5 +75,7 @@ test("quick context is tenant/branch scoped and view-checked; list payment omits
 
 test("detail page uses the shared complete guard (no drift with the list)", () => {
   const page = read("app/dashboard/orders/[id]/page.tsx");
-  assert.match(page, /orderCompleteBlockedReason\(\{/);
+  assert.match(page, /orderCompleteBlocker\(completeGuardInput\)/);
+  // the string reason shown on the «Дуусгах» button comes from the same blocker
+  assert.match(page, /completeBlockedReason = completeBlocker\?\.message \?\? null/);
 });
