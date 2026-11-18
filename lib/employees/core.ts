@@ -20,6 +20,8 @@ import { importRowToFormData, isCalendarDate, type ImportRow, type ImportRowResu
 import {
   duplicateUserFields,
   ensureRoleAssignable,
+  targetEffectivePermissions,
+  EFFECTIVE_ROLE_SELECT,
   filterOwnBranchIds,
   roleWithinActorPermissions,
 } from "./guards";
@@ -101,7 +103,7 @@ export async function prepareCreateEmployee(
     // Админ өөрөө permission системээс дээгүүр тул тусад нь Role хэрэггүй.
     data.roleId = null;
   } else if (data.roleId) {
-    const r = await ensureRoleAssignable(db, data.roleId);
+    const r = await ensureRoleAssignable(db, data.roleId, actor.tenantId);
     if (!r.ok) {
       return {
         ok: false,
@@ -302,7 +304,7 @@ export async function updateEmployee(
   }
 
   if (data.roleId) {
-    const r = await ensureRoleAssignable(db, data.roleId);
+    const r = await ensureRoleAssignable(db, data.roleId, actor.tenantId);
     if (!r.ok) {
       return {
         ok: false,
@@ -469,7 +471,7 @@ export async function bulkUpdateEmployeeRoleBranch(
 
   let roleName = "";
   if (roleId) {
-    const r = await ensureRoleAssignable(db, roleId);
+    const r = await ensureRoleAssignable(db, roleId, actor.tenantId);
     if (!r.ok) return { ok: false, message: "Сонгосон үүрэг олдсонгүй эсвэл идэвхгүй байна." };
     if (!roleWithinActorPermissions(actor, r.permissions)) {
       return { ok: false, message: ROLE_EXCEEDS_ACTOR_ERROR };
@@ -592,13 +594,13 @@ export async function toggleEmployeeActive(
 
   const target = await db.user.findFirst({
     where: { id, tenantId: actor.tenantId },
-    select: { isOwner: true, isActive: true, firstName: true, lastName: true, deletedAt: true, role: { select: { permissions: true } } },
+    select: { isOwner: true, isActive: true, firstName: true, lastName: true, deletedAt: true, deniedPermissions: true, role: { select: EFFECTIVE_ROLE_SELECT } },
   });
   if (!target || target.deletedAt) return { ok: true, noop: true };
   if (target.isOwner && !actor.isOwner) {
     return { ok: false, code: "OWNER_ONLY", error: OWNER_ONLY_ERROR };
   }
-  if (!roleWithinActorPermissions(actor, target.role?.permissions)) {
+  if (!roleWithinActorPermissions(actor, await targetEffectivePermissions(db, actor.tenantId, target))) {
     return { ok: false, code: "OWNER_ONLY", error: SUPERIOR_TARGET_ERROR };
   }
   if (target.isOwner && !next) {
@@ -641,14 +643,14 @@ export async function deleteEmployee(
 
   const target = await db.user.findFirst({
     where: { id, tenantId: actor.tenantId },
-    include: { role: { select: { name: true, permissions: true } } },
+    include: { role: { select: EFFECTIVE_ROLE_SELECT } },
   });
   if (!target || target.deletedAt) return { ok: true, noop: true };
 
   if (target.isOwner && !actor.isOwner) {
     return { ok: false, code: "OWNER_ONLY", error: OWNER_ONLY_ERROR };
   }
-  if (!roleWithinActorPermissions(actor, target.role?.permissions)) {
+  if (!roleWithinActorPermissions(actor, await targetEffectivePermissions(db, actor.tenantId, target))) {
     return { ok: false, code: "OWNER_ONLY", error: SUPERIOR_TARGET_ERROR };
   }
   if (target.isOwner) {
@@ -712,13 +714,13 @@ export async function resetEmployeePassword(
 
   const target = await db.user.findFirst({
     where: { id, tenantId: actor.tenantId },
-    select: { firstName: true, lastName: true, deletedAt: true, isOwner: true, role: { select: { permissions: true } } },
+    select: { firstName: true, lastName: true, deletedAt: true, isOwner: true, deniedPermissions: true, role: { select: EFFECTIVE_ROLE_SELECT } },
   });
   if (!target || target.deletedAt) return { ok: true, noop: true };
   if (target.isOwner && !actor.isOwner) {
     return { ok: false, code: "OWNER_ONLY", error: OWNER_ONLY_ERROR };
   }
-  if (!roleWithinActorPermissions(actor, target.role?.permissions)) {
+  if (!roleWithinActorPermissions(actor, await targetEffectivePermissions(db, actor.tenantId, target))) {
     return { ok: false, code: "OWNER_ONLY", error: SUPERIOR_TARGET_ERROR };
   }
 

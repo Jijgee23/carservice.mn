@@ -4,10 +4,12 @@ import { Btn, BtnLink, Chip } from "@/app/_components/landing-ops-ui";
 import { requireUser } from "@/lib/auth";
 import { getBranchVisibility } from "@/lib/branch-visibility";
 import { canEdit } from "@/lib/auth/roles";
-import { permissionLabel } from "@/lib/auth/permissions";
+import { PERMISSIONS, permissionLabel } from "@/lib/auth/permissions";
+import { getEmployeeRestrictions } from "@/lib/employees/restrictions";
 import { prisma } from "@/lib/prisma";
 import { EmployeeForm, EMPLOYEE_FORM_ID } from "../employee-form";
 import { DeleteEmployeeButton, ResetPasswordButton } from "./danger-actions";
+import { EmployeeRestrictions } from "./employee-restrictions";
 
 export const metadata = {
   title: "Ажилтан засах",
@@ -44,6 +46,24 @@ export default async function EditEmployeePage({
     include: { role: { select: { name: true, permissions: true } } },
   });
   if (!employee) notFound();
+
+  // Хязгаарлалт: эзэн болон өөрийг нь хязгаарлахгүй (lib/employees/restrictions.ts).
+  const restrictions =
+    employee.isOwner || employee.id === me.id || !employee.role
+      ? null
+      : await getEmployeeRestrictions(me, employee.id);
+  const restrictionGroups = restrictions
+    ? Array.from(
+        PERMISSIONS.filter((p) => restrictions.grantedPermissions.includes(p.code)).reduce((m, p) => {
+          const arr = m.get(p.group) ?? [];
+          arr.push({ code: p.code, label: p.label });
+          m.set(p.group, arr);
+          return m;
+        }, new Map<string, { code: string; label: string }[]>()),
+      ).map(([group, items]) => ({ group, items }))
+    : [];
+  // Хязгаарлалтын дараах үр дүнтэй эрх (байхгүй бол ролийн эрх).
+  const shownPermissions = restrictions?.effectivePermissions ?? employee.role?.permissions ?? [];
 
   // Идэвхтэй салбарууд + энэ ажилтны одоогийн харьяалал/сонголтод байгаа
   // (боловч хожим идэвхгүй болсон байж болзошгүй) салбаруудыг хамт харуулна.
@@ -244,7 +264,7 @@ export default async function EditEmployeePage({
               <h2 className="font-semibold text-[var(--oc-ink)] mb-3">{employee.role.name} эрх</h2>
               <ul className="space-y-2">
                 {QUICK_PERMISSIONS.map((code) => {
-                  const has = employee.role!.permissions.includes(code);
+                  const has = shownPermissions.includes(code);
                   return (
                     <li key={code} className="flex items-center gap-2 text-[13px]">
                       <span className={has ? "text-[var(--oc-ok)]" : "text-[var(--oc-muted4)]"}>
@@ -258,9 +278,17 @@ export default async function EditEmployeePage({
                 })}
               </ul>
               <p className="mt-3 text-xs text-[var(--oc-muted3)]">
-                Ролийн эрхийг системийн админ тохируулдаг.
+                Ролийн эрхийг системийн админ тохируулдаг; байгууллагын эзэн Тохиргоо → Ролийн эрхээс өөрчилнө.
               </p>
             </div>
+          ) : null}
+
+          {restrictions ? (
+            <EmployeeRestrictions
+              employeeId={employee.id}
+              groups={restrictionGroups}
+              initialDenied={restrictions.denied}
+            />
           ) : null}
 
           {recentLogs.length > 0 ? (

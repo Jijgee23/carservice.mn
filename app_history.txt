@@ -2408,3 +2408,9 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - DB-түвшний шүүлт: lib/auth/effective-where.ts holdsEffectivePermissionWhere(code, tenantId) — роль/override add-remove/ажилтны хязгаарлалтыг relation filter-ээр. orderAssignableWhere(tenantId, now) (tenantId заавал → 7 дуудагч шинэчлэгдсэн), staffRecipientWhere (appointments.view; одоо role.isActive-г мөн шалгана), order-commands хариуцагчийн шалгалт effective эрхээр. Бодит локал DB дээр 13 хувилбар шалгав.
 - ТАНАМЖ: probe-ийн үеэр prisma.$transaction rollback хийдэггүй гэдгийг (extension query бүрийг тусад нь tx-д ажиллуулна) мэдээгүй локал DB-д sysrole_mechanic-г түр өөрчилсөн → SYSTEM_ROLE_DEFAULTS-аар сэргээв. memory-д тэмдэглэв.
 - Тест: tenant-role-overrides (8), role-delegation-routes (5), order-assignable-users (+2), одоо байгаа 2 source-pattern assertion шинэчлэв.
+
+[2026-11-18] Ролийн эрхийн 3 давхарга — 4–5-р үе шат (ажилтны хязгаарлалт, docs)
+- lib/employees/restrictions.ts: getEmployeeRestrictions / saveEmployeeRestrictions — ажилтнаас ролийн зарим эрхийг ХАСНА (нэмэхгүй). Дүрэм: эзэн/өөрийгөө хязгаарлахгүй, эзэн биш оноогч өөрөөсөө илүү эрхтэй ажилтныг хязгаарлахгүй, зөвхөн ОДОО байгаа эрх, tenant scope. Вэб: app/_actions/employee-restrictions.ts + ажилтны хуудсанд «Эрхийн хязгаарлалт» карт (employee-restrictions.tsx). API: GET/PUT /api/v1/employees/[id]/restrictions (employees.edit, PUT идэвхтэй захиалга шаардана).
+- Escalation guard-ууд ҮР ДҮНТЭЙ эрхээр: ensureRoleAssignable(db, roleId, tenantId) байгууллагын override-той, targetEffectivePermissions (deactivate/reset-password/delete-ийн «дээд эрхтэй ажилтан» шалгалт). EmployeesClient-д optional tenantRoleOverride.
+- API docs (staff-docs): roles/overrides, roles/[id]/override, employees/[id]/restrictions, role.editablePermissions. Гарын авлага: «Ролийн эрхийг байгууллагад тохируулах», «Ажилтны эрхийг хязгаарлах».
+- Тест: employee-restrictions (10), employee-guards-effective (7), role-delegation-routes (+4).

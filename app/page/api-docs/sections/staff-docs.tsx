@@ -102,12 +102,45 @@ Res: 200 { "roles": [{ "id": "sysrole_manager", "key": "MANAGER"|null,   // key:
         </Endpoint>
 
         <Endpoint method="GET" path="/api/v1/roles/[id]" auth="bearer" bearerLabel={BEARER} tags={["Эрх: employees.view / employees.create / employees.edit (аль нэг)"]} title="Нэг ролийн дэлгэрэнгүй.">
-          <Code>{`Res: 200 { "role": { "id", "key", "name", "description", "permissions", "isActive" } }
+          <Code>{`Res: 200 { "role": { "id", "key", "name", "description", "permissions", "editablePermissions", "isActive" } }   // editablePermissions: байгууллага өөрчилж болох эрх
 404 { "error": "Роль олдсонгүй.", "code": "NOT_FOUND" }`}</Code>
         </Endpoint>
 
         <Endpoint method="POST" path="/api/v1/roles" auth="bearer" bearerLabel={BEARER} tags={["Хасагдсан"]} title="Байгууллага роль үүсгэх/засах/устгах боломжгүй болсон — POST /roles, PATCH/DELETE /roles/[id] үргэлж 403.">
           <Code>{`403 { "error": "Роль системээс тохируулагдана. Системийн админтай холбогдоно уу.", "code": "SYSTEM_MANAGED" }`}</Code>
+        </Endpoint>
+
+        <Endpoint method="GET" path="/api/v1/roles/overrides" auth="bearer" bearerLabel={BEARER} tags={["Эрх: employees.view / employees.create / employees.edit (аль нэг)"]} title="Системийн админ ядаж нэг эрхийг өөрчлөхийг зөвшөөрсөн идэвхтэй ролиуд + ЭНЭ байгууллагын нэмэлт/хасалт. Хэрэгжих эрх = ролийн эрх + нэмсэн − хассан (/auth/login, /me-ийн role.permissions нь аль хэдийн энэ үр дүнтэй эрх).">
+          <Code>{`Res: 200 { "roles": [{ "roleId", "name", "description", "rolePermissions": [...],     // ролийн анхдагч эрх (систем админ)
+                       "editablePermissions": ["orders.itemPrice", ...],        // байгууллага нэмж/хасч болох эрх; бусад нь түгжигдсэн
+                       "add": [...], "remove": [...],                           // энэ байгууллагын одоогийн өөрчлөлт (хүчинтэй хэсэг)
+                       "effectivePermissions": [...] }] }`}</Code>
+        </Endpoint>
+
+        <Endpoint method="GET" path="/api/v1/roles/[id]/override" auth="bearer" bearerLabel={BEARER} tags={["Эрх: employees.view / employees.create / employees.edit (аль нэг)"]} title="Нэг ролийн override (өөрчилж болох эрхгүй ч буцна — editablePermissions = []).">
+          <Code>{`Res: 200 { "override": { "roleId", "name", "rolePermissions", "editablePermissions", "add", "remove", "effectivePermissions" } }
+404 { "error": "Роль олдсонгүй.", "code": "NOT_FOUND" }`}</Code>
+        </Endpoint>
+
+        <Endpoint method="PUT" path="/api/v1/roles/[id]/override" auth="bearer" bearerLabel={BEARER} tags={["Зөвхөн байгууллагын эзэн (isOwner)"]} title="Ролиос эрх нэмэх/хасах. ЗӨВХӨН editablePermissions доторх кодод хүчинтэй. add + remove хоёулаа хоосон = анхдагч руу буцаана.">
+          <Code>{`Req:  { "add": ["customers.view"], "remove": ["orders.itemPrice"] }   // нэг код хоёуланд байж болохгүй
+Res:  200 { "override": { ... } }
+403   { "error": "Зөвхөн байгууллагын эзэн өөрчилнө." } | { "error": "...", "code": "LOCKED" }   // системээс түгжсэн роль
+404   { "error": "Роль олдсонгүй.", "code": "NOT_FOUND" }
+422   { "error": "Оруулсан мэдээлэл буруу.", "code": "VALIDATION", "fieldErrors": { "remove": "Энэ эрхийг өөрчлөх боломжгүй (түгжигдсэн): orders.editOwn" } }`}</Code>
+        </Endpoint>
+
+        <Endpoint method="GET" path="/api/v1/employees/[id]/restrictions" auth="bearer" bearerLabel={BEARER} tags={["Эрх: employees.edit"]} title="Ажилтны эрхийн хязгаарлалт: grantedPermissions = ролиос (байгууллагын өөрчлөлтийн дараах) эрх, denied = хассан эрх, effectivePermissions = үр дүн.">
+          <Code>{`Res: 200 { "restrictions": { "employeeId", "grantedPermissions": [...], "denied": [...], "effectivePermissions": [...] } }
+404 { "error": "Ажилтан олдсонгүй.", "code": "NOT_FOUND" }`}</Code>
+        </Endpoint>
+
+        <Endpoint method="PUT" path="/api/v1/employees/[id]/restrictions" auth="bearer" bearerLabel={BEARER} tags={["Эрх: employees.edit", "Идэвхтэй захиалга шаардана"]} title="Ажилтнаас зарим эрхийг хасна. Эрх НЭМЭХГҮЙ (зөвхөн одоо байгаа эрх). Эзэн болон өөрийгөө хязгаарлах, өөрөөсөө илүү эрхтэй ажилтныг хязгаарлах боломжгүй. Хоосон жагсаалт = хязгаарлалтыг арилгана.">
+          <Code>{`Req:  { "denied": ["orders.itemPrice", "customers.view"] }
+Res:  200 { "restrictions": { ... } }
+403   { "error": "...", "code": "OWNER_TARGET" | "SELF" | "SUPERIOR_TARGET" }
+404   { "error": "Ажилтан олдсонгүй.", "code": "NOT_FOUND" }
+422   { "error": "Оруулсан мэдээлэл буруу.", "code": "VALIDATION", "fieldErrors": { "denied": "Тодорхойгүй эрхийн код: ..." } }`}</Code>
         </Endpoint>
 
         <Endpoint method="GET" path="/api/v1/permissions" auth="bearer" bearerLabel={BEARER} tags={["Эрх: employees.view / employees.create / employees.edit (аль нэг)"]} title="Эрхийн каталог (тенантаас үл хамаарна) — үүргийн эрх сонгогч бүтээхэд.">

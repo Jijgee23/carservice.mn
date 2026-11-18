@@ -71,6 +71,10 @@ export type EmployeesClient = {
   role: {
     findFirst(args: Args): Promise<Args>;
   };
+  /** Байгууллагын роль override — effective эрх тооцоход (байхгүй бол override үгүй гэж үзнэ). */
+  tenantRoleOverride?: {
+    findUnique(args: Args): Promise<Args>;
+  };
   serviceOrder: {
     count(args: Args): Promise<Args>;
   };

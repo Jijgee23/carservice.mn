@@ -1,6 +1,7 @@
 // Framework-free tenant/role/branch guards — moved verbatim from
 // `app/_actions/employees.ts`.
 
+import { EFFECTIVE_ROLE_SELECT, resolveEffectiveRole } from "@/lib/auth/load-effective";
 import type { BranchRow, EmployeeActor, EmployeesClient, RoleRow } from "./types";
 
 /**
@@ -46,19 +47,76 @@ export async function filterOwnBranchIds(
 
 /**
  * Роль системийн (глобал) тул tenant шүүлтгүй — зөвхөн байгаа, идэвхтэй эсэхийг
- * шалгана (идэвхгүй ролийг шинээр оноохгүй).
+ * шалгана (идэвхгүй ролийг шинээр оноохгүй). `tenantId` өгвөл буцаах `permissions` нь
+ * тухайн байгууллагын override-той ҮР ДҮНТЭЙ эрх — оноогч өөрөөсөө илүү эрхтэй ролийг
+ * (байгууллагын нэмсэн эрхийг оруулаад) өгөхөөс сэргийлэх шалгалтад.
  */
 export async function ensureRoleAssignable(
   db: EmployeesClient,
   roleId: string,
+  tenantId?: string,
 ): Promise<{ ok: boolean; name?: string; permissions?: string[] }> {
-  const role: RoleRow | null = await db.role.findFirst({
+  const role: (RoleRow & { tenantEditablePermissions?: string[] }) | null = await db.role.findFirst({
     where: { id: roleId },
-    select: { id: true, name: true, isActive: true, permissions: true },
+    select: { id: true, name: true, isActive: true, permissions: true, tenantEditablePermissions: true },
   });
   if (!role || !role.isActive) return { ok: false };
-  return { ok: true, name: role.name, permissions: role.permissions ?? [] };
+  const rolePerms = role.permissions ?? [];
+  let permissions = rolePerms;
+  if (tenantId && db.tenantRoleOverride && (role.tenantEditablePermissions?.length ?? 0) > 0) {
+    const eff = await resolveEffectiveRole(
+      {
+        isOwner: false,
+        tenantId,
+        deniedPermissions: [],
+        role: {
+          id: role.id,
+          name: role.name ?? "",
+          isActive: true,
+          permissions: rolePerms,
+          tenantEditablePermissions: role.tenantEditablePermissions ?? [],
+        },
+      },
+      db as never,
+    );
+    permissions = eff?.permissions ?? rolePerms;
+  }
+  return { ok: true, name: role.name, permissions };
 }
+
+/** Үйлдлийн объект болох ажилтны ҮР ДҮНТЭЙ эрх (роль + байгууллагын override − хязгаарлалт). Эзэн/роль-гүй → []. */
+export async function targetEffectivePermissions(
+  db: EmployeesClient,
+  tenantId: string,
+  target: {
+    isOwner?: boolean;
+    deniedPermissions?: string[];
+    role?: (Partial<RoleRow> & { tenantEditablePermissions?: string[] }) | null;
+  },
+): Promise<string[]> {
+  const role = target.role;
+  if (!role) return [];
+  const rolePerms = role.permissions ?? [];
+  // Override-ийн нөлөөг уншихад db.tenantRoleOverride хэрэгтэй (fake/хуучин client-д байхгүй бол алгасна).
+  const eff = await resolveEffectiveRole(
+    {
+      isOwner: Boolean(target.isOwner),
+      tenantId,
+      deniedPermissions: target.deniedPermissions ?? [],
+      role: {
+        id: role.id ?? "",
+        name: role.name ?? "",
+        isActive: role.isActive !== false,
+        permissions: rolePerms,
+        tenantEditablePermissions: db.tenantRoleOverride ? (role.tenantEditablePermissions ?? []) : [],
+      },
+    },
+    db as never,
+  );
+  return eff?.permissions ?? rolePerms;
+}
+
+export { EFFECTIVE_ROLE_SELECT };
 
 /**
  * Owner биш actor зөвхөн өөрт байгаа эрхүүдийн дэд олонлог болох үүргийг л
