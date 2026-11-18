@@ -4,7 +4,6 @@
 // модуль бүрийн харах эрх (canView). Өдрийн хил — Asia/Ulaanbaatar (bookingDayBounds).
 
 import { Prisma } from "@/app/generated/prisma/client";
-import type { requireUser } from "@/lib/auth";
 import { orderReadWhere } from "@/lib/auth/order-access";
 import { canView, workingBranchScopeId } from "@/lib/auth/roles";
 import { bookingDateKey, bookingDayBounds } from "@/lib/booking-time";
@@ -20,7 +19,17 @@ import {
 import { RECEIVABLE_ORDER_SELECT, RECEIVABLE_ORDER_WHERE } from "@/lib/orders/order-receivable";
 import { prisma } from "@/lib/prisma";
 
-type User = Awaited<ReturnType<typeof requireUser>>;
+/**
+ * Loader-т хэрэгтэй хамгийн бага хэрэглэгч: вэбийн requireUser() болон API-ийн
+ * ApiUser (workingBranchId-г X-Working-Branch-аас тооцоолж дамжуулна) хоёул таарна.
+ */
+export type FocusUser = {
+  id: string;
+  tenantId: string;
+  isOwner: boolean;
+  role?: { permissions: string[] } | null;
+  workingBranchId?: string;
+};
 
 const IN_PROGRESS_LIMIT = 200;
 const APPOINTMENT_LIMIT = 40;
@@ -77,7 +86,7 @@ function personName(p: { firstName: string; lastName: string } | null): string |
   return p ? `${p.lastName} ${p.firstName}`.trim() : null;
 }
 
-export async function loadDashboardFocus(user: User, now = new Date()): Promise<DashboardFocus> {
+export async function loadDashboardFocus(user: FocusUser, now = new Date()): Promise<DashboardFocus> {
   const todayKey = bookingDateKey(now);
   const { start: todayStart, end: tomorrowStart } = bookingDayBounds(todayKey);
   const monthStart = bookingDayBounds(`${todayKey.slice(0, 8)}01`).start;

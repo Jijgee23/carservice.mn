@@ -10,7 +10,7 @@ import { WebPushBar } from "@/app/_components/web-push";
 import { BranchRosterSync } from "./branch-roster-sync";
 import { BranchSwitcher } from "./branch-switcher";
 import { requireUser } from "@/lib/auth";
-import { canChooseAllBranches, eligibleBranchIds } from "@/lib/auth/roles";
+import { canChooseAllBranches, canCreate, canView, eligibleBranchIds, hasPermission } from "@/lib/auth/roles";
 import { ALL_BRANCHES } from "@/lib/auth/session";
 import { resolveTodayLockedBranch } from "@/lib/employee-branch-lock";
 import { MODULE_LIMIT_CODES } from "@/lib/plan-limits";
@@ -20,6 +20,7 @@ import { prisma } from "@/lib/prisma";
 import { getSubscriptionState } from "@/lib/subscription-server";
 import { setTenantContext } from "@/lib/tenant-context";
 import { loadServiceKeyChoices } from "@/lib/tenant-service-keys";
+import { QuickActions } from "./_components/quick-actions";
 import { ServiceKeysGate } from "./_components/service-keys-gate";
 import { ShopNameGate } from "./_components/shop-name-gate";
 
@@ -90,6 +91,7 @@ export default async function DashboardLayout({
       label: SINGLE_BRANCH_LABEL,
     }
     : null;
+  const canSeeOrders = canView(user, "orders") || hasPermission(user, "orders.viewOwn");
   const lockedModules = MODULE_LIMIT_CODES.filter((m) => !enabledModules.has(m));
   // Эзэн «үзүүлдэг үйлчилгээ»-гээ баталгаажуулаагүй бол (шинэ бүртгэл эсвэл
   // хуучин байгууллага) хааж болохгүй dialog — /book, /discover хайлтад хэрэгтэй.
@@ -141,6 +143,7 @@ export default async function DashboardLayout({
 
          <div className="px-4 sm:px-6 lg:px-8 pt-3">
   <div className="flex flex-col sm:flex-row sm:items-stretch gap-3">
+              {canSeeOrders ? <QuickActions canCreateOrder={canCreate(user, "orders")} /> : null}
               {!branchVisibility.hideBranches &&
                 (user.workingBranchId === ALL_BRANCHES || user.workingBranch) ? (
                 <BranchSwitcher

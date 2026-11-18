@@ -408,6 +408,34 @@ Res:  200 { "overview": {
                               "items": [{ "status", "kind" }] }] } }`}</Code>
         </Endpoint>
 
+        <Endpoint method="GET" path="/api/v1/home" auth="bearer" bearerLabel={BEARER} title="Дүрээр тохируулсан нүүр дэлгэц — вэб dashboard-тай ИЖИЛ дүр, ИЖИЛ тоо. Дүрийг ЭРХЭЭС тодорхойлно (role-ийн нэрээс биш); өгөгдөл бүр эрх, салбараар (X-Working-Branch) тасалддаг тул дүр буруу таарсан ч эрхгүй зүйл ил гарахгүй.">
+          <Code>{`Res: 200 {
+  "persona": "manager" | "mechanic" | "frontdesk" | "cashier",
+  // mechanic = зөвхөн ӨӨРИЙН хуудас (orders.viewOwn); cashier = мөнгө (cash.manage/payments.view), цаг захиалгагүй;
+  // frontdesk = цаг захиалга, мөнгөгүй; бусад + админ = manager
+  "layout": {
+    "headline": "Миний ажил",
+    "attention": true,
+    "kpis": ["openOrders", "monthCompleted"],         // openOrders|createdToday|monthCompleted|paymentsToday|receivable|reviews
+    "main": ["work"], "side": [],                      // widget-ийн дараалал: appointments|work|cash|payments|receivable
+    "income": false, "recent": true, "base": false,    // income/base-ийн өгөгдөл энд ирэхгүй — GET /overview
+    "actions": ["my-orders"]                           // new-order|new-appointment|collect-payment|my-orders
+  },
+  "access": { "orders": true, "appointments": false, "payments": false, "reviews": false },   // false = энэ хэсгийг харуулахгүй
+  "orders": { "scheduled", "inProgress", "createdToday", "staleScheduled", "ready", "overdue", "unfilledDiagnostics",
+    "top": [{ "id", "number", "customerName", "plate", "vehicle", "masterName", "expectedFinishAt": "ISO" | null, "overdue",
+              "work": { "active", "done", "unfilledDiagnostics", "ready", "percent" } }],   // анхаарах эрэмбээр (хэтэрсэн → бэлэн)
+    "workload": [{ "id", "name", "count", "overdue" }],
+    "monthCompleted", "monthRevenue": "1200000", "monthAverage": "300000" | null,
+    "receivable": { "total": "150000", "count": 2, "buckets": ["0–30 хоног", "31–60", "60+"] } },
+  "appointments": { "today": [{ "id", "requestedAt": "ISO", "status", "arrived", "converted", "name", "plate", "masterName" }], "pending": 1 },
+  "payments": { "total": "80000", "count": 2, "byMethod": [{ "method", "amount", "count" }] },
+  "reviews": { "average": 4.6 | null, "count", "unreplied" }
+}
+401 { "error": "Нэвтрэх шаардлагатай эсвэл token хүчингүй." }
+403 X-Working-Branch зөвшөөрөгдөөгүй/түгжигдсэн салбар`}</Code>
+        </Endpoint>
+
         <Endpoint method="GET" path="/api/v1/reports" auth="bearer" bearerLabel={BEARER} tags={["Нэвтэрсэн бүх ажилтан", "branch-scoped"]} title="Тайлангийн өгөгдөл (орлого, статус, төрөл, салбар, мастер, үйлчлүүлэгч, сэлбэг). Өгөөгүй бол «энэ сар».">
           <Code>{`Query: ?from=YYYY-MM-DD&to=YYYY-MM-DD   // хоёулаа эсвэл аль нь ч биш; from ≤ to, ≤ 366 хоног
 Res:  200 { "range": { "from", "to", "label", "key" },

@@ -2378,3 +2378,14 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - GET /api/v1/app/booking-fee (нийтийн): { fee: { amount, ttlMinutes } | null } — захиалгаас өмнө харуулах.
 - API docs шинэчлэгдэв; тест tests/tenant-service-keys.test.ts.
 - (2026-11-17) Mobile хураамжийн объект (lib/appointment-payments.ts serializeAppointmentFee) `payBy` (ISO, createdAt + 15 мин; төлөгдсөн бол null) — /api/v1/app/appointments жагсаалт/POST, /[id]/payment, /retry. Апп төлбөрийн дэлгэцийг дахин нээхэд ч хугацааг харуулна.
+
+[2026-11-18] Tenant UX + mobile профайл API
+- Sidebar: өдөр тутмын ажил (хуудас, цаг захиалга, үйлчлүүлэгч, касс) дээр, удирдлага (үйлчилгээ, ажилтан, салбар) доор — NAV_PRIORITY тогтвортой sort (app/_components/admin-sidebar.tsx); эрх/багцын шүүлт өөрчлөгдөөгүй.
+- Dashboard толгойд байнгын QuickActions (app/dashboard/_components/quick-actions.tsx): дугаараар хайх (GET /dashboard/orders?q=) + «+ Шинэ хуудас» (orders.create-тэй үед). Хайлт orders.view/viewOwn-тэй үед л.
+- Mobile (customer): GET/PATCH /api/v1/app/me — name/email засах (lib/auth/account-profile.ts validateAccountProfileInput; утас солихгүй; rate limit 30/10мин). API docs шинэчлэгдэв; тест tests/account-profile-validate.test.ts (6).
+
+[2026-11-18] Дүрээр тохируулсан нүүр дэлгэц (web + mobile)
+- lib/dashboard-persona.ts: resolveHomePersona (эрхээс: owner→manager; orders.viewOwn→mechanic; мөнгө+цаг захиалгагүй→cashier; цаг захиалга+мөнгөгүй→frontdesk; бусад→manager) + homeLayoutFor (kpis/main/side/income/recent/base/actions). Role-ийн нэрээс хамаарахгүй (тенант бүр өөрийн role үүсгэдэг).
+- app/dashboard/page.tsx layout-аар зурагдана: KPI шүүлт, main/side widget дараалал, income/base нуух, дүрийн үндсэн үйлдэл («Төлбөр авах», «Миний ажил»). Өгөгдөл өмнөх шигээ эрх+салбараар тасалддаг (loadDashboardFocus) — дүр зөвхөн байрлал.
+- GET /api/v1/home (app/api/v1/home/route.ts, lib/dashboard-home-dto.ts): вэбтэй ижил persona/layout + focus (Decimal→string, Date→ISO), X-Working-Branch хүндэтгэнэ. lib/dashboard-focus.ts FocusUser бүтцийн төрөл (вэб+API хоёул таарна). API docs шинэчлэгдэв.
+- Тест: tests/dashboard-persona.test.ts (8), tests/dashboard-home-dto.test.ts (3).

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { requireUser } from "@/lib/auth";
 import { canCreate, userRoleLabel } from "@/lib/auth/roles";
 import {
@@ -18,6 +18,7 @@ import { IncomeBarChart } from "./income-bar-chart";
 import { CashOverview } from "./cash-overview";
 import { type Trend, loadOverviewData } from "@/lib/overview";
 import { loadDashboardFocus, type DashboardFocus } from "@/lib/dashboard-focus";
+import { resolveHomeLayout, type HomeKpi, type HomeWidget } from "@/lib/dashboard-persona";
 import { INCOME_QUICK_RANGES, type IncomeRangeKey } from "./income-range";
 import { formatDaysLeft } from "@/lib/subscription";
 import type { AppointmentStatus } from "@/app/generated/prisma/client";
@@ -170,6 +171,16 @@ export default async function DashboardPage({
     activeSub?.expiresAt && activeSub.daysLeft <= SUBSCRIPTION_WARN_DAYS ? activeSub : null;
   const { orders, appointments, payments, reviews, access } = focus;
   const openOrders = orders.scheduled + orders.inProgress;
+  const layout = resolveHomeLayout(user);
+  const kpiOn = (k: HomeKpi) => layout.kpis.includes(k);
+  const widgets: Record<HomeWidget, ReactNode> = {
+    appointments: access.appointments ? <TodayAppointments items={appointments.today} /> : null,
+    work: access.orders ? <WorkInProgress focus={focus} /> : null,
+    cash: <CashOverview user={user} compact />,
+    payments: access.payments ? <PaymentsToday focus={focus} /> : null,
+    receivable: access.orders && orders.receivable.count > 0 ? <ReceivableAgingCard focus={focus} /> : null,
+  };
+  const hasSide = layout.side.length > 0;
 
   return (
     <div className="p-4 sm:p-6 flex flex-col gap-6">
@@ -179,11 +190,11 @@ export default async function DashboardPage({
           <p className="font-plex-mono text-[11px] uppercase tracking-[0.12em] text-[var(--oc-muted3)]">{today}</p>
           <h1 className="mt-1 text-2xl font-semibold text-[var(--oc-ink)]">Сайн байна уу, {user.firstName}!</h1>
           <p className="mt-0.5 text-sm text-[var(--oc-muted3)]">
-            {user.tenant.name} · {userRoleLabel(user)}
+            {user.tenant.name} · {userRoleLabel(user)} · {layout.headline}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canCreate(user, "appointments") ? (
+          {layout.actions.includes("new-appointment") && canCreate(user, "appointments") ? (
             <Link
               href="/dashboard/appointments/new"
               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--oc-line)] px-3.5 py-2 text-sm font-medium text-[var(--oc-ink2)] transition-colors hover:border-[var(--oc-line2)] hover:text-[var(--oc-ink)]"
@@ -191,12 +202,28 @@ export default async function DashboardPage({
               + Цаг захиалга
             </Link>
           ) : null}
-          {canCreate(user, "orders") ? (
+          {layout.actions.includes("new-order") && canCreate(user, "orders") ? (
             <Link
               href="/dashboard/orders/new"
               className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--oc-accent)] px-3.5 py-2 text-sm font-semibold text-[var(--oc-on-accent)] transition-colors hover:bg-[var(--oc-accent-hi)]"
             >
               + Засварын хуудас
+            </Link>
+          ) : null}
+          {layout.actions.includes("collect-payment") && access.orders ? (
+            <Link
+              href="/dashboard/orders?unpaid=1"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--oc-accent)] px-3.5 py-2 text-sm font-semibold text-[var(--oc-on-accent)] transition-colors hover:bg-[var(--oc-accent-hi)]"
+            >
+              Төлбөр авах
+            </Link>
+          ) : null}
+          {layout.actions.includes("my-orders") && access.orders ? (
+            <Link
+              href="/dashboard/orders/in-progress"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--oc-accent)] px-3.5 py-2 text-sm font-semibold text-[var(--oc-on-accent)] transition-colors hover:bg-[var(--oc-accent-hi)]"
+            >
+              Миний ажил
             </Link>
           ) : null}
         </div>
@@ -237,35 +264,37 @@ export default async function DashboardPage({
 
       {/* Гол үзүүлэлтүүд */}
       <section aria-label="Гол үзүүлэлтүүд" className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6">
-        {access.orders ? (
-          <>
-            <Kpi
-              label="Идэвхтэй хуудас"
-              value={openOrders.toLocaleString("mn-MN")}
-              sub={`${orders.inProgress} хийгдэж буй · ${orders.scheduled} товлосон`}
-              href="/dashboard/orders"
-              trend={orderTrend}
-            />
-            <Kpi
-              label="Өнөөдөр нээсэн"
-              value={orders.createdToday.toLocaleString("mn-MN")}
-              sub="шинэ засварын хуудас"
-              href="/dashboard/orders"
-            />
-            <Kpi
-              label="Энэ сар дуусгасан"
-              value={orders.monthCompleted.toLocaleString("mn-MN")}
-              sub={
-                orders.monthAverage
-                  ? `Дундаж ${formatTugrik(orders.monthAverage.toFixed(0))}`
-                  : "Дундаж дүн —"
-              }
-              href="/dashboard/orders?status=COMPLETED"
-              trend={completedTrend}
-            />
-          </>
+        {access.orders && kpiOn("openOrders") ? (
+          <Kpi
+            label="Идэвхтэй хуудас"
+            value={openOrders.toLocaleString("mn-MN")}
+            sub={`${orders.inProgress} хийгдэж буй · ${orders.scheduled} товлосон`}
+            href="/dashboard/orders"
+            trend={orderTrend}
+          />
         ) : null}
-        {access.payments ? (
+        {access.orders && kpiOn("createdToday") ? (
+          <Kpi
+            label="Өнөөдөр нээсэн"
+            value={orders.createdToday.toLocaleString("mn-MN")}
+            sub="шинэ засварын хуудас"
+            href="/dashboard/orders"
+          />
+        ) : null}
+        {access.orders && kpiOn("monthCompleted") ? (
+          <Kpi
+            label="Энэ сар дуусгасан"
+            value={orders.monthCompleted.toLocaleString("mn-MN")}
+            sub={
+              orders.monthAverage
+                ? `Дундаж ${formatTugrik(orders.monthAverage.toFixed(0))}`
+                : "Дундаж дүн —"
+            }
+            href="/dashboard/orders?status=COMPLETED"
+            trend={completedTrend}
+          />
+        ) : null}
+        {access.payments && kpiOn("paymentsToday") ? (
           <Kpi
             label="Өнөөдөр хүлээн авсан"
             value={formatTugrik(payments.total.toString())}
@@ -273,7 +302,7 @@ export default async function DashboardPage({
             tone="ok"
           />
         ) : null}
-        {access.orders ? (
+        {access.orders && kpiOn("receivable") ? (
           <Kpi
             label="Авлага"
             value={formatTugrik(orders.receivable.total.toString())}
@@ -282,7 +311,7 @@ export default async function DashboardPage({
             tone={orders.receivable.total.gt(0) ? "warn" : undefined}
           />
         ) : null}
-        {access.reviews ? (
+        {access.reviews && kpiOn("reviews") ? (
           <Kpi
             label="Үйлчлүүлэгчийн үнэлгээ"
             value={reviews.average != null ? `★ ${reviews.average.toFixed(1)}` : "—"}
@@ -294,101 +323,106 @@ export default async function DashboardPage({
 
       {/* Өнөөдөр + мөнгө */}
       <section className="grid gap-6 lg:grid-cols-3">
-        <div className="flex min-w-0 flex-col gap-6 lg:col-span-2">
-          {access.appointments ? <TodayAppointments items={appointments.today} /> : null}
-          {access.orders ? <WorkInProgress focus={focus} /> : null}
+        <div className={`flex min-w-0 flex-col gap-6 ${hasSide ? "lg:col-span-2" : "lg:col-span-3"}`}>
+          {layout.main.map((w) => (
+            <Fragment key={w}>{widgets[w]}</Fragment>
+          ))}
         </div>
-        <div className="flex min-w-0 flex-col gap-6">
-          <CashOverview user={user} compact />
-          {access.payments ? <PaymentsToday focus={focus} /> : null}
-          {access.orders && orders.receivable.count > 0 ? <ReceivableAgingCard focus={focus} /> : null}
-        </div>
+        {hasSide ? (
+          <div className="flex min-w-0 flex-col gap-6">
+            {layout.side.map((w) => (
+              <Fragment key={w}>{widgets[w]}</Fragment>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       {/* Гүйцэтгэлийн орлого */}
-      <section className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 sm:p-6 lg:p-8">
-        <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
-          <div>
-            <h2 className="font-semibold text-[var(--oc-ink)] mb-1">Гүйцэтгэлийн орлого</h2>
-            <p className="text-xs text-[var(--oc-muted3)]">
-              {incomeRange.label} · дууссан засварын хуудсын дүн (хүлээн авсан мөнгө биш)
-            </p>
-          </div>
-          <div className="text-right">
-            <div className="font-plex-mono text-2xl sm:text-3xl font-semibold text-[var(--oc-ink)] leading-none">
-              {formatTugrik(income.total)}
+      {layout.income ? (
+        <section className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 sm:p-6 lg:p-8">
+          <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
+            <div>
+              <h2 className="font-semibold text-[var(--oc-ink)] mb-1">Гүйцэтгэлийн орлого</h2>
+              <p className="text-xs text-[var(--oc-muted3)]">
+                {incomeRange.label} · дууссан засварын хуудсын дүн (хүлээн авсан мөнгө биш)
+              </p>
             </div>
-            {income.changePct != null ? (
-              <div
-                title="Өмнөх ижил урттай үетэй харьцуулав"
-                className={`mt-1.5 inline-flex items-center gap-1 font-plex-mono text-xs font-medium px-2 py-0.5 rounded-full ${incomeUp
-                  ? "bg-[var(--oc-ok)]/15 text-[var(--oc-ok)]"
-                  : "bg-red-500/15 text-red-300 light:text-red-700"
-                  }`}
-              >
-                <span>{incomeUp ? "▲" : "▼"}</span>
-                <span className="tabular-nums">
-                  {Math.abs(income.changePct).toFixed(1)}%
-                </span>
-                <span className="text-[var(--oc-muted3)]">өмнөх үе</span>
+            <div className="text-right">
+              <div className="font-plex-mono text-2xl sm:text-3xl font-semibold text-[var(--oc-ink)] leading-none">
+                {formatTugrik(income.total)}
               </div>
-            ) : null}
-            <div
-              title="Дотоод засварын дүн орлогод орохгүй"
-              className="mt-2 text-xs text-[var(--oc-muted3)]"
-            >
-              {INTERNAL_COST_LABEL}:{" "}
-              <span className="font-plex-mono text-[var(--oc-ink2)]">
-                {formatTugrik(internalCost.toString())}
-              </span>
+              {income.changePct != null ? (
+                <div
+                  title="Өмнөх ижил урттай үетэй харьцуулав"
+                  className={`mt-1.5 inline-flex items-center gap-1 font-plex-mono text-xs font-medium px-2 py-0.5 rounded-full ${incomeUp
+                    ? "bg-[var(--oc-ok)]/15 text-[var(--oc-ok)]"
+                    : "bg-red-500/15 text-red-300 light:text-red-700"
+                    }`}
+                >
+                  <span>{incomeUp ? "▲" : "▼"}</span>
+                  <span className="tabular-nums">
+                    {Math.abs(income.changePct).toFixed(1)}%
+                  </span>
+                  <span className="text-[var(--oc-muted3)]">өмнөх үе</span>
+                </div>
+              ) : null}
+              <div
+                title="Дотоод засварын дүн орлогод орохгүй"
+                className="mt-2 text-xs text-[var(--oc-muted3)]"
+              >
+                {INTERNAL_COST_LABEL}:{" "}
+                <span className="font-plex-mono text-[var(--oc-ink2)]">
+                  {formatTugrik(internalCost.toString())}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-2 flex-wrap mb-6">
-          {INCOME_QUICK_RANGES.map((q) => {
-            const active = incomeRange.key === q.key;
-            return (
-              <Link
-                key={q.key}
-                href={incomeRangeHref(q.key)}
-                className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${active
-                  ? "bg-[var(--oc-accent)]/15 text-[var(--oc-accent)] border border-[var(--oc-accent)]/30"
-                  : "text-[var(--oc-muted3)] hover:text-[var(--oc-ink2)] border border-[var(--oc-line)] hover:border-[var(--oc-line2)]"
-                  }`}
-              >
-                {q.label}
-              </Link>
-            );
-          })}
+          <div className="flex items-center gap-2 flex-wrap mb-6">
+            {INCOME_QUICK_RANGES.map((q) => {
+              const active = incomeRange.key === q.key;
+              return (
+                <Link
+                  key={q.key}
+                  href={incomeRangeHref(q.key)}
+                  className={`text-xs px-3 py-1.5 rounded-lg transition-colors ${active
+                    ? "bg-[var(--oc-accent)]/15 text-[var(--oc-accent)] border border-[var(--oc-accent)]/30"
+                    : "text-[var(--oc-muted3)] hover:text-[var(--oc-ink2)] border border-[var(--oc-line)] hover:border-[var(--oc-line2)]"
+                    }`}
+                >
+                  {q.label}
+                </Link>
+              );
+            })}
 
-          <form
-            className="flex flex-col sm:flex-row sm:ml-auto items-stretch sm:items-center gap-2 w-full sm:w-auto"
-            action="/dashboard"
-          >
-            <DatePicker
-              mode="range"
-              fromName="from"
-              toName="to"
-              defaultValue={{ from: params.from ?? "", to: params.to ?? "" }}
-              className="w-full sm:w-[15rem]"
-            />
-            <button
-              type="submit"
-              className="text-xs bg-[var(--oc-accent)] hover:bg-[var(--oc-accent-hi)] transition-colors px-5 py-3 text-left text-sm rounded-lg font-medium text-[var(--oc-on-accent)] shrink-0 w-full sm:w-auto"
+            <form
+              className="flex flex-col sm:flex-row sm:ml-auto items-stretch sm:items-center gap-2 w-full sm:w-auto"
+              action="/dashboard"
             >
-              Шүүх
-            </button>
-          </form>
-        </div>
+              <DatePicker
+                mode="range"
+                fromName="from"
+                toName="to"
+                defaultValue={{ from: params.from ?? "", to: params.to ?? "" }}
+                className="w-full sm:w-[15rem]"
+              />
+              <button
+                type="submit"
+                className="text-xs bg-[var(--oc-accent)] hover:bg-[var(--oc-accent-hi)] transition-colors px-5 py-3 text-left text-sm rounded-lg font-medium text-[var(--oc-on-accent)] shrink-0 w-full sm:w-auto"
+              >
+                Шүүх
+              </button>
+            </form>
+          </div>
 
-        <IncomeBarChart points={income.points} />
-      </section>
+          <IncomeBarChart points={income.points} />
+        </section>
+      ) : null}
 
       {/* Сүүлд шинэчлэгдсэн + бааз */}
       <section className="grid gap-6 lg:grid-cols-3">
         <Panel
-          className="lg:col-span-2"
+          className={layout.base ? "lg:col-span-2" : "lg:col-span-3"}
           title="Сүүлд шинэчлэгдсэн"
           action={<PanelLink href="/dashboard/orders">Бүгдийг үзэх →</PanelLink>}
           flush
@@ -425,14 +459,16 @@ export default async function DashboardPage({
           )}
         </Panel>
 
-        <Panel title="Бааз">
-          <div className="divide-y divide-[var(--oc-line)] text-sm">
-            <BaseRow label="Үйлчлүүлэгч" value={customerCount} href="/dashboard/customers" />
-            <BaseRow label="Машин" value={vehicleCount} href="/dashboard/vehicles" />
-            <BaseRow label="Ажилтан" value={employeeCount} href="/dashboard/employees" />
-            {branchCount > 1 ? <BaseRow label="Салбар" value={branchCount} href="/dashboard/branches" /> : null}
-          </div>
-        </Panel>
+        {layout.base ? (
+          <Panel title="Бааз">
+            <div className="divide-y divide-[var(--oc-line)] text-sm">
+              <BaseRow label="Үйлчлүүлэгч" value={customerCount} href="/dashboard/customers" />
+              <BaseRow label="Машин" value={vehicleCount} href="/dashboard/vehicles" />
+              <BaseRow label="Ажилтан" value={employeeCount} href="/dashboard/employees" />
+              {branchCount > 1 ? <BaseRow label="Салбар" value={branchCount} href="/dashboard/branches" /> : null}
+            </div>
+          </Panel>
+        ) : null}
       </section>
     </div>
   );
