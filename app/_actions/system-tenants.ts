@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { requireSuperAdmin } from "@/lib/auth/system";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
+import { activateTenant, suspendTenant } from "@/lib/system/tenants";
 
 function s(fd: FormData, key: string): string {
   const v = fd.get(key);
@@ -18,13 +19,9 @@ export async function suspendTenantAction(formData: FormData): Promise<ConfirmAc
   await requireSuperAdmin();
   const id = s(formData, "id");
   if (!id) return;
-  // Гараар зогсоосон — credit-ийн автомат нээлт хамаарахгүй (creditSuspended=false).
-  // update() нь олдохгүй id дээр P2025 шиддэг тул updateMany + count.
-  const res = await prisma.tenant.updateMany({
-    where: { id },
-    data: { suspended: true, creditSuspended: false },
-  });
-  if (res.count === 0) return { error: "Байгууллага олдсонгүй." };
+  // Логик нь lib/system/tenants.ts-д (мобайл POST /api/v1/system/tenants/[id]/suspend-тэй нэг).
+  const res = await suspendTenant(id);
+  if (!res.ok) return { error: "Байгууллага олдсонгүй." };
   revalidatePath("/system/tenants");
   revalidatePath(`/system/tenants/${id}`);
   revalidatePath("/system");
@@ -34,18 +31,9 @@ export async function activateTenantAction(formData: FormData): Promise<void> {
   await requireSuperAdmin();
   const id = s(formData, "id");
   if (!id) return;
-  // Credit-ээр зогсоосон байгууллагыг гараар сэргээвэл админы шийдвэр давуу:
-  // автомат блокоос чөлөөлнө (creditExempt), эс бөгөөс маргаашийн cron дахин зогсооно.
-  const current = await prisma.tenant.findUnique({ where: { id }, select: { creditSuspended: true } });
-  if (!current) return; // энгийн form action (void) — олдохгүй бол чимээгүй буцна
-  await prisma.tenant.update({
-    where: { id },
-    data: {
-      suspended: false,
-      creditSuspended: false,
-      ...(current.creditSuspended ? { creditExempt: true } : {}),
-    },
-  });
+  // Credit-ээр зогсоосон байгууллагыг гараар сэргээвэл админы шийдвэр давуу (creditExempt) — lib/system/tenants.ts.
+  const res = await activateTenant(id);
+  if (!res.ok) return; // энгийн form action (void) — олдохгүй бол чимээгүй буцна
   revalidatePath("/system/tenants");
   revalidatePath(`/system/tenants/${id}`);
   revalidatePath("/system");
