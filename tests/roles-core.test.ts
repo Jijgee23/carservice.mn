@@ -38,6 +38,7 @@ type FakeRole = {
   name: string;
   description: string | null;
   permissions: string[];
+  tenantEditablePermissions?: string[];
   isActive: boolean;
   userCount?: number;
 };
@@ -63,6 +64,7 @@ function makeFakeDb(seed: { roles?: FakeRole[] } = {}) {
           name: data.name as string,
           description: (data.description as string | null) ?? null,
           permissions: (data.permissions as string[]) ?? [],
+          tenantEditablePermissions: (data.tenantEditablePermissions as string[]) ?? [],
           isActive: (data.isActive as boolean) ?? true,
         };
         roles.push(r);
@@ -158,7 +160,12 @@ test("createRole: success returns audit-ready summary/after", async () => {
   assert.equal(result.ok, true);
   if (!result.ok) throw new Error("unreachable");
   assert.equal(result.summary, "Мастер · 2 эрх");
-  assert.deepEqual(result.after, { name: "Мастер", permissions: ["orders.view", "orders.edit"], isActive: true });
+  assert.deepEqual(result.after, {
+    name: "Мастер",
+    permissions: ["orders.view", "orders.edit"],
+    tenantEditablePermissions: [],
+    isActive: true,
+  });
 });
 
 test("createRole: validation error surfaces field errors, not a message", async () => {
@@ -202,7 +209,12 @@ test("updateRole: success returns before/after for audit", async () => {
   const result = await core.updateRole(db, "r1", fd({ name: "Мастер 2", permissions: ["orders.view", "orders.edit"] }));
   assert.equal(result.ok, true);
   if (!result.ok) throw new Error("unreachable");
-  assert.deepEqual(result.before, { name: "Мастер", permissions: ["orders.view"], isActive: true });
+  assert.deepEqual(result.before, {
+    name: "Мастер",
+    permissions: ["orders.view"],
+    tenantEditablePermissions: [],
+    isActive: true,
+  });
   assert.equal(result.summary, "Мастер 2 · 2 эрх");
 });
 
@@ -265,6 +277,7 @@ test("toRoleDto emits only whitelisted fields", () => {
     name: "Мастер",
     description: "d",
     permissions: ["orders.view"],
+    editablePermissions: [],
     isActive: true,
     key: null,
     userCount: 2,
@@ -305,4 +318,62 @@ test("SYSTEM_ROLE_DEFAULTS: 5 built-in roles, valid codes, migration SQL in sync
   // Менежер — зөвхөн харах.
   const manager = SYSTEM_ROLE_DEFAULTS.find((r) => r.key === "MANAGER")!;
   assert.ok(manager.permissions.every((c) => /\.view$|^orders\.itemHistory$/.test(c)));
+});
+
+// --- tenantEditablePermissions (role delegation) ----------------------------
+
+test("validate: tenantEditable parsed, invalid and duplicate codes dropped, independent of permissions", () => {
+  const { data, errors } = validate.validate(
+    fd({
+      name: "Засварчин",
+      permissions: ["orders.viewOwn"],
+      tenantEditable: ["orders.itemPrice", "orders.itemPrice", "bogus.code", "payments.view"],
+    }),
+  );
+  assert.equal(errors.name, undefined);
+  assert.deepEqual(data.tenantEditablePermissions, ["orders.itemPrice", "payments.view"]);
+  assert.deepEqual(data.permissions, ["orders.viewOwn"]);
+});
+
+test("validate: no tenantEditable field → empty (everything locked by default)", () => {
+  const { data } = validate.validate(fd({ name: "X", permissions: ["orders.viewOwn"] }));
+  assert.deepEqual(data.tenantEditablePermissions, []);
+});
+
+test("createRole / updateRole persist tenantEditablePermissions and report before/after", async () => {
+  const { db, roles } = makeFakeDb();
+  const created = await core.createRole(
+    db as never,
+    fd({ name: "Касс", permissions: ["payments.view"], tenantEditable: ["payments.create"] }),
+  );
+  assert.equal(created.ok, true);
+  assert.deepEqual((roles[0] as unknown as { tenantEditablePermissions: string[] }).tenantEditablePermissions, ["payments.create"]);
+  if (created.ok) assert.deepEqual((created.after as { tenantEditablePermissions: string[] }).tenantEditablePermissions, ["payments.create"]);
+
+  const updated = await core.updateRole(
+    db as never,
+    roles[0].id,
+    fd({ name: "Касс", permissions: ["payments.view"], tenantEditable: ["payments.create", "payments.edit"] }),
+  );
+  assert.equal(updated.ok, true);
+  if (updated.ok) {
+    assert.deepEqual((updated.after as { tenantEditablePermissions: string[] }).tenantEditablePermissions, ["payments.create", "payments.edit"]);
+    // before reflects what was stored (fake row stored the field on create)
+    assert.deepEqual((updated.before as { tenantEditablePermissions: string[] }).tenantEditablePermissions, ["payments.create"]);
+  }
+});
+
+test("clearing all tenantEditable on update re-locks the role", async () => {
+  const { db, roles } = makeFakeDb();
+  await core.createRole(db as never, fd({ name: "Касс", permissions: ["payments.view"], tenantEditable: ["payments.create"] }));
+  const r = await core.updateRole(db as never, roles[0].id, fd({ name: "Касс", permissions: ["payments.view"] }));
+  assert.equal(r.ok, true);
+  assert.deepEqual((roles[0] as unknown as { tenantEditablePermissions: string[] }).tenantEditablePermissions, []);
+});
+
+test("toRoleDto exposes editablePermissions (default [])", () => {
+  const base = { id: "r1", name: "Касс", description: null, permissions: ["payments.view"], isActive: true };
+  assert.deepEqual(dto.toRoleDto(base).editablePermissions, []);
+  assert.deepEqual(dto.toRoleDto({ ...base, tenantEditablePermissions: ["payments.create"] }).editablePermissions, ["payments.create"]);
+  assert.equal(dto.ROLE_SELECT.tenantEditablePermissions, true);
 });

@@ -12,6 +12,7 @@ export const ROLE_SELECT = {
   name: true,
   description: true,
   permissions: true,
+  tenantEditablePermissions: true,
   isActive: true,
 } satisfies Prisma.RoleSelect;
 
@@ -20,6 +21,7 @@ export const SYSTEM_MANAGED_MESSAGE =
   "Роль системээс тохируулагдана. Системийн админтай холбогдоно уу.";
 
 export type FullRoleRow = Required<Pick<RoleRow, "id" | "name" | "description" | "permissions" | "isActive">> & {
+  tenantEditablePermissions?: string[];
   key?: string | null;
   _count?: { users: number };
 };
@@ -29,6 +31,8 @@ export type RoleDto = {
   name: string;
   description: string | null;
   permissions: string[];
+  /** Байгууллага нэмж/хасч болох эрхүүд (систем админ тохируулсан); бусад нь түгжигдсэн. */
+  editablePermissions: string[];
   isActive: boolean;
   /** Үндсэн системийн ролийн түлхүүр (MECHANIC…); null = нэмэлт роль. */
   key: string | null;
@@ -41,6 +45,7 @@ export function toRoleDto(row: FullRoleRow): RoleDto {
     name: row.name,
     description: row.description,
     permissions: row.permissions,
+    editablePermissions: row.tenantEditablePermissions ?? [],
     isActive: row.isActive,
     key: row.key ?? null,
     ...(row._count ? { userCount: row._count.users } : {}),

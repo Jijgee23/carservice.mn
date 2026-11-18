@@ -3,6 +3,7 @@ import { Btn, BtnLink } from "@/app/_components/landing-ops-ui";
 import { requireSuperAdmin } from "@/lib/auth/system";
 import {
   ACTIONS,
+  PERMISSIONS,
   RESOURCES,
   STANDALONE_PERMISSIONS,
 } from "@/lib/auth/permissions";
@@ -50,6 +51,7 @@ export default async function NewRolePage() {
           label: p.label,
           description: p.description,
         }))}
+        permissionCatalog={PERMISSIONS.map((p) => ({ code: p.code, label: p.label, group: p.group }))}
       />
     </div>
   );

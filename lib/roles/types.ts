@@ -6,6 +6,7 @@ export type RoleRow = {
   name?: string;
   description?: string | null;
   permissions?: string[];
+  tenantEditablePermissions?: string[];
   isActive?: boolean;
   key?: string | null;
   _count?: { users: number };
@@ -32,5 +33,7 @@ export type ValidatedRole = {
   name: string;
   description: string | null;
   permissions: string[];
+  /** Байгууллага (эзэн) нэмж/хасч болох эрхүүд; бусад нь түгжигдсэн. */
+  tenantEditablePermissions: string[];
   isActive: boolean;
 };

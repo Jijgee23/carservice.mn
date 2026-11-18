@@ -29,11 +29,15 @@ type StandaloneItem = {
   description: string;
 };
 
+type CatalogItem = { code: string; label: string; group: string };
+
 type Initial = {
   id?: string;
   name: string;
   description: string | null;
   permissions: string[];
+  /** Байгууллага нэмж/хасч болох эрхүүд. */
+  tenantEditablePermissions?: string[];
   isActive: boolean;
 };
 
@@ -73,12 +77,15 @@ export function RoleForm({
   resources: allResources,
   actions,
   standalonePermissions,
+  permissionCatalog,
   hideBranches = false,
 }: {
   initial?: Initial;
   resources: ResourceRow[];
   actions: ActionCol[];
   standalonePermissions: StandaloneItem[];
+  /** Бүх эрхийн код (шошготой) — «Байгууллагад өөрчлөх эрх» хэсэгт. */
+  permissionCatalog: CatalogItem[];
   /** Энгийн багц (ганц салбар): «Салбар» нөөцийн мөрийг нууна. */
   hideBranches?: boolean;
 }) {
@@ -105,6 +112,31 @@ export function RoleForm({
     () => new Set(initial?.permissions ?? []),
   );
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
+  // Систем админ «байгууллага өөрчилж болно» гэж тэмдэглэсэн эрхүүд.
+  const [editable, setEditable] = useState<Set<string>>(
+    () => new Set(initial?.tenantEditablePermissions ?? []),
+  );
+
+  function toggleEditable(code: string) {
+    setDirty(true);
+    setEditable((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  }
+
+  const catalogGroups = useMemo(() => {
+    const map = new Map<string, CatalogItem[]>();
+    for (const p of permissionCatalog) {
+      if (hideBranches && p.code.startsWith("branches.")) continue;
+      const arr = map.get(p.group) ?? [];
+      arr.push(p);
+      map.set(p.group, arr);
+    }
+    return Array.from(map.entries());
+  }, [permissionCatalog, hideBranches]);
 
   function toggle(code: string) {
     setDirty(true);
@@ -230,8 +262,11 @@ export function RoleForm({
       {Array.from(selected).map((code) => (
         <input key={code} type="hidden" name="permissions" value={code} />
       ))}
+      {Array.from(editable).map((code) => (
+        <input key={code} type="hidden" name="tenantEditable" value={code} />
+      ))}
 
-      <SectionPanel index={1} total={2} title="Үндсэн мэдээлэл">
+      <SectionPanel index={1} total={3} title="Үндсэн мэдээлэл">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Ролийн нэр" htmlFor="name" error={fe.name}>
             <input
@@ -290,7 +325,7 @@ export function RoleForm({
 
       <SectionPanel
         index={2}
-        total={2}
+        total={3}
         title="Эрхийн тохиргоо"
         description="Нөөц бүрд харах, үүсгэх, засах, устгах эрхийг тус тусдаа сонгоно."
       >
@@ -428,6 +463,52 @@ export function RoleForm({
             </div>
           </div>
         ) : null}
+      </SectionPanel>
+
+      <SectionPanel
+        index={3}
+        total={3}
+        title="Байгууллагад өөрчлөх эрх"
+        description="Тэмдэглэсэн эрхийг байгууллага (эзэн) энэ ролиос хасах эсвэл нэмж болно. Тэмдэглээгүй эрх түгжигдсэн — байгууллага өөрчилж чадахгүй."
+      >
+        <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel2)] divide-y divide-[var(--oc-line)]">
+          {catalogGroups.map(([group, items]) => (
+            <div key={group} className="p-3">
+              <div className="font-plex-mono text-[10px] uppercase tracking-[0.08em] text-[var(--oc-muted4)] font-medium mb-2">
+                {group}
+              </div>
+              <div className="grid gap-1.5 sm:grid-cols-2">
+                {items.map((p) => {
+                  const inRole = selected.has(p.code);
+                  const on = editable.has(p.code);
+                  return (
+                    <label
+                      key={p.code}
+                      className={`flex items-start gap-2.5 rounded-lg border px-2.5 py-2 cursor-pointer transition-colors ${
+                        on
+                          ? "border-[var(--oc-accent)] bg-[var(--oc-accent)]/[0.08]"
+                          : "border-[var(--oc-line)] bg-[var(--oc-panel)] hover:border-[var(--oc-line2)]"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() => toggleEditable(p.code)}
+                        className="mt-0.5 accent-[var(--oc-accent)]"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[13px] text-[var(--oc-ink2)]">{p.label}</span>
+                        <span className="block text-[11px] text-[var(--oc-muted3)]">
+                          {inRole ? "Ролид байгаа — байгууллага хасч болно" : "Ролид байхгүй — байгууллага нэмж болно"}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
       </SectionPanel>
 
       {/* Sticky action bar — урт форм scroll хийхэд ч Хадгалах үргэлж харагдана */}

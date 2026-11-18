@@ -9,8 +9,8 @@ export function s(fd: FormData, key: string): string {
   return typeof v === "string" ? v.trim() : "";
 }
 
-export function getCheckedPermissions(fd: FormData): string[] {
-  const all = fd.getAll("permissions");
+export function getCheckedPermissions(fd: FormData, field = "permissions"): string[] {
+  const all = fd.getAll(field);
   const out: string[] = [];
   for (const v of all) {
     if (typeof v === "string" && isValidPermissionCode(v) && !out.includes(v)) {
@@ -39,6 +39,8 @@ export function validate(fd: FormData): {
   const description = s(fd, "description");
   const isActive = fd.get("isActive") !== "off";
   const permissions = getCheckedPermissions(fd);
+  // Байгууллага өөрчилж болох эрхүүд (форм дахь «Байгууллагад өөрчлөх эрх» хэсэг).
+  const tenantEditablePermissions = getCheckedPermissions(fd, "tenantEditable");
 
   const errors: Record<string, string> = {};
   if (!name) errors.name = "Үүргийн нэрээ оруулна уу.";
@@ -53,6 +55,7 @@ export function validate(fd: FormData): {
       name,
       description: description || null,
       permissions,
+      tenantEditablePermissions,
       isActive,
     },
     errors,

@@ -2396,3 +2396,8 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - lib/auth/load-effective.ts resolveEffectiveRole: вэб loader (lib/auth/index.ts) + API loader (api-token.ts) + login/activate/signup (api-login.ts) + /me PATCH — role.permissions = effective. Эзэн хөндөгдөхгүй; роль дээр «өөрчилж болох» эрх байхгүй бол override query 0.
 - Үлдсэн raw уншилт (дараагийн үе шатанд): lib/orders/order-commands.ts:191, order-assignable, notifications:643, employees/core+guards.
 - Тест: effective-permissions (12), load-effective (8).
+
+[2026-11-18] Ролийн эрхийн 3 давхарга — 2-р үе шат (систем админ «байгууллага өөрчилж болно»)
+- /system/roles форм: шинэ 3-р хэсэг «Байгууллагад өөрчлөх эрх» — бүх эрхийн мөр бүрд checkbox (ролид байгаа бол «байгууллага хасч болно», байхгүй бол «нэмж болно»). Hidden input `tenantEditable` → lib/roles/validate.ts → core create/update (Role.tenantEditablePermissions). Тэмдэглээгүй эрх түгжигдсэн.
+- lib/roles/dto.ts: ROLE_SELECT + RoleDto.editablePermissions (GET /api/v1/roles[/id] хариунд нэмэгдсэн). Системийн роль default = хоосон (бүгд түгжигдсэн) — прод дээр админ өөрөө нээнэ.
+- Тест: roles-core +5, одоогийн 3 exact-shape assertion шинэ талбарт тааруулав.

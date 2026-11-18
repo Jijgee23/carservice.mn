@@ -47,6 +47,7 @@ export async function createRole(
         name: data.name,
         description: data.description,
         permissions: data.permissions,
+        tenantEditablePermissions: data.tenantEditablePermissions,
         isActive: data.isActive,
       },
       select: { id: true, name: true },
@@ -70,7 +71,12 @@ export async function createRole(
     ok: true,
     id: created.id,
     summary: `${data.name} · ${data.permissions.length} эрх`,
-    after: { name: data.name, permissions: data.permissions, isActive: data.isActive },
+    after: {
+      name: data.name,
+      permissions: data.permissions,
+      tenantEditablePermissions: data.tenantEditablePermissions,
+      isActive: data.isActive,
+    },
   };
 }
 
@@ -107,6 +113,7 @@ export async function updateRole(
         name: data.name,
         description: data.description,
         permissions: data.permissions,
+        tenantEditablePermissions: data.tenantEditablePermissions,
         isActive: data.isActive,
       },
     });
@@ -132,11 +139,13 @@ export async function updateRole(
     before: {
       name: target.name,
       permissions: target.permissions,
+      tenantEditablePermissions: target.tenantEditablePermissions ?? [],
       isActive: target.isActive,
     },
     after: {
       name: data.name,
       permissions: data.permissions,
+      tenantEditablePermissions: data.tenantEditablePermissions,
       isActive: data.isActive,
     },
   };
