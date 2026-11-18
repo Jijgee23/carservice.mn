@@ -68,6 +68,17 @@ export function AdminCreateForm() {
       </Field>
 
       <Field
+        label="Төрөл"
+        htmlFor="sa-kind"
+        hint="System ажилтан зөвхөн мобайл апп-аар нэвтэрч харилцагч бүртгэх, засах эрхтэй"
+      >
+        <select id="sa-kind" name="kind" defaultValue={state?.values?.kind ?? "STAFF"} className="auth-input">
+          <option value="STAFF">System ажилтан (мобайл — харилцагч бүртгэх/засах)</option>
+          <option value="ROOT">Бүрэн admin (вэб /system + мобайл)</option>
+        </select>
+      </Field>
+
+      <Field
         label="Нууц үг"
         htmlFor="sa-password"
         hint="хамгийн багадаа 8 тэмдэгт"
@@ -85,7 +96,7 @@ export function AdminCreateForm() {
 
       <div>
         <Btn type="submit" disabled={pending}>
-          {pending ? "Нэмж..." : "Admin урих"}
+          {pending ? "Нэмж..." : "Нэмэх"}
         </Btn>
       </div>
     </form>

@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import { isRootKind } from "@/lib/auth/system-permissions";
 import { prisma } from "@/lib/prisma";
 import { setBypassContext } from "@/lib/tenant-context";
 import { clearSystemSessionCookie, getSystemSessionCookie } from "./system-cookies";
@@ -41,6 +42,13 @@ const loadSuperAdmin = cache(async () => {
     await clearSystemSessionCookie();
     redirect("/system/login");
   }
+  // «System ажилтан» (STAFF) вэб /system-д огт нэвтэрдэггүй — зөвхөн мобайл апп-аар (lib/auth/system-api.ts).
+  // requireSuperAdmin нь 70 гаруй газар дуудагддаг ТУЛ энд ROOT-оос өөрийг хаах нь бүх хуудас/action-ыг default-аар
+  // аюулгүй болгоно (шинэ хуудас нэмэхэд ажилтан хандахаас сэргийлнэ).
+  if (!isRootKind(admin.kind)) {
+    await clearSystemSessionCookie();
+    redirect("/system/login");
+  }
   return admin;
 });
 
@@ -62,7 +70,7 @@ export async function hasActiveSystemSession(): Promise<boolean> {
   setBypassContext();
   const admin = await prisma.superAdmin.findUnique({
     where: { id: session.adminId },
-    select: { isActive: true },
+    select: { isActive: true, kind: true },
   });
-  return Boolean(admin?.isActive);
+  return Boolean(admin?.isActive && isRootKind(admin.kind));
 }

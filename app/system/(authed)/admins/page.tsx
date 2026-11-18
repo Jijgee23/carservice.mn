@@ -19,11 +19,13 @@ export default async function SystemAdminsPage() {
       firstName: true,
       lastName: true,
       isActive: true,
+      kind: true,
       createdAt: true,
       createdBy: { select: { firstName: true, lastName: true } },
     },
   });
-  const activeCount = admins.filter((a) => a.isActive).length;
+  // Сүүлийн идэвхтэй ROOT-ыг идэвхгүй болгохгүй (STAFF-ийг тоолохгүй — вэбийг удирдах ROOT л чухал).
+  const activeRootCount = admins.filter((a) => a.isActive && a.kind === "ROOT").length;
 
   return (
     <div className="p-4 sm:p-6 max-w-full flex-1 flex flex-col min-h-0 w-full">
@@ -61,7 +63,7 @@ export default async function SystemAdminsPage() {
                   key={a.id}
                   admin={a}
                   isSelf={a.id === actor.id}
-                  canDeactivate={activeCount > 1}
+                  canDeactivate={a.kind === "STAFF" || activeRootCount > 1}
                 />
               ))}
             </tbody>
@@ -72,8 +74,9 @@ export default async function SystemAdminsPage() {
       <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 sm:p-5 max-w-xl">
         <h2 className="font-semibold text-[var(--oc-ink)] mb-1">Шинэ admin урих</h2>
         <p className="text-xs text-[var(--oc-muted3)] mb-4">
-          Урьсан admin танайтай яг адил бүрэн super admin эрхтэй болно —
-          тиймээс зөвхөн итгэмжлэгдсэн хүнд л энэ эрхийг олгоно уу.
+          «Бүрэн admin» танайтай яг адил super admin эрхтэй болно — зөвхөн итгэмжлэгдсэн хүнд олгоно уу.
+          «System ажилтан» вэб /system-д нэвтэрдэггүй; мобайл апп-аар зөвхөн харилцагч бүртгэх, мэдээллийг нь засах,
+          түр хаах/нээх эрхтэй (багц, төлбөр, зээл, устгах байхгүй).
         </p>
         <AdminCreateForm />
       </div>

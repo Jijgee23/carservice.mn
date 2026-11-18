@@ -79,6 +79,15 @@ export async function signInSystemAction(
     };
   }
 
+  // «System ажилтан» вэбээр нэвтэрдэггүй — мобайл апп-аар.
+  if (admin.kind !== "ROOT") {
+    return {
+      ok: false,
+      message: "Энэ бүртгэлээр зөвхөн мобайл апп-аар нэвтэрнэ.",
+      values: { email },
+    };
+  }
+
   const token = await signSystemSession({
     adminId: admin.id,
     email: admin.email,

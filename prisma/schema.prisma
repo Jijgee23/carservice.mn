@@ -2336,19 +2336,31 @@ model PlatformSetting {
 
 // --- SuperAdmin (carservice.mn-ын платформын эзэн) ---------------------------
 
+// ROOT = платформын бүрэн админ (вэб /system + мобайл). STAFF = «System ажилтан»: ЗӨВХӨН мобайл апп-аар нэвтэрч
+// харилцагч (tenant) бүртгэх/засах/түр хаах-нээх (lib/auth/system-permissions.ts). Вэб /system-д STAFF нэвтэрч чадахгүй.
+enum SuperAdminKind {
+  ROOT
+  STAFF
+}
+
 model SuperAdmin {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  firstName    String
-  lastName     String
-  passwordHash String
+  id                  String         @id @default(cuid())
+  email               String         @unique
+  firstName           String
+  lastName            String
+  passwordHash        String
+  kind                SuperAdminKind @default(ROOT)
+  // Мобайл нэвтрэлтийн brute-force хамгаалалт: 5 буруу → `lockedUntil` (хугацаат, байнгын БИШ — ганц root-ыг
+  // түгжиж DoS хийхээс сэргийлнэ). Амжилттай нэвтрэхэд тэглэнэ. lib/auth/system-lockout.ts.
+  failedLoginAttempts Int            @default(0)
+  lockedUntil         DateTime?
   // V2: олон super admin дэмжинэ (харах: app/system/(authed)/admins/) —
   // идэвхгүй болговол нэвтрэх боломжгүй болно, харин холбогдсон
   // subscriptionsCreated/refundedAppointmentPayments зэрэг түүхэн
   // мэдээллийг хадгалахын тулд мөрийг УСТГАХГҮЙ.
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  isActive            Boolean        @default(true)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 
   // Аль admin урьсан/үүсгэсэн бэ (эхний, bootstrap admin-д null).
   createdById String?
@@ -2363,6 +2375,53 @@ model SuperAdmin {
   createdServiceKeys          SystemServiceKey[]
   createdBranchTags           BranchTag[]
   quoteRequestReplies         QuoteRequestReply[]
+  refreshTokens               SuperAdminRefreshToken[]
+  auditLogs                   SystemAuditLog[]
+}
+
+// Мобайл system realm-ийн refresh token — AccountRefreshToken-той ижил зарчим (опак random, sha256, ротаци, reuse илрүүлэлт).
+// Глобал (tenant-гүй) тул RLS-гүй. lib/auth/system-refresh-token.ts.
+model SuperAdminRefreshToken {
+  id        String     @id @default(cuid())
+  tokenHash String     @unique
+  adminId   String
+  admin     SuperAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  // Ротацийн хэлхээ. Зориуд revoke (logout) бол null.
+  replacedById String?                 @unique
+  replacedBy   SuperAdminRefreshToken? @relation("SystemTokenRotation", fields: [replacedById], references: [id], onDelete: SetNull)
+  replacedFrom SuperAdminRefreshToken? @relation("SystemTokenRotation")
+  userAgent    String?
+  ip           String?
+
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  @@index([adminId])
+  @@index([expiresAt])
+}
+
+// System талын өөрчлөлтийн аудит (хэн, юуг). AuditLog нь tenant хэрэглэгчид зориулагдсан (tenantId заавал) тул тусдаа.
+// `tenantId` нь FK-гүй: tenant устгагдахад аудит хориглохгүй, түүхээ хадгална. Админ УСТГАГДАХГҮЙ (зөвхөн идэвхгүй болно).
+model SystemAuditLog {
+  id        String      @id @default(cuid())
+  adminId   String
+  admin     SuperAdmin  @relation(fields: [adminId], references: [id])
+  tenantId  String?
+  entity    String
+  entityId  String
+  action    AuditAction
+  summary   String?
+  before    Json?
+  after     Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime    @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([adminId, createdAt])
 }
 
 // --- AuditLog (тенант доторх чухал үйлдлийн түүх) ------------------------

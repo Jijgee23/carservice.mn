@@ -1,5 +1,6 @@
 import { ConfirmForm } from "@/app/_components/confirm-form";
 import { setSuperAdminActiveAction } from "@/app/_actions/system-admins";
+import { StaffPasswordForm } from "./staff-password-form";
 
 type AdminRowData = {
   id: string;
@@ -7,6 +8,7 @@ type AdminRowData = {
   firstName: string;
   lastName: string;
   isActive: boolean;
+  kind: "ROOT" | "STAFF";
   createdAt: Date;
   createdBy: { firstName: string; lastName: string } | null;
 };
@@ -33,6 +35,16 @@ export function AdminRow({
         {isSelf ? (
           <span className="ml-1.5 text-[10px] text-[var(--oc-muted3)]">(та)</span>
         ) : null}
+        <span
+          className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full border ${
+            admin.kind === "STAFF"
+              ? "border-[var(--oc-line)] text-[var(--oc-muted3)]"
+              : "border-[var(--oc-accent)]/40 text-[var(--oc-accent)]"
+          }`}
+        >
+          {admin.kind === "STAFF" ? "Ажилтан" : "Admin"}
+        </span>
+        {admin.kind === "STAFF" ? <StaffPasswordForm adminId={admin.id} /> : null}
       </td>
       <td className="px-5 py-3 text-[var(--oc-muted)]">{admin.email}</td>
       <td className="px-5 py-3 text-xs text-[var(--oc-muted3)]">

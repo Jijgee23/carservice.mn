@@ -22,7 +22,7 @@ function routeFiles(dir: string): string[] {
 }
 
 const HANDLER_RE = /export (?:async )?function (GET|POST|PUT|PATCH|DELETE)\b/g;
-const AUTH_CALL = /\b(requireApiUser|requireCashApiUser|getApiUserFromRequest|getApiAccountFromRequest|authenticateAccountRequest)\(/;
+const AUTH_CALL = /\b(requireApiUser|requireCashApiUser|getApiUserFromRequest|getApiAccountFromRequest|authenticateAccountRequest|requireSystemApiUser)\(/;
 
 type Handler = { route: string; method: string; body: string; file: string; source: string };
 
@@ -56,6 +56,10 @@ const PUBLIC: Record<string, string> = {
   "POST app/auth/verify-otp": "customer OTP verify",
   "POST app/auth/refresh": "customer refresh-token rotation (the opaque refresh token IS the credential)",
   "POST app/auth/logout": "revokes the customer refresh token supplied in the body",
+  // --- System realm (мобайл): токен авахын өмнөх алхмууд. login нь IP+имэйл rate limit, DB-ийн хугацаат түгжээтэй.
+  "POST system/auth/login": "system realm login (rate limited + timed lockout)",
+  "POST system/auth/refresh": "system refresh-token rotation (the opaque token IS the credential)",
+  "POST system/auth/logout": "revokes the system refresh token supplied in the body",
   "POST auth/login": "staff login",
   "POST auth/logout": "revokes the refresh token supplied in the body",
   "POST auth/refresh": "exchanges a refresh token",
@@ -162,14 +166,19 @@ test("customer-realm /api/v1/app routes authenticate with the ACCOUNT token, sta
   for (const h of handlers()) {
     if (`${h.method} ${h.route}` in PUBLIC) continue;
     const isApp = h.route.startsWith("app/");
-    if (isApp) {
+    const isSystem = h.route.startsWith("system/");
+    if (isSystem) {
+      // System realm: зөвхөн system token (requireSystemApiUser); ажилтан/Account token хүлээн авахгүй.
+      assert.match(h.body, /requireSystemApiUser\(req/, `${h.method} ${h.route}: system route must use the system token`);
+      assert.doesNotMatch(h.body, /requireApiUser\(|getApiAccountFromRequest\(|authenticateAccountRequest\(|requireCashApiUser\(/, `${h.method} ${h.route}: system route must not accept other realms' tokens`);
+    } else if (isApp) {
       assert.ok(
         /getApiAccountFromRequest\(|authenticateAccountRequest\(/.test(h.body) || /requireApiAccount\(/.test(h.body) || AUTH_HELPERS.some((n) => h.body.includes(`${n}(`)),
         `${h.method} ${h.route}: customer route must use the account token`,
       );
       assert.doesNotMatch(h.body, /requireApiUser\(/, `${h.method} ${h.route}: customer route must not accept a staff token`);
     } else {
-      assert.doesNotMatch(h.body, /getApiAccountFromRequest\(|authenticateAccountRequest\(/, `${h.method} ${h.route}: staff route must not accept an account token`);
+      assert.doesNotMatch(h.body, /getApiAccountFromRequest\(|authenticateAccountRequest\(|requireSystemApiUser\(/, `${h.method} ${h.route}: staff route must not accept an account or system token`);
     }
   }
 });

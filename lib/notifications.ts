@@ -699,7 +699,8 @@ export async function notifySuperAdmins(args: {
   input: NotificationInput;
 }): Promise<void> {
   setBypassContext();
-  const recipients = await prisma.superAdmin.findMany({ select: { id: true } });
+  // Зөвхөн ROOT: «System ажилтан» (STAFF) төлбөр, санал хүсэлт зэрэг платформын мэдэгдлийг хүлээн авахгүй.
+  const recipients = await prisma.superAdmin.findMany({ where: { kind: "ROOT", isActive: true }, select: { id: true } });
   if (recipients.length === 0) return;
 
   const def = NOTIFICATION_REGISTRY[args.type];
