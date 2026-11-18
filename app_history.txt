@@ -2420,3 +2420,10 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - Migration 20261118120000_tenant_editable_defaults: tenantEditablePermissions хоосон ролиудад default-ыг тавина (админ тохируулсныг дарахгүй). Локал DB: 5 роль бүгд 41 эрх нээлттэй.
 - /system/roles форм: шинэ роль default-аар нээлттэй, «Анхдагч / Бүгдийг нээх / Бүгдийг түгжих» товч, нээлттэй тоо. Систем админ ихэвчлэн ЮУГ ТҮГЖИХЭЭ тохируулна.
 - Тест: tenant-editable-defaults (6; migration SQL ↔ TS синк).
+
+[2026-11-18] Эрхийн тохиргоо: нэг хуудсанд бүгдийг биш, эрх бүр switch-ээр (шууд хадгалагдана)
+- app/_components/permission-switch-list.tsx: дундын switch жагсаалт (бүлэг, хайлт, role="switch", optimistic + алдаа гарвал буцаах, нэг эрхийн хүсэлт дуустал тэр switch идэвхгүй, түгжигдсэн эрх 🔒).
+- Байгууллага: /dashboard/settings/roles = ролиудын жагсаалт (карт), /dashboard/settings/roles/[id] = тухайн ролийн эрх бүрийн switch (toggleTenantRolePermissionAction → toggleTenantRolePermission; нэг код өөрчилж saveTenantRoleOverride-оор — ижил шалгалт, аудит). Хуучин олон ролийн нэг хуудас, batch «Хадгалах» action устсан.
+- Систем админ: роль засах форм (CRUD матриц) «Байгууллагад өөрчлөх эрх»-ийг БҮР хөндөхгүй — validate tenantEditable undefined = өөрчлөхгүй, үүсгэхэд анхдагч нээлттэй. Тусдаа /system/roles/[id]/delegation хуудас (setRoleEditablePermissionAction → lib/roles/delegation.ts), ролийн хуудсаас товч, жагсаалтад «Байгууллага өөрчилж болох» тоо.
+- Ажилтны «Эрхийн хязгаарлалт»: эрх бүр switch (toggleEmployeeRestrictionAction → toggleEmployeeRestriction), batch action устсан. Мобайл API (GET/PUT …/override, …/restrictions) өөрчлөгдөөгүй.
+- Тест: permission-toggles (12), roles-core шинэчлэв (fake нь Prisma шиг undefined-г хөндөхгүй), role-delegation-routes, tenant-editable-defaults.

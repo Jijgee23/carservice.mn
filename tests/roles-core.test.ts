@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { DEFAULT_TENANT_EDITABLE_PERMISSIONS } from "../lib/roles/tenant-editable-defaults";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -76,7 +77,8 @@ function makeFakeDb(seed: { roles?: FakeRole[] } = {}) {
         if (data.name && roles.some((x) => x.id !== r.id && x.name === data.name)) {
           throw p2002();
         }
-        Object.assign(r, data);
+        // Prisma нь `undefined` талбарыг хөндөхгүй — fake ч адил.
+        Object.assign(r, Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined)));
         return { id: r.id };
       },
       async delete({ where }: { where: { id: string } }) {
@@ -163,7 +165,7 @@ test("createRole: success returns audit-ready summary/after", async () => {
   assert.deepEqual(result.after, {
     name: "Мастер",
     permissions: ["orders.view", "orders.edit"],
-    tenantEditablePermissions: [],
+    tenantEditablePermissions: [...DEFAULT_TENANT_EDITABLE_PERMISSIONS],
     isActive: true,
   });
 });
@@ -288,7 +290,8 @@ test("toRoleDto emits only whitelisted fields", () => {
 
 test("app/_actions/system-roles.ts delegates every mutation to lib/roles/core and is super-admin gated", () => {
   const source = src("../app/_actions/system-roles.ts");
-  assert.equal((source.match(/await requireSuperAdmin\(\)/g) ?? []).length, 3);
+  assert.equal((source.match(/await requireSuperAdmin\(\)/g) ?? []).length, 4);
+  assert.ok(source.includes("setRoleEditablePermission"), "per-permission switch action");
   for (const fn of ["createRole", "updateRole", "deleteRole"]) {
     assert.ok(source.includes(fn), `action file must call core.${fn}`);
   }
@@ -335,9 +338,9 @@ test("validate: tenantEditable parsed, invalid and duplicate codes dropped, inde
   assert.deepEqual(data.permissions, ["orders.viewOwn"]);
 });
 
-test("validate: no tenantEditable field → empty (everything locked by default)", () => {
+test("validate: no tenantEditable field → undefined (updates leave the switches alone, create uses open defaults)", () => {
   const { data } = validate.validate(fd({ name: "X", permissions: ["orders.viewOwn"] }));
-  assert.deepEqual(data.tenantEditablePermissions, []);
+  assert.equal(data.tenantEditablePermissions, undefined);
 });
 
 test("createRole / updateRole persist tenantEditablePermissions and report before/after", async () => {
@@ -363,12 +366,21 @@ test("createRole / updateRole persist tenantEditablePermissions and report befor
   }
 });
 
-test("clearing all tenantEditable on update re-locks the role", async () => {
+test("updating a role WITHOUT the tenantEditable field never touches the switches (no silent re-lock)", async () => {
   const { db, roles } = makeFakeDb();
   await core.createRole(db as never, fd({ name: "Касс", permissions: ["payments.view"], tenantEditable: ["payments.create"] }));
-  const r = await core.updateRole(db as never, roles[0].id, fd({ name: "Касс", permissions: ["payments.view"] }));
+  const r = await core.updateRole(db as never, roles[0].id, fd({ name: "Касс 2", permissions: ["payments.view", "payments.edit"] }));
   assert.equal(r.ok, true);
-  assert.deepEqual((roles[0] as unknown as { tenantEditablePermissions: string[] }).tenantEditablePermissions, []);
+  assert.deepEqual((roles[0] as unknown as { tenantEditablePermissions: string[] }).tenantEditablePermissions, ["payments.create"]);
+  if (r.ok) assert.deepEqual((r.after as { tenantEditablePermissions: string[] }).tenantEditablePermissions, ["payments.create"]);
+});
+
+test("createRole without the field opens the default set; an explicit empty-capable field is honoured", async () => {
+  const { db, roles } = makeFakeDb();
+  await core.createRole(db as never, fd({ name: "А", permissions: ["payments.view"] }));
+  assert.deepEqual((roles[0] as unknown as { tenantEditablePermissions: string[] }).tenantEditablePermissions, [...DEFAULT_TENANT_EDITABLE_PERMISSIONS]);
+  await core.createRole(db as never, fd({ name: "Б", permissions: ["payments.view"], tenantEditable: ["payments.create"] }));
+  assert.deepEqual((roles[1] as unknown as { tenantEditablePermissions: string[] }).tenantEditablePermissions, ["payments.create"]);
 });
 
 test("toRoleDto exposes editablePermissions (default [])", () => {

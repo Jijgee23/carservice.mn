@@ -119,3 +119,26 @@ export async function saveEmployeeRestrictions(
     after: { denied: parsed.denied },
   };
 }
+
+/**
+ * Нэг эрхийг шууд асаах/унтраах (switch): allowed=false → хязгаарлана (хасна), true → сэргээнэ.
+ * Одоогийн хязгаарлалт дээр ЗӨВХӨН энэ кодыг өөрчилж saveEmployeeRestrictions-оор дамжуулна
+ * (ижил guard, tenant scope, sanitize).
+ */
+export async function toggleEmployeeRestriction(
+  db: Db,
+  actor: EmployeeActor,
+  employeeId: string,
+  code: unknown,
+  allowed: unknown,
+): Promise<SaveRestrictionResult> {
+  if (typeof code !== "string" || typeof allowed !== "boolean") {
+    return { ok: false, code: "VALIDATION", error: "Хүсэлт буруу.", fieldErrors: { code: "Эрхийн код, төлөв шаардлагатай." } };
+  }
+  const current = await getEmployeeRestrictions(actor, employeeId, db);
+  if (!current) return { ok: false, code: "NOT_FOUND", error: "Ажилтан олдсонгүй." };
+  const denied = new Set(current.denied);
+  if (allowed) denied.delete(code);
+  else denied.add(code);
+  return saveEmployeeRestrictions(db, actor, employeeId, [...denied]);
+}

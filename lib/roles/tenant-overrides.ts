@@ -134,6 +134,40 @@ export async function saveTenantRoleOverride(
   return { ok: true, view: toView(role, saved) };
 }
 
+/**
+ * Нэг эрхийг шууд асаах/унтраах (switch). Одоогийн override дээр ЗӨВХӨН энэ кодыг өөрчилж
+ * saveTenantRoleOverride-оор дамжуулна (ижил шалгалт, аудит, түгжигдсэн код → VALIDATION).
+ * on=true: ролид байгаа бол «хассан»-аас гаргана, байхгүй бол «нэмсэн»-д оруулна.
+ * on=false: ролид байгаа бол «хассан»-д оруулна, байхгүй бол «нэмсэн»-ээс гаргана.
+ */
+export async function toggleTenantRolePermission(
+  ctx: { tenantId: string; userId: string },
+  roleId: string,
+  code: unknown,
+  on: unknown,
+  deps: { db?: Db; audit?: Audit } = {},
+): Promise<SaveOverrideResult> {
+  const db = deps.db ?? prisma;
+  if (typeof code !== "string" || typeof on !== "boolean") {
+    return { ok: false, code: "VALIDATION", message: "Хүсэлт буруу.", fieldErrors: { code: "Эрхийн код, төлөв шаардлагатай." } };
+  }
+  const current = await getTenantRoleOverrideView(ctx.tenantId, roleId, db);
+  if (!current) return { ok: false, code: "NOT_FOUND", message: "Роль олдсонгүй." };
+
+  const inRole = current.rolePermissions.includes(code);
+  const add = new Set(current.add);
+  const remove = new Set(current.remove);
+  if (on) {
+    if (inRole) remove.delete(code);
+    else add.add(code);
+  } else if (inRole) {
+    remove.add(code);
+  } else {
+    add.delete(code);
+  }
+  return saveTenantRoleOverride(ctx, roleId, { add: [...add], remove: [...remove] }, deps);
+}
+
 /** Нэг ролийн харагдац (өөрчилж болох эрхгүй ч буцна — editablePermissions = []). Идэвхгүй/олдохгүй → null. */
 export async function getTenantRoleOverrideView(
   tenantId: string,

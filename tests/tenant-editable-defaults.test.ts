@@ -73,9 +73,12 @@ test("end to end: with defaults a tenant can give a mechanic item-price editing,
   assert.equal(locked.ok, false);
 });
 
-test("form pre-checks defaults for a new role and exposes quick actions", () => {
+test("role form no longer carries the delegation list; switches live on their own pages", () => {
   const form = src("../app/system/(authed)/roles/role-form.tsx");
-  assert.match(form, /initial \? \(initial\.tenantEditablePermissions \?\? \[\]\) : defaultTenantEditable/);
-  for (const label of ["Анхдагч", "Бүгдийг нээх", "Бүгдийг түгжих"]) assert.ok(form.includes(label), label);
-  assert.match(src("../app/system/(authed)/roles/new/page.tsx"), /defaultTenantEditable=\{\[\.\.\.DEFAULT_TENANT_EDITABLE_PERMISSIONS\]\}/);
+  assert.ok(!form.includes("tenantEditable"), "role form must not post tenantEditable");
+  assert.ok(!form.includes("permissionCatalog"));
+  const page = src("../app/system/(authed)/roles/[id]/delegation/page.tsx");
+  assert.match(page, /PermissionSwitchList/);
+  assert.match(page, /setRoleEditablePermissionAction\.bind\(null, id\)/);
+  assert.match(src("../app/system/(authed)/roles/[id]/page.tsx"), /\/delegation/);
 });

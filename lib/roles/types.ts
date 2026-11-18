@@ -33,7 +33,7 @@ export type ValidatedRole = {
   name: string;
   description: string | null;
   permissions: string[];
-  /** Байгууллага (эзэн) нэмж/хасч болох эрхүүд; бусад нь түгжигдсэн. */
-  tenantEditablePermissions: string[];
+  /** Байгууллага (эзэн) нэмж/хасч болох эрхүүд; undefined = өөрчлөхгүй (үүсгэхэд анхдагч нээлттэй). */
+  tenantEditablePermissions?: string[];
   isActive: boolean;
 };

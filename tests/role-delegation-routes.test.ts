@@ -34,17 +34,24 @@ test("GET override routes require employees.view|create|edit and scope by the ca
   }
 });
 
-test("web action is owner-gated, revalidates the dashboard layout, and uses the shared service", () => {
+test("tenant switch action is owner-gated, revalidates the dashboard layout, and uses the shared service", () => {
   const s = src("../app/_actions/tenant-role-overrides.ts");
   assert.match(s, /"use server"/);
   assert.match(s, /if \(!user\.isOwner\) return/);
-  assert.match(s, /saveTenantRoleOverride\(/);
+  assert.match(s, /toggleTenantRolePermission\(/);
   assert.match(s, /revalidatePath\("\/dashboard", "layout"\)/);
+  assert.ok(!s.includes("saveTenantRoleOverrideAction"), "batch save action removed");
 });
 
 test("settings page lives under the owner-only settings layout", () => {
   assert.match(src("../app/dashboard/settings/layout.tsx"), /if \(!user\.isOwner\)/);
   assert.match(src("../app/dashboard/settings/roles/page.tsx"), /listTenantRoleOverrides\(user\.tenantId\)/);
+  // one page per role with a switch per permission; the list page has no switches
+  const detail = src("../app/dashboard/settings/roles/[id]/page.tsx");
+  assert.match(detail, /PermissionSwitchList/);
+  assert.match(detail, /toggleTenantRolePermissionAction\.bind\(null, id\)/);
+  assert.match(detail, /getTenantRoleOverrideView\(user\.tenantId, id\)/);
+  assert.ok(!src("../app/dashboard/settings/roles/page.tsx").includes("PermissionSwitchList"));
 });
 
 test("override service never trusts client codes: always sanitized against the role's editable set", () => {
@@ -68,14 +75,15 @@ test("PUT /employees/[id]/restrictions needs employees.edit + active subscriptio
   assert.match(get, /requirePermission\(auth\.user, "employees\.edit"\)/);
 });
 
-test("employee restrictions web action: canEdit(employees) + subscription + audit + revalidate", () => {
+test("employee restriction switch action: canEdit(employees) + subscription + audit + revalidate", () => {
   const s = src("../app/_actions/employee-restrictions.ts");
   assert.match(s, /"use server"/);
   assert.match(s, /canEdit\(me, "employees"\)/);
   assert.match(s, /assertActiveSubscription\(me\.tenantId\)/);
-  assert.match(s, /saveEmployeeRestrictions\(prisma, me, employeeId, denied\)/);
+  assert.match(s, /toggleEmployeeRestriction\(prisma, me, employeeId, code, allowed\)/);
   assert.match(s, /logAudit\(/);
   assert.match(s, /revalidatePath\(`\/dashboard\/employees\/\$\{employeeId\}`\)/);
+  assert.match(src("../app/dashboard/employees/[id]/employee-restrictions.tsx"), /toggleEmployeeRestrictionAction\(employeeId, code, on\)/);
 });
 
 test("employee page hides the restrictions card for owners and for yourself", () => {

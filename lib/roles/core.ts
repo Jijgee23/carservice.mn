@@ -3,6 +3,7 @@
 // `"use server"`/`server-only` imports here — auth and revalidation stay in
 // the action wrapper (`app/_actions/system-roles.ts`).
 
+import { DEFAULT_TENANT_EDITABLE_PERMISSIONS } from "./tenant-editable-defaults";
 import type { RolesClient, ValidatedRole } from "./types";
 import { s, validate } from "./validate";
 
@@ -47,7 +48,8 @@ export async function createRole(
         name: data.name,
         description: data.description,
         permissions: data.permissions,
-        tenantEditablePermissions: data.tenantEditablePermissions,
+        // Шинэ роль анхнаасаа нээлттэй (lib/roles/tenant-editable-defaults.ts).
+        tenantEditablePermissions: data.tenantEditablePermissions ?? [...DEFAULT_TENANT_EDITABLE_PERMISSIONS],
         isActive: data.isActive,
       },
       select: { id: true, name: true },
@@ -74,7 +76,7 @@ export async function createRole(
     after: {
       name: data.name,
       permissions: data.permissions,
-      tenantEditablePermissions: data.tenantEditablePermissions,
+      tenantEditablePermissions: data.tenantEditablePermissions ?? [...DEFAULT_TENANT_EDITABLE_PERMISSIONS],
       isActive: data.isActive,
     },
   };
@@ -113,6 +115,7 @@ export async function updateRole(
         name: data.name,
         description: data.description,
         permissions: data.permissions,
+        // undefined → Prisma талбарыг хөндөхгүй (switch-ээр тохируулсан нээлттэй эрхүүд хэвээр).
         tenantEditablePermissions: data.tenantEditablePermissions,
         isActive: data.isActive,
       },
@@ -145,7 +148,7 @@ export async function updateRole(
     after: {
       name: data.name,
       permissions: data.permissions,
-      tenantEditablePermissions: data.tenantEditablePermissions,
+      tenantEditablePermissions: data.tenantEditablePermissions ?? target.tenantEditablePermissions ?? [],
       isActive: data.isActive,
     },
   };

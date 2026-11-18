@@ -1,7 +1,6 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/auth";
-import { permissionLabel } from "@/lib/auth/permissions";
 import { listTenantRoleOverrides } from "@/lib/roles/tenant-overrides";
-import { RoleOverrideCard } from "./role-override-card";
 
 export const metadata = {
   title: "Ролийн эрх",
@@ -17,8 +16,8 @@ export default async function RoleOverridesPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-[var(--oc-ink)]">Ролийн эрх</h1>
         <p className="text-sm text-[var(--oc-muted3)] mt-1">
-          Системээс зөвшөөрсөн эрхүүдийг ролиос нэмж эсвэл хасна. Түгжигдсэн эрхийг өөрчлөх боломжгүй.
-          Тодорхой ажилтны эрхийг хязгаарлахыг ажилтны хуудаснаас хийнэ.
+          Ролийг сонгоод эрх бүрийг switch-ээр асаах/унтраана — өөрчлөлт шууд хадгалагдана. Системийн админ
+          түгжсэн эрхийг өөрчлөх боломжгүй. Тодорхой ажилтны эрхийг ажилтны хуудаснаас хязгаарлана.
         </p>
       </div>
 
@@ -27,23 +26,30 @@ export default async function RoleOverridesPage() {
           Системийн админ одоогоор ролийн эрхийг өөрчлөх боломжийг бүх ролиос түгжсэн байна.
         </div>
       ) : (
-        <div className="flex flex-col gap-5">
-          {roles.map((r) => (
-            <RoleOverrideCard
-              key={r.roleId}
-              roleId={r.roleId}
-              name={r.name}
-              description={r.description}
-              lockedCount={r.rolePermissions.filter((c) => !r.editablePermissions.includes(c)).length}
-              items={r.editablePermissions.map((code) => ({
-                code,
-                label: permissionLabel(code),
-                inRole: r.rolePermissions.includes(code),
-                on: r.effectivePermissions.includes(code),
-              }))}
-            />
-          ))}
-        </div>
+        <ul className="grid gap-3 sm:grid-cols-2">
+          {roles.map((r) => {
+            const changed = r.add.length + r.remove.length;
+            return (
+              <li key={r.roleId}>
+                <Link
+                  href={`/dashboard/settings/roles/${r.roleId}`}
+                  className="block h-full rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-4 transition-colors hover:border-[var(--oc-line2)]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <h2 className="font-semibold text-[var(--oc-ink)]">{r.name}</h2>
+                    <span className="font-plex-mono text-[11px] text-[var(--oc-muted3)] shrink-0">
+                      {changed > 0 ? `${changed} өөрчилсөн` : "Анхдагч"}
+                    </span>
+                  </div>
+                  {r.description ? <p className="text-xs text-[var(--oc-muted3)] mt-1 line-clamp-2">{r.description}</p> : null}
+                  <p className="mt-3 text-xs text-[var(--oc-muted2)]">
+                    {r.effectivePermissions.length} эрхтэй · {r.editablePermissions.length} эрх өөрчилж болно
+                  </p>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );

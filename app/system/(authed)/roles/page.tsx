@@ -30,7 +30,7 @@ export default async function SystemRolesPage() {
           <table className="w-full min-w-[720px]">
             <thead>
               <tr className="border-b border-[var(--oc-line)]">
-                {["Нэр", "Эрхүүд", "Ажилтан", "Төрөл", "Төлөв"].map((h) => (
+                {["Нэр", "Эрхүүд", "Байгууллага өөрчилж болох", "Ажилтан", "Төрөл", "Төлөв"].map((h) => (
                   <th
                     key={h}
                     className="text-left font-plex-mono text-[10.5px] uppercase tracking-[0.08em] text-[var(--oc-muted3)] font-medium px-5 py-3"
@@ -62,6 +62,9 @@ export default async function SystemRolesPage() {
                         </span>
                       ) : null}
                     </div>
+                  </td>
+                  <td className="px-5 py-4 font-plex-mono text-sm text-[var(--oc-ink2)]">
+                    {r.tenantEditablePermissions.length}
                   </td>
                   <td className="px-5 py-4 font-plex-mono text-sm text-[var(--oc-ink2)]">
                     {r._count.users}

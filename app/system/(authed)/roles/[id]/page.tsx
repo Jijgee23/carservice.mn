@@ -4,12 +4,10 @@ import { Btn, BtnLink, Chip } from "@/app/_components/landing-ops-ui";
 import { requireSuperAdmin } from "@/lib/auth/system";
 import {
   ACTIONS,
-  PERMISSIONS,
   RESOURCES,
   STANDALONE_PERMISSIONS,
 } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
-import { DEFAULT_TENANT_EDITABLE_PERMISSIONS } from "@/lib/roles/tenant-editable-defaults";
 import { ROLE_FORM_ID, RoleForm } from "../role-form";
 import { DeleteRoleButton } from "./danger-actions";
 
@@ -69,6 +67,9 @@ export default async function EditRolePage({
           <BtnLink href="/system/roles" variant="ghost">
             ← Буцах
           </BtnLink>
+          <BtnLink href={`/system/roles/${role.id}/delegation`} variant="ghost">
+            Байгууллагад өөрчлөх эрх ({role.tenantEditablePermissions.length})
+          </BtnLink>
           <Btn type="submit" form={ROLE_FORM_ID}>
             Хадгалах
           </Btn>
@@ -82,7 +83,6 @@ export default async function EditRolePage({
             name: role.name,
             description: role.description,
             permissions: role.permissions,
-            tenantEditablePermissions: role.tenantEditablePermissions,
             isActive: role.isActive,
           }}
           resources={[...RESOURCES]}
@@ -92,8 +92,6 @@ export default async function EditRolePage({
             label: p.label,
             description: p.description,
           }))}
-          permissionCatalog={PERMISSIONS.map((p) => ({ code: p.code, label: p.label, group: p.group }))}
-          defaultTenantEditable={[...DEFAULT_TENANT_EDITABLE_PERMISSIONS]}
         />
 
         <div className="flex flex-col gap-6">

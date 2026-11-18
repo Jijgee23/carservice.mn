@@ -39,8 +39,12 @@ export function validate(fd: FormData): {
   const description = s(fd, "description");
   const isActive = fd.get("isActive") !== "off";
   const permissions = getCheckedPermissions(fd);
-  // Байгууллага өөрчилж болох эрхүүд (форм дахь «Байгууллагад өөрчлөх эрх» хэсэг).
-  const tenantEditablePermissions = getCheckedPermissions(fd, "tenantEditable");
+  // Байгууллага өөрчилж болох эрхүүд — ЗӨВХӨН дуудагч илгээсэн үед (undefined = хөндөхгүй).
+  // Роль засах форм үүнийг илгээхгүй; эрх тус бүрийн switch тусдаа хуудаснаас
+  // (lib/roles/delegation.ts) удирдагдана, тиймээс «Хадгалах» нь үүнийг дарж бичихгүй.
+  const tenantEditablePermissions = fd.has("tenantEditable")
+    ? getCheckedPermissions(fd, "tenantEditable")
+    : undefined;
 
   const errors: Record<string, string> = {};
   if (!name) errors.name = "Үүргийн нэрээ оруулна уу.";
