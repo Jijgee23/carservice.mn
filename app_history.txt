@@ -2486,3 +2486,7 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - Эрх: байгууллагын зураг = зөвхөн эзэн (лого-той адил), салбарын зураг = branches.edit; устгахад хамрах хүрээг DB-ээс тодорхойлно. Web action app/_actions/tenant-photos.ts, мобайл API GET/POST /api/v1/tenant/photos, DELETE /api/v1/tenant/photos/[id].
 - UI: Тохиргоо → "Байгууллагын зураг" (эзэн), Салбар засах → "Салбарын зураг" (PhotoGalleryManager); олон нийтийн салбарын дэлгэрэнгүйд (салбарын зураг + байгууллагын зураг) ба байгууллагын захиалгын хуудсанд PhotoGallery (grid + томруулах, ←/→/Esc). Хэрэглэгчийн апп API GET /api/v1/app/orgs/[slug] хариунд org.photos ба branches[].photos нэмэв. API docs шинэчилсэн.
 - Шалгалт: тест tenant-photos (4), бүх тест 2136 pass, tsc/eslint цэвэр. Бодит локал DB дээр 31 шалгалт (core, мобайл route-ууд, эрх, хязгаар, хуурамч/SVG файл, файл диск дээр үүсэж/устах, customer API) — 30 pass; 1 "FAIL" нь .env postgres superuser-ээр холбогддог (RLS-г тойрдог) тул хүлээгдэж байсан; RLS-г carcare_local role-оор шууд шалгаж 6/6 pass (бусад tenant 0 мөр, INSERT/DELETE хориглогдсон). Түр мэдээлэл, файл бүрэн цэвэрлэгдсэн.
+
+[2026-11-18] Прод deploy (0090c78) + docs/mobile-tasks.md
+- Хэрэглэгчийн зөвшөөрлөөр прод deploy: өмнө pg_dump (~/backups/carcare_pre_deploy_20261118_1445_64348f1.dump), дараа нь scripts/deploy.sh (nvm-тэй). 5 migration: role_delegation, tenant_editable_defaults, account_refresh_tokens, system_staff, tenant_photos.
+- docs/mobile-tasks.md: System / Tenant / Customer апп-уудын хийгдээгүй ажлууд + backend-ийн үлдсэн ажлууд.
