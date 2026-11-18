@@ -33,6 +33,8 @@ import { setBypassContext } from "@/lib/tenant-context";
 import { absoluteUrl, branchDescription, branchJsonLd, branchUrl } from "@/lib/seo";
 import { JsonLd } from "@/app/_components/json-ld";
 import { HoursDisclosure } from "./hours-disclosure";
+import { PhotoGallery } from "@/app/_components/photo-gallery";
+import { listTenantPhotos } from "@/lib/tenant-photos";
 
 export const dynamic = "force-dynamic";
 
@@ -203,6 +205,9 @@ export default async function BranchDetailPage({
     : `/org/${org.slug}?branch=${encodeURIComponent(branch.id)}`;
 
   const reviews = branch.ratingCount > 0 ? await loadPublicReviews(branch.id, 10) : [];
+  // Салбарын зураг эхэнд, дараа нь байгууллагын нийтлэг зураг.
+  const [branchPhotos, orgPhotos] = await Promise.all([listTenantPhotos(org.id, branch.id), listTenantPhotos(org.id, null)]);
+  const photos = [...branchPhotos, ...orgPhotos];
 
   const distanceText =
     distance == null
@@ -243,6 +248,8 @@ export default async function BranchDetailPage({
           ) : null
         }
       />
+
+      {photos.length > 0 ? <PhotoGallery photos={photos} label={branch.name} /> : null}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem] items-start">
         <div className="flex flex-col gap-5 min-w-0">

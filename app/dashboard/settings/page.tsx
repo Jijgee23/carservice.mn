@@ -7,6 +7,8 @@ import type { CreditBreakdown } from "@/lib/credit-score";
 import { getCreditSettings } from "@/lib/credit-score-server";
 import { AppointmentReminderForm } from "./appointment-reminder-form";
 import { LogoForm } from "./logo-form";
+import { PhotoGalleryManager } from "@/app/_components/photo-gallery-manager";
+import { listTenantPhotos, MAX_FILES_PER_UPLOAD, MAX_PHOTOS_PER_SCOPE } from "@/lib/tenant-photos";
 import { TenantForm } from "./tenant-form";
 import { ServiceKeysPicker } from "../_components/service-keys-picker";
 import { loadServiceKeyChoices } from "@/lib/tenant-service-keys";
@@ -54,9 +56,10 @@ export default async function SettingsPage() {
     where: { id: user.tenantId },
   });
   if (!tenant) redirect("/dashboard");
-  const [creditSettings, serviceKeyChoices] = await Promise.all([
+  const [creditSettings, serviceKeyChoices, photos] = await Promise.all([
     getCreditSettings(),
     user.isOwner ? loadServiceKeyChoices(user.tenantId) : Promise.resolve(null),
+    user.isOwner ? listTenantPhotos(user.tenantId, null) : Promise.resolve(null),
   ]);
 
   return (
@@ -71,16 +74,27 @@ export default async function SettingsPage() {
       <div className="grid gap-6">
         <SectionPanel
           index={1}
-          total={6}
+          total={7}
           title="Лого"
           description="Платформ дотор болон нэхэмжлэхэд харагдана."
         >
           <LogoForm currentLogoUrl={tenant.logoUrl} />
         </SectionPanel>
 
+        {photos ? (
+          <SectionPanel
+            index={2}
+            total={7}
+            title="Байгууллагын зураг"
+            description="Олон нийтийн хуудас (carservice.mn)-ны дэлгэрэнгүй хэсэгт харагдана. Салбар бүрийн зургийг салбарын засах хуудаснаас оруулна."
+          >
+            <PhotoGalleryManager photos={photos} max={MAX_PHOTOS_PER_SCOPE} maxPerUpload={MAX_FILES_PER_UPLOAD} />
+          </SectionPanel>
+        ) : null}
+
         <SectionPanel
           index={2}
-          total={6}
+          total={7}
           title="Үндсэн мэдээлэл"
           description="Нэр, регистр, харилцагч мэдээлэл."
         >
@@ -101,7 +115,7 @@ export default async function SettingsPage() {
         {serviceKeyChoices && serviceKeyChoices.keys.length > 0 ? (
           <SectionPanel
             index={3}
-            total={6}
+            total={7}
             title="Үзүүлдэг үйлчилгээ"
             description="Жолооч нар хийлгэх ажлаараа хайхад (carservice.mn/book, газрын зураг) танай байгууллага эдгээрээр гарна. Онлайн цаг захиалгад ашиглагдана."
           >
@@ -115,7 +129,7 @@ export default async function SettingsPage() {
         {modules.has("enable_appointments") ? (
           <SectionPanel
             index={4}
-            total={6}
+            total={7}
             title="Цаг захиалгын сануулга"
             description="Товлосон цагаас хэдэн хугацааны өмнө үйлчлүүлэгчид сануулга илгээхийг тохируулна."
           >
@@ -127,7 +141,7 @@ export default async function SettingsPage() {
 
         <SectionPanel
           index={5}
-          total={6}
+          total={7}
           title="Credit score"
           description="Үйлчлүүлэгчийн үнэлгээ, цаг захиалга баталсан, засвар дуусгасан, хугацаандаа дуусгасан хувиас өдөр бүр тооцогдоно."
         >
@@ -140,7 +154,7 @@ export default async function SettingsPage() {
           />
         </SectionPanel>
 
-        <SectionPanel index={6} total={6} title="Бусад">
+        <SectionPanel index={6} total={7} title="Бусад">
           <dl className="grid gap-3 text-sm sm:grid-cols-3">
             <Row label="Slug">
               <span className="font-plex-mono text-[var(--oc-ink2)]">{tenant.slug}</span>

@@ -7,6 +7,9 @@ import { prisma } from "@/lib/prisma";
 import { setBypassContext } from "@/lib/tenant-context";
 import { branchScheduleDisplaySelect } from "@/lib/branch-effective-schedule-server";
 
+const PHOTO_ORDER = [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }];
+const PHOTO_SELECT = { id: true, url: true } as const;
+
 // GET /api/v1/app/orgs/[slug] — байгууллагын дэлгэрэнгүй + салбарууд (нийтэд).
 // Booking v2: салбар бүрд санал болгох ангилалуудыг шийдэгдсэн хугацаатай нь
 // (category default ?? 30) хавсаргана.
@@ -34,6 +37,8 @@ export async function GET(
       name: true,
       logoUrl: true,
       phone1: true,
+      // Байгууллагын нийтлэг зураг (салбарын зураг нь branches[].photos). url нь "/uploads/..." (logoUrl-тай адил).
+      photos: { where: { branchId: null }, orderBy: PHOTO_ORDER, select: PHOTO_SELECT },
       branches: {
         orderBy: { isPrimary: "desc" },
         select: {
@@ -47,6 +52,7 @@ export async function GET(
           address: true,
           latitude: true,
           longitude: true,
+          photos: { orderBy: PHOTO_ORDER, select: PHOTO_SELECT },
           ...branchScheduleDisplaySelect(),
         },
       },

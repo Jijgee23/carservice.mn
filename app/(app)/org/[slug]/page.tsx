@@ -20,6 +20,8 @@ import { setBypassContext } from "@/lib/tenant-context";
 import { absoluteUrl, orgDescription, orgJsonLd, orgUrl } from "@/lib/seo";
 import { JsonLd } from "@/app/_components/json-ld";
 import { BookingForm } from "./booking-form";
+import { PhotoGallery } from "@/app/_components/photo-gallery";
+import { listTenantPhotos } from "@/lib/tenant-photos";
 
 export const dynamic = "force-dynamic";
 
@@ -127,6 +129,7 @@ export default async function OrgPage({
   const bookingBranches = lockedBranch ? [lockedBranch] : org.branches;
 
   const account = await getAccount();
+  const orgPhotos = lockedBranch ? [] : await listTenantPhotos(org.id, null);
   const [vehicles, categoryRows, bookingFee] = await Promise.all([
     // Хэрэглэгчийн бүх машин — өөрөө нэмсэн (AccountVehicle) дээр нэмээд
     // сервисүүдэд бүртгэлтэй, энэ хэрэглэгчид холбогдсон машинууд
@@ -179,6 +182,8 @@ export default async function OrgPage({
             : `${org.branches.length} салбар${org.phone1 ? ` · ${org.phone1}` : ""}`
         }
       />
+
+      {orgPhotos.length > 0 ? <PhotoGallery photos={orgPhotos} label={org.name} /> : null}
 
       <Panel
         title="Цаг захиалах"

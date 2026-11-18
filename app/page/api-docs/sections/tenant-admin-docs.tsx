@@ -161,6 +161,44 @@ Res:  200 { "logoUrl": "/uploads/logos/..." }
 
         <Endpoint
           method="GET"
+          path="/api/v1/tenant/photos"
+          auth="bearer"
+          bearerLabel={BEARER}
+          title="Байгууллага / салбарын зургийн сан. ?branchId= байхгүй бол байгууллагын нийтлэг зураг. Нэвтэрсэн бүх ажилтан уншина."
+        >
+          <Code>{`Res:  200 { "photos": [{ "id": "...", "url": "/uploads/gallery/...", "branchId": null | "<id>" }],
+            "limits": { "maxPerScope": 12, "maxPerUpload": 6 } }
+404 { "code": "NOT_FOUND" }   // салбар олдсонгүй`}</Code>
+        </Endpoint>
+
+        <Endpoint
+          method="POST"
+          path="/api/v1/tenant/photos"
+          auth="bearer"
+          bearerLabel={BEARER}
+          tags={["Байгууллага: зөвхөн эзэн", "Салбар: branches.edit"]}
+          title="Зураг нэмэх (олон нийтийн хуудас, хэрэглэгчийн апп-ын дэлгэрэнгүйд харагдана). multipart/form-data, PNG/JPG/WEBP, зураг бүр 2MB хүртэл (агуулгаар шалгана), нэг орон зайд 12, нэг удаад 6 хүртэл."
+        >
+          <Code>{`Req:  multipart/form-data — files: <зураг> (олон) эсвэл file: <зураг>, branchId?: "<id>" (байхгүй бол байгууллагын зураг)
+Res:  201 { "photos": [{ "id": "...", "url": "/uploads/gallery/...", "branchId": null | "<id>" }] }
+400 { "code": "VALIDATION", "fieldErrors": { "files": "..." } }   // файл байхгүй / төрөл / хэмжээ / нэг удаад хэт олон
+403 эрхгүй | 404 { "code": "NOT_FOUND" } (салбар) | 409 { "code": "LIMIT" } (дээд тоо)`}</Code>
+        </Endpoint>
+
+        <Endpoint
+          method="DELETE"
+          path="/api/v1/tenant/photos/{id}"
+          auth="bearer"
+          bearerLabel={BEARER}
+          tags={["Байгууллага: зөвхөн эзэн", "Салбар: branches.edit"]}
+          title="Зураг устгах (мөр + файл)."
+        >
+          <Code>{`Res:  200 { "ok": true }
+403 эрхгүй | 404 { "code": "NOT_FOUND" }`}</Code>
+        </Endpoint>
+
+        <Endpoint
+          method="GET"
           path="/api/v1/tenant/qpay"
           auth="bearer"
           bearerLabel={BEARER}

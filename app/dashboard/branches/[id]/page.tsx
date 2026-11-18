@@ -6,6 +6,8 @@ import { canEdit } from "@/lib/auth/roles";
 import { Btn, BtnLink, Chip } from "@/app/_components/landing-ops-ui";
 import { prisma } from "@/lib/prisma";
 import { BranchForm, BRANCH_FORM_ID } from "../branch-form";
+import { PhotoGalleryManager } from "@/app/_components/photo-gallery-manager";
+import { listTenantPhotos, MAX_FILES_PER_UPLOAD, MAX_PHOTOS_PER_SCOPE } from "@/lib/tenant-photos";
 import { getAddressData } from "@/lib/address";
 import type { Weekday } from "@/lib/branches";
 import { getBranchVisibility, SINGLE_BRANCH_LABEL } from "@/lib/branch-visibility";
@@ -77,6 +79,7 @@ export default async function EditBranchPage({
     }),
   ]);
   if (!branch) notFound();
+  const photos = await listTenantPhotos(user.tenantId, branch.id);
 
   const openDays = branch.schedules
     .filter((s) => s.isOpen)
@@ -255,6 +258,19 @@ export default async function EditBranchPage({
           </div>
         </div>
       </div>
+
+      <section className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-5 sm:p-6">
+        <h2 className="font-semibold text-[var(--oc-ink)]">Салбарын зураг</h2>
+        <p className="text-xs text-[var(--oc-muted3)] mt-0.5 mb-4">
+          Олон нийтийн хуудас (carservice.mn)-ны дэлгэрэнгүй хэсэгт харагдана.
+        </p>
+        <PhotoGalleryManager
+          photos={photos}
+          branchId={branch.id}
+          max={MAX_PHOTOS_PER_SCOPE}
+          maxPerUpload={MAX_FILES_PER_UPLOAD}
+        />
+      </section>
     </div>
   );
 }

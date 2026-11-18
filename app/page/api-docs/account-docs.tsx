@@ -241,7 +241,9 @@ Res: 200 {
           <Code>{`Res: 200 {
   "org": {
     "slug": "infosystems", "name": "Инфосистемс", "logoUrl": "..." | null, "phone1": "70110000",
+    "photos": [{ "id": "...", "url": "/uploads/gallery/..." }],         // байгууллагын нийтлэг зураг (хоосон байж болно)
     "branches": [{
+      "photos": [{ "id": "...", "url": "/uploads/gallery/..." }],       // тухайн салбарын зураг (дэлгэрэнгүй дэлгэцэнд)
       "id": "...", "name": "Үндсэн салбар", "city": "...", "district": "...",
       "khoroo": "...", "address": "...", "latitude": 47.91, "longitude": 106.91,
       "openTime": "09:00", "closeTime": "18:00",                       // анхдагч (default) цаг
