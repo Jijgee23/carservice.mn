@@ -78,6 +78,7 @@ export function RoleForm({
   actions,
   standalonePermissions,
   permissionCatalog,
+  defaultTenantEditable = [],
   hideBranches = false,
 }: {
   initial?: Initial;
@@ -86,6 +87,8 @@ export function RoleForm({
   standalonePermissions: StandaloneItem[];
   /** Бүх эрхийн код (шошготой) — «Байгууллагад өөрчлөх эрх» хэсэгт. */
   permissionCatalog: CatalogItem[];
+  /** Шинэ роль үүсгэх үеийн анхдагч «нээлттэй» эрхүүд (түгжигдэх ёстой нь эмзэг эрхүүд). */
+  defaultTenantEditable?: string[];
   /** Энгийн багц (ганц салбар): «Салбар» нөөцийн мөрийг нууна. */
   hideBranches?: boolean;
 }) {
@@ -114,7 +117,7 @@ export function RoleForm({
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
   // Систем админ «байгууллага өөрчилж болно» гэж тэмдэглэсэн эрхүүд.
   const [editable, setEditable] = useState<Set<string>>(
-    () => new Set(initial?.tenantEditablePermissions ?? []),
+    () => new Set(initial ? (initial.tenantEditablePermissions ?? []) : defaultTenantEditable),
   );
 
   function toggleEditable(code: string) {
@@ -469,8 +472,43 @@ export function RoleForm({
         index={3}
         total={3}
         title="Байгууллагад өөрчлөх эрх"
-        description="Тэмдэглэсэн эрхийг байгууллага (эзэн) энэ ролиос хасах эсвэл нэмж болно. Тэмдэглээгүй эрх түгжигдсэн — байгууллага өөрчилж чадахгүй."
+        description="Тэмдэглэсэн эрхийг байгууллага (эзэн) энэ ролиос хасах эсвэл нэмж болно. Анхдагчаар ихэнх эрх нээлттэй; мөнгө, ажилтан удирдах, аудит зэрэг эмзэг эрх түгжигдсэн. Тэмдэглээгүй эрх түгжигдсэн — байгууллага өөрчилж чадахгүй."
       >
+        <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
+          <span className="font-plex-mono text-[var(--oc-muted3)]">
+            {editable.size}/{permissionCatalog.length} нээлттэй
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setDirty(true);
+              setEditable(new Set(defaultTenantEditable));
+            }}
+            className="text-[var(--oc-accent)] hover:text-[var(--oc-accent-hi)] transition-colors"
+          >
+            Анхдагч
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setDirty(true);
+              setEditable(new Set(permissionCatalog.map((p) => p.code)));
+            }}
+            className="text-[var(--oc-muted2)] hover:text-[var(--oc-ink2)] transition-colors"
+          >
+            Бүгдийг нээх
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setDirty(true);
+              setEditable(new Set());
+            }}
+            className="text-[var(--oc-muted2)] hover:text-[var(--oc-ink2)] transition-colors"
+          >
+            Бүгдийг түгжих
+          </button>
+        </div>
         <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel2)] divide-y divide-[var(--oc-line)]">
           {catalogGroups.map(([group, items]) => (
             <div key={group} className="p-3">

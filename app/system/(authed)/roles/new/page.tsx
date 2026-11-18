@@ -7,6 +7,7 @@ import {
   RESOURCES,
   STANDALONE_PERMISSIONS,
 } from "@/lib/auth/permissions";
+import { DEFAULT_TENANT_EDITABLE_PERMISSIONS } from "@/lib/roles/tenant-editable-defaults";
 import { ROLE_FORM_ID, RoleForm } from "../role-form";
 
 export const metadata = {
@@ -52,6 +53,7 @@ export default async function NewRolePage() {
           description: p.description,
         }))}
         permissionCatalog={PERMISSIONS.map((p) => ({ code: p.code, label: p.label, group: p.group }))}
+        defaultTenantEditable={[...DEFAULT_TENANT_EDITABLE_PERMISSIONS]}
       />
     </div>
   );

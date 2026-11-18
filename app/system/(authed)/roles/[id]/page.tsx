@@ -9,6 +9,7 @@ import {
   STANDALONE_PERMISSIONS,
 } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
+import { DEFAULT_TENANT_EDITABLE_PERMISSIONS } from "@/lib/roles/tenant-editable-defaults";
 import { ROLE_FORM_ID, RoleForm } from "../role-form";
 import { DeleteRoleButton } from "./danger-actions";
 
@@ -92,6 +93,7 @@ export default async function EditRolePage({
             description: p.description,
           }))}
           permissionCatalog={PERMISSIONS.map((p) => ({ code: p.code, label: p.label, group: p.group }))}
+          defaultTenantEditable={[...DEFAULT_TENANT_EDITABLE_PERMISSIONS]}
         />
 
         <div className="flex flex-col gap-6">

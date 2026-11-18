@@ -110,7 +110,7 @@ Res: 200 { "roles": [{ "id": "sysrole_manager", "key": "MANAGER"|null,   // key:
           <Code>{`403 { "error": "Роль системээс тохируулагдана. Системийн админтай холбогдоно уу.", "code": "SYSTEM_MANAGED" }`}</Code>
         </Endpoint>
 
-        <Endpoint method="GET" path="/api/v1/roles/overrides" auth="bearer" bearerLabel={BEARER} tags={["Эрх: employees.view / employees.create / employees.edit (аль нэг)"]} title="Системийн админ ядаж нэг эрхийг өөрчлөхийг зөвшөөрсөн идэвхтэй ролиуд + ЭНЭ байгууллагын нэмэлт/хасалт. Хэрэгжих эрх = ролийн эрх + нэмсэн − хассан (/auth/login, /me-ийн role.permissions нь аль хэдийн энэ үр дүнтэй эрх).">
+        <Endpoint method="GET" path="/api/v1/roles/overrides" auth="bearer" bearerLabel={BEARER} tags={["Эрх: employees.view / employees.create / employees.edit (аль нэг)"]} title="Өөрчилж болох эрхтэй (анхдагчаар ихэнх эрх нээлттэй; системийн админ түгжиж болно) идэвхтэй ролиуд + ЭНЭ байгууллагын нэмэлт/хасалт. Хэрэгжих эрх = ролийн эрх + нэмсэн − хассан (/auth/login, /me-ийн role.permissions нь аль хэдийн энэ үр дүнтэй эрх).">
           <Code>{`Res: 200 { "roles": [{ "roleId", "name", "description", "rolePermissions": [...],     // ролийн анхдагч эрх (систем админ)
                        "editablePermissions": ["orders.itemPrice", ...],        // байгууллага нэмж/хасч болох эрх; бусад нь түгжигдсэн
                        "add": [...], "remove": [...],                           // энэ байгууллагын одоогийн өөрчлөлт (хүчинтэй хэсэг)

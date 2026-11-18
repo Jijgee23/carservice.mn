@@ -24,8 +24,7 @@ export default async function RoleOverridesPage() {
 
       {roles.length === 0 ? (
         <div className="rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-6 text-sm text-[var(--oc-muted2)]">
-          Одоогоор өөрчилж болох эрх байхгүй байна. Системийн админ танай байгууллагад ролийн эрх
-          өөрчлөх боломжийг нээгээгүй байна.
+          Системийн админ одоогоор ролийн эрхийг өөрчлөх боломжийг бүх ролиос түгжсэн байна.
         </div>
       ) : (
         <div className="flex flex-col gap-5">

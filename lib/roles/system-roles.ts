@@ -10,6 +10,7 @@
 // Tenant-admin (`User.isOwner`) нь роль биш — бүх эрхтэй хэвээр.
 
 import { RESOURCES, type PermissionCode } from "@/lib/auth/permissions";
+import { DEFAULT_TENANT_EDITABLE_PERMISSIONS } from "./tenant-editable-defaults";
 
 export const SYSTEM_ROLE_KEYS = [
   "MECHANIC",
@@ -22,6 +23,8 @@ export const SYSTEM_ROLE_KEYS = [
 export type SystemRoleKey = (typeof SYSTEM_ROLE_KEYS)[number];
 
 export type SystemRoleDefault = {
+  /** Байгууллага өөрчилж болох эрхүүд — анхнаасаа нээлттэй (lib/roles/tenant-editable-defaults.ts). */
+  tenantEditablePermissions: string[];
   id: string;
   key: SystemRoleKey;
   name: string;
@@ -32,12 +35,15 @@ export type SystemRoleDefault = {
 
 const ALL_VIEW = RESOURCES.map((r) => `${r.key}.view` as PermissionCode);
 
+const OPEN = [...DEFAULT_TENANT_EDITABLE_PERMISSIONS];
+
 export const SYSTEM_ROLE_DEFAULTS: readonly SystemRoleDefault[] = [
   {
     id: "sysrole_mechanic",
     key: "MECHANIC",
     name: "Засварчин",
     description: "Өөрт оноогдсон засварыг гүйцэтгэж, оношилгоо хийнэ.",
+    tenantEditablePermissions: OPEN,
     sortOrder: 10,
     permissions: [
       "orders.viewOwn",
@@ -58,6 +64,7 @@ export const SYSTEM_ROLE_DEFAULTS: readonly SystemRoleDefault[] = [
     key: "ENGINEER",
     name: "Инженер",
     description: "Засвар хүлээн авч, хуваарилж, үнэ болон оношилгоог хариуцна.",
+    tenantEditablePermissions: OPEN,
     sortOrder: 20,
     permissions: [
       "orders.view",
@@ -89,6 +96,7 @@ export const SYSTEM_ROLE_DEFAULTS: readonly SystemRoleDefault[] = [
     key: "ACCOUNTANT",
     name: "Нягтлан",
     description: "Төлбөр, касс, тооцоо болон санхүүгийн хяналт.",
+    tenantEditablePermissions: OPEN,
     sortOrder: 30,
     permissions: [
       "payments.view",
@@ -109,6 +117,7 @@ export const SYSTEM_ROLE_DEFAULTS: readonly SystemRoleDefault[] = [
     key: "CASHIER",
     name: "Кассын нярав",
     description: "Төлбөр хүлээн авч, кассын гүйлгээ хөтөлнө.",
+    tenantEditablePermissions: OPEN,
     sortOrder: 40,
     permissions: [
       "payments.view",
@@ -125,6 +134,7 @@ export const SYSTEM_ROLE_DEFAULTS: readonly SystemRoleDefault[] = [
     key: "MANAGER",
     name: "Менежер",
     description: "Бүх мэдээллийг зөвхөн харна (засах эрхгүй).",
+    tenantEditablePermissions: OPEN,
     sortOrder: 50,
     permissions: [...ALL_VIEW, "audit.view", "orders.itemHistory"],
   },

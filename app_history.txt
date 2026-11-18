@@ -2414,3 +2414,9 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - Escalation guard-ууд ҮР ДҮНТЭЙ эрхээр: ensureRoleAssignable(db, roleId, tenantId) байгууллагын override-той, targetEffectivePermissions (deactivate/reset-password/delete-ийн «дээд эрхтэй ажилтан» шалгалт). EmployeesClient-д optional tenantRoleOverride.
 - API docs (staff-docs): roles/overrides, roles/[id]/override, employees/[id]/restrictions, role.editablePermissions. Гарын авлага: «Ролийн эрхийг байгууллагад тохируулах», «Ажилтны эрхийг хязгаарлах».
 - Тест: employee-restrictions (10), employee-guards-effective (7), role-delegation-routes (+4).
+
+[2026-11-18] Эрх өөрчлөх боломж АНХНААСАА НЭЭЛТТЭЙ (ролийн delegation-ийн default өөрчлөлт)
+- lib/roles/tenant-editable-defaults.ts: DEFAULT_TENANT_EDITABLE_PERMISSIONS = каталог − SENSITIVE (employees.create/edit/delete, audit.view, cash.manage, orders.closeUnpaidPostpaid, payments.delete). Жишээ нь засварын хуудсанд ажил/үйлчилгээ/сэлбэгийн үнэ засах orders.itemPrice нээлттэй. Нэг эх сурвалж: migration, SYSTEM_ROLE_DEFAULTS, fixture seed, шинэ роль үүсгэх форм.
+- Migration 20261118120000_tenant_editable_defaults: tenantEditablePermissions хоосон ролиудад default-ыг тавина (админ тохируулсныг дарахгүй). Локал DB: 5 роль бүгд 41 эрх нээлттэй.
+- /system/roles форм: шинэ роль default-аар нээлттэй, «Анхдагч / Бүгдийг нээх / Бүгдийг түгжих» товч, нээлттэй тоо. Систем админ ихэвчлэн ЮУГ ТҮГЖИХЭЭ тохируулна.
+- Тест: tenant-editable-defaults (6; migration SQL ↔ TS синк).

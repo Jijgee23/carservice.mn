@@ -373,7 +373,7 @@ export async function seedFixtureData(db: SeedDb) {
     await db.role.upsert({
       where: { id: r.id },
       update: {},
-      create: { id: r.id, key: r.key, name: r.name, description: r.description, permissions: [...r.permissions], sortOrder: r.sortOrder },
+      create: { id: r.id, key: r.key, name: r.name, description: r.description, permissions: [...r.permissions], tenantEditablePermissions: [...r.tenantEditablePermissions], sortOrder: r.sortOrder },
     });
   }
 
