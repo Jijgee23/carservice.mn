@@ -1,26 +1,23 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma } from "@/app/generated/prisma/client";
-import { logAudit } from "@/lib/audit";
 import { requireUser } from "@/lib/auth";
 import { canCreate } from "@/lib/auth/roles";
-import { importEmployees } from "@/lib/employees/core";
 import {
-  duplicateKeys,
   MAX_IMPORT_BYTES,
   parseImportRowsPayload,
   type ImportEmployeesResult,
   type ParsedSheet,
 } from "@/lib/employees/import";
+import { checkEmployeeImportTaken, runEmployeeImport } from "@/lib/employees/import-service";
 import { ImportParseError, parseEmployeeWorkbook } from "@/lib/employees/import-server";
 import type { EmployeeActor } from "@/lib/employees/types";
-import { prisma } from "@/lib/prisma";
 import { assertActiveSubscription } from "@/lib/subscription-server";
 
 // «Excel-ээс ажилтан оруулах» (/dashboard/employees/import). Гурван алхам:
 // parse (файл → гарчиг + мөр), check (тенант дотор давхцал), import (үүсгэх).
-// Бүгд ажилтан нэмэх эрх + идэвхтэй багц шаардана.
+// Бүгд ажилтан нэмэх эрх + идэвхтэй багц шаардана. Логик нь lib/employees/import-service.ts-д
+// (мобайл POST /api/v1/employees/import[/preview]-тэй нэг).
 
 async function authorizeImport(): Promise<EmployeeActor> {
   const user = await requireUser();
@@ -63,12 +60,7 @@ export async function parseEmployeeImportAction(formData: FormData): Promise<Par
   }
 }
 
-/**
- * Утас/имэйл тенантын бусад ажилтанд бүртгэлтэй эсэх (урьдчилан харах
- * хүснэгтэд). RLS-ээр зөвхөн өөрийн тенант харагдана — өөр тенантын
- * давхцлыг санаатайгаар илрүүлэхгүй (500 мөрөөр бусдын утас/имэйл шалгах
- * oracle болохгүйн тулд); тийм мөр импорт хийхэд P2002-оор алдаа буцна.
- */
+/** Утас/имэйл тенантын бусад ажилтанд бүртгэлтэй эсэх (урьдчилан харах хүснэгтэд). */
 export async function checkEmployeeImportDuplicatesAction(
   entries: unknown,
 ): Promise<{ ok: true; taken: Record<string, { phone?: boolean; email?: boolean }> } | { ok: false; message: string }> {
@@ -80,31 +72,7 @@ export async function checkEmployeeImportDuplicatesAction(
   }
   const rows = parseImportRowsPayload(entries);
   if (!rows) return { ok: false, message: "Буруу хүсэлт." };
-
-  const keyed = rows.map((r) => ({ key: r.key, ...duplicateKeys(r) }));
-  const phones = [...new Set(keyed.map((r) => r.phone).filter(Boolean))];
-  const emails = [...new Set(keyed.map((r) => r.email).filter(Boolean))];
-  if (phones.length === 0 && emails.length === 0) return { ok: true, taken: {} };
-
-  const existing = await prisma.user.findMany({
-    where: {
-      tenantId: user.tenantId,
-      OR: [{ phone: { in: phones } }, { email: { in: emails } }],
-    },
-    select: { phone: true, email: true },
-  });
-  const takenPhones = new Set(existing.map((u) => u.phone));
-  const takenEmails = new Set(existing.map((u) => u.email));
-
-  const taken: Record<string, { phone?: boolean; email?: boolean }> = {};
-  for (const r of keyed) {
-    const hit = {
-      ...(r.phone && takenPhones.has(r.phone) ? { phone: true } : {}),
-      ...(r.email && takenEmails.has(r.email) ? { email: true } : {}),
-    };
-    if (hit.phone || hit.email) taken[r.key] = hit;
-  }
-  return { ok: true, taken };
+  return { ok: true, taken: await checkEmployeeImportTaken(user.tenantId, rows) };
 }
 
 export async function importEmployeesAction(payload: unknown): Promise<ImportEmployeesResult> {
@@ -117,22 +85,10 @@ export async function importEmployeesAction(payload: unknown): Promise<ImportEmp
   const rows = parseImportRowsPayload(payload);
   if (!rows) return { ok: false, message: "Оруулах мөр алга эсвэл хүсэлт буруу." };
 
-  const result = await importEmployees(prisma, user, rows, {
-    onCreated: (created) =>
-      logAudit({
-        tenantId: user.tenantId,
-        userId: user.id,
-        entity: "User",
-        entityId: created.id,
-        action: "CREATE",
-        summary: `${created.summary} · Excel-ээс`,
-        after: created.after as Prisma.InputJsonValue,
-      }),
-  });
-
+  const result = await runEmployeeImport(user, rows);
   if (result.succeeded > 0) {
     revalidatePath("/dashboard/employees");
     revalidatePath("/dashboard");
   }
-  return { ok: true, ...result };
+  return result;
 }

@@ -383,6 +383,37 @@ Res:  200 { "template": { ...POST-ийн template, "versionBumped": true | false
       Content-Disposition: attachment; filename="diagnostic-<id>-<YYYY-MM-DD>.pdf"
 404 { "error": "Тайлан олдсонгүй." }   // байхгүй, өөр салбар, эсвэл холбогдсон захиалгыг харах эрхгүй`}</Code>
         </Endpoint>
+
+        <Endpoint method="GET" path="/api/v1/orders/[id]/pdf" auth="bearer" bearerLabel={BEARER} tags={["Эрх: orders.view эсвэл orders.viewOwn (зөвхөн өөрийн хуудас)", "branch-scoped"]} title="Захиалгын хуудас / нэхэмжлэхийн PDF (хэвлэх, хуваалцах). Вэбийн /dashboard/orders/[id]/print-тэй ИЖИЛ баримт — цуцлагдсан, төлөгдсөн, нэхэмжлэх гарчиг, төлөх данс, гарын үсгийн мөр, хүлээн авалтын шалгалт. Татварын баримт БИШ.">
+          <Code>{`Query: ?format=a4|80mm      // байхгүй бол байгууллагын анхдагч хэмжээ (Тохиргоо → Засварын хуудас)
+Res:  200 application/pdf
+      Content-Disposition: attachment; filename="order-<дугаар>.pdf"; Cache-Control: private, no-store
+      // 80mm = дулааны принтерийн 80мм-ийн нэг урт хуудас; a4 = олон хуудаслалттай
+403 { "error": "Танд энэ үйлдэл хийх эрх байхгүй." }
+404 { "error": "Засварын хуудас олдсонгүй.", "code": "NOT_FOUND" }   // байхгүй, өөр салбар, эсвэл өөрийх биш (эрхийн хүрээнээс гадуур)
+422 { "code": "VALIDATION", "fieldErrors": { "format": "a4 | 80mm" } }`}</Code>
+        </Endpoint>
+
+        <Endpoint method="POST" path="/api/v1/services/import/preview" auth="bearer" bearerLabel={BEARER} tags={["Эрх: services.create", SUB, "multipart/form-data", "Rate limit: 20/10мин"]} title="Ажил / сэлбэгийг Excel-ээс оруулах — 1–3-р алхам НЭГ дуудлагаар: файл → гарчиг → баганыг автоматаар таах → ангилал/нэгжийг нэрээр таних → мөр бүрийн шалгалт, давхардсан/бүртгэлтэй код. Юу ч үүсгэхгүй.">
+          <Code>{`Form: file=<.xlsx ≤2MB, ≤500 мөр> type=LABOR|GOODS   mapping=<заавал биш JSON, талбар → баганын индекс | null>
+Res:  200 { "fileName": "...", "preview": {
+  "type": "LABOR", "headers": ["Нэр","Код","Үнэ"], "mapping": { "name": 0, "code": 1, "price": 2, "unit": null, ... },
+  "fields": [{ "key": "name", "label": "Нэр", "required": true }, ...],
+  "rows": [{ "key": "r2", "excelRow": 2, "name": "...", "code": "OIL-1", "categoryId": "..."|"", "categoryRaw": "...", "unitId": "...", ... }],
+  "rowErrors": { "r4": { "price": "..." } },              // алдаатай мөр бүрийн талбарын алдаа
+  "inFileDuplicates": { "r3": 2 },                        // файл дотор давхардсан код → эхний мөрийн Excel дугаар
+  "takenKeys": ["r5"],                                    // системд бүртгэлтэй код (импортод алгасна)
+  "categories": [{ "id", "name" }], "units": [{ "id", "name", "code" }], "readyCount": 12 } }
+400 { "code": "VALIDATION", "fieldErrors": { "mapping": "..." } } | 400 файл/multipart алга
+413 файл 2MB-аас хэтэрсэн   415 .xlsx биш   422 { "code": "VALIDATION" (type) } | { "code": "IMPORT_PARSE" }   429`}</Code>
+        </Endpoint>
+
+        <Endpoint method="POST" path="/api/v1/services/import" auth="bearer" bearerLabel={BEARER} tags={["Эрх: services.create", SUB, "Rate limit: 10/10мин"]} title="preview-ийн rows-ыг (шаардлагатай бол засаад) илгээж олноор үүсгэнэ. Мөр бүр ТУСАД нь (all-or-nothing БИШ); системд бүртгэлтэй кодтой мөрийг алгасна; амжилттай бүр аудитад бичигдэнэ.">
+          <Code>{`Req:  { "type": "GOODS", "rows": [ ...preview.rows (1–500) ] }
+Res:  200 { "succeeded": 11, "failed": 1, "results": [{ "key": "r2", "ok": true }, { "key": "r4", "ok": false, "error": "...", "fieldErrors": { "code": "..." } }] }
+      // зарим нь амжилтгүй байсан ч 200
+422 { "code": "VALIDATION", "fieldErrors": { "type": "LABOR | GOODS" } } | { "fieldErrors": { "rows": "1–500 мөр шаардлагатай." } }   429`}</Code>
+        </Endpoint>
       </Section>
 
       {/* --- Тайлан, хяналт, санал хүсэлт --- */}

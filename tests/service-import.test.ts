@@ -175,7 +175,9 @@ test("actions and routes are permission-gated; list toolbar links them", () => {
   assert.match(actions, /canCreate\(user, "services"\)/);
   assert.match(actions, /assertActiveSubscription\(user\.tenantId\)/);
   assert.doesNotMatch(actions, /enforceCountLimit|PLAN_LIMIT_REACHED|DAILY_LIMIT_REACHED|PLAN_LIMIT_CODES\.(MAX_|DAILY_)/);
-  assert.match(actions, /auditSuffix: " · Excel-ээс"/);
+  // the audit tag now lives in the shared service (web action + mobile API both use it)
+  assert.match(actions, /runServiceImportForActor\(user, type, rows\)/);
+  assert.match(read("lib/services/import-service.ts"), /auditSuffix: " · Excel-ээс"/);
   assert.match(read("app/dashboard/services/export/route.ts"), /canView\(user, "services"\)/);
   assert.match(read("app/dashboard/services/import/template/route.ts"), /canCreate\(user, "services"\)/);
   const list = read("app/dashboard/services/service-list.tsx");

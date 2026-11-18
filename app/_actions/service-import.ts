@@ -5,29 +5,20 @@ import { requireUser } from "@/lib/auth";
 import { canCreate } from "@/lib/auth/roles";
 import { MAX_IMPORT_BYTES, type ParsedSheet } from "@/lib/import/mapping";
 import { ImportParseError, parseImportWorkbook } from "@/lib/import/xlsx-server";
-import { prisma } from "@/lib/prisma";
-import {
-  parseServiceImportPayload,
-  type ImportServiceKind,
-  type ServiceImportResult,
-} from "@/lib/services/import";
-import { createServiceCommand, loadServiceRefs } from "@/lib/services/service-create";
-import { runServiceImport } from "@/lib/services/service-import-run";
+import { parseServiceImportPayload, type ServiceImportResult } from "@/lib/services/import";
+import { existingServiceCodes, isImportServiceKind, runServiceImportForActor } from "@/lib/services/import-service";
 import { assertActiveSubscription } from "@/lib/subscription-server";
 
 // «Excel-ээс ажил / сэлбэг оруулах» (/dashboard/services/import?type=labor|goods).
 // parse (файл → гарчиг + мөр), checkCodes (бүртгэлтэй код), import (үүсгэх).
-// Бүгд «Үйлчилгээ — Үүсгэх» эрх + идэвхтэй багц шаардана.
+// Бүгд «Үйлчилгээ — Үүсгэх» эрх + идэвхтэй багц шаардана. Логик нь lib/services/import-service.ts-д
+// (мобайл POST /api/v1/services/import[/preview]-тэй нэг).
 
 async function authorizeImport() {
   const user = await requireUser();
   if (!canCreate(user, "services")) throw new Error("Танд ажил/сэлбэг нэмэх эрх байхгүй.");
   await assertActiveSubscription(user.tenantId);
   return user;
-}
-
-function kindOf(v: unknown): ImportServiceKind | null {
-  return v === "LABOR" || v === "GOODS" ? v : null;
 }
 
 export type ParseServiceImportResult = ({ ok: true; fileName: string } & ParsedSheet) | { ok: false; message: string };
@@ -65,17 +56,11 @@ export async function checkServiceImportCodesAction(
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
   }
-  const kind = kindOf(type);
-  if (!kind || !Array.isArray(codes) || codes.length > 1000 || codes.some((c) => typeof c !== "string")) {
+  if (!isImportServiceKind(type) || !Array.isArray(codes) || codes.length > 1000 || codes.some((c) => typeof c !== "string")) {
     return { ok: false, message: "Буруу хүсэлт." };
   }
-  const list = [...new Set((codes as string[]).map((c) => c.trim().toUpperCase().slice(0, 300)).filter(Boolean))];
-  if (list.length === 0) return { ok: true, taken: [] };
-  const existing = await prisma.service.findMany({
-    where: { tenantId: user.tenantId, type: kind, code: { in: list } },
-    select: { code: true },
-  });
-  return { ok: true, taken: existing.map((s) => s.code!).filter(Boolean) };
+  const taken = await existingServiceCodes(user.tenantId, type, codes as string[]);
+  return { ok: true, taken: [...taken] };
 }
 
 export async function importServicesAction(type: unknown, payload: unknown): Promise<ServiceImportResult> {
@@ -85,25 +70,10 @@ export async function importServicesAction(type: unknown, payload: unknown): Pro
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Алдаа" };
   }
-  const kind = kindOf(type);
   const rows = parseServiceImportPayload(payload);
-  if (!kind || !rows) return { ok: false, message: "Оруулах мөр алга эсвэл хүсэлт буруу." };
+  if (!isImportServiceKind(type) || !rows) return { ok: false, message: "Оруулах мөр алга эсвэл хүсэлт буруу." };
 
-  const codes = [...new Set(rows.map((r) => r.code.trim().toUpperCase()).filter(Boolean))];
-  const [refs, existing] = await Promise.all([
-    loadServiceRefs(user.tenantId, kind),
-    codes.length
-      ? prisma.service.findMany({ where: { tenantId: user.tenantId, type: kind, code: { in: codes } }, select: { code: true } })
-      : Promise.resolve([] as { code: string | null }[]),
-  ]);
-  const result = await runServiceImport({
-    type: kind,
-    rows,
-    refs,
-    existingCodes: new Set(existing.map((e) => (e.code ?? "").toUpperCase()).filter(Boolean)),
-    create: (values) => createServiceCommand(user, values, { auditSuffix: " · Excel-ээс" }),
-  });
-
+  const result = await runServiceImportForActor(user, type, rows);
   if (result.succeeded > 0) revalidatePath("/dashboard/services", "layout");
-  return { ok: true, ...result };
+  return result;
 }

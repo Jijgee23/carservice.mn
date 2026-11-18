@@ -85,6 +85,26 @@ Res:  200 { "employee": { "id": "...", "isActive": false } }
 409 { "error": "Сүүлийн админыг идэвхгүй болгох боломжгүй.", "code": "LAST_OWNER" }`}</Code>
         </Endpoint>
 
+        <Endpoint method="POST" path="/api/v1/employees/import/preview" auth="bearer" bearerLabel={BEARER} tags={["Эрх: employees.create", "Идэвхтэй захиалга шаардана", "multipart/form-data", "Rate limit: 20/10мин"]} title="Ажилтныг Excel-ээс оруулах — 1–3-р алхам НЭГ дуудлагаар: файл → гарчиг → баганыг автоматаар таах → үүрэг/салбарыг нэрээр таних → мөр бүрийн шалгалт, файл доторх болон бүртгэлтэй давхцал. Юу ч үүсгэхгүй.">
+          <Code>{`Form: file=<.xlsx ≤2MB, ≤500 мөр>   mapping=<заавал биш JSON: { "lastName":0,"firstName":1,"phone":2,"email":3,"role":4,"branch":null,"activeUntil":null }>
+Res:  200 { "fileName": "...", "preview": {
+  "headers": [...], "mapping": { "lastName": 0, ... }, "fields": [{ "key", "label", "required" }],
+  "rows": [{ "key": "r2", "excelRow": 2, "lastName", "firstName", "phone", "email", "roleId": "..."|"", "branchId": "..."|"", "activeUntil": "YYYY-MM-DD"|"", "roleRaw", "branchRaw" }],
+  "rowErrors": { "r4": { "phone": "..." } },
+  "inFileDuplicates": { "r3": { "phone": 2 } },            // файл дотор давхардсан утас/имэйл → эхний мөрийн Excel дугаар
+  "taken": { "r5": { "phone": true } },                    // тенантад бүртгэлтэй утас/имэйл
+  "roles": [{ "id", "name" }], "branches": [{ "id", "name" }], "readyCount": 7 } }
+400 { "code": "VALIDATION", "fieldErrors": { "mapping": "..." } } | файл/multipart алга   413 > 2MB   415 .xlsx биш
+422 { "code": "IMPORT_PARSE" }   429`}</Code>
+        </Endpoint>
+
+        <Endpoint method="POST" path="/api/v1/employees/import" auth="bearer" bearerLabel={BEARER} tags={["Эрх: employees.create", "Идэвхтэй захиалга шаардана", "Rate limit: 10/10мин"]} title="preview-ийн rows-ыг (шаардлагатай бол үүрэг/салбарыг засаад) илгээж ажилтныг олноор үүсгэнэ. Мөр бүр ТУСАД нь (all-or-nothing БИШ); ажилтан бүр анх нэвтрэхдээ утсанд ирсэн кодоор нууц үгээ тохируулна; амжилттай бүр аудитад бичигдэнэ.">
+          <Code>{`Req:  { "rows": [ ...preview.rows (1–500) ] }
+Res:  200 { "succeeded": 6, "failed": 1, "results": [{ "key": "r2", "ok": true }, { "key": "r4", "ok": false, "error": "...", "fieldErrors": { "email": "..." } }] }
+      // зарим нь амжилтгүй байсан ч 200. Админ (isOwner) эрхтэй хэрэглэгч импортоор үүсэхгүй.
+422 { "code": "VALIDATION", "fieldErrors": { "rows": "1–500 мөр шаардлагатай." } }   429`}</Code>
+        </Endpoint>
+
         <Endpoint method="POST" path="/api/v1/employees/bulk" auth="bearer" bearerLabel={BEARER} tags={["Эрх: employees.edit", "Багц идэвхтэй байх шаардлагатай"]} title="Олон ажилтны үүрэг ба/эсвэл үндсэн салбарыг нэг дор солих — мөр тус бүрээр (бүгд эсвэл юу ч биш биш).">
           <Code>{`Req:  { "employeeIds": ["...", "..."], "roleId": "...", "branchId": "..." }   // ids ≥1; roleId/branchId-ийн дор хаяж нэг
 Res:  200 { "succeeded": 2, "failed": 1, "errors": ["Овог Нэр: Тенант админыг өөрчлөх боломжгүй."] }

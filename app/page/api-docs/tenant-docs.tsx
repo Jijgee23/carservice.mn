@@ -573,6 +573,13 @@ Res: 200 { "settlements": [{ ...дээрх settlement бүтэц, "orders"/"entr
 404 { "code": "SETTLEMENT_NOT_FOUND" }`}</Code>
         </Endpoint>
 
+        <Endpoint method="GET" path="/api/v1/cash/settlements/[id]/pdf" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage", "branch-scoped"]} title="Тооцооны нэхэмжлэхийн PDF (вэбийн /dashboard/cash/settlements/[id]/print-тэй ИЖИЛ баримт; цуцлагдсан тооцоо «хүчингүй» тэмдэгтэй).">
+          <Code>{`Query: ?format=a4|80mm   // анхдагч a4
+Res:  200 application/pdf   Content-Disposition: attachment; filename="settlement-<id>.pdf"; Cache-Control: private, no-store
+403 { "code": "CASH_MANAGE_FORBIDDEN" }   404 { "code": "SETTLEMENT_NOT_FOUND" }
+422 { "code": "VALIDATION", "fieldErrors": { "format": "a4 | 80mm" } }`}</Code>
+        </Endpoint>
+
         <Endpoint method="POST" path="/api/v1/cash/settlements/[id]/void" auth="bearer" bearerLabel={BEARER} tags={["Эрх: cash.manage + orders.closeUnpaidPostpaid", "Багц идэвхтэй байх шаардлагатай"]} title="Тооцоог бүхэлд нь цуцлах (захиалга бүрийн төлбөр буцаагдаж, кассын бичлэг хүчингүй болно).">
           <Code>{`Req:  { "reason": "..." }                  // заавал, ≤500
 Res:  200 { "settlement": { ..., "voidedAt": "ISO", "voidReason": "...", "orders": [{ ..., "paymentStatus": "CANCELLED" }] } }
