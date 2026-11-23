@@ -12,9 +12,12 @@ export async function GET(request: Request) {
   const parsed = parseDiscoveryFilters(searchParams);
   if (parsed.error || !parsed.filters) return jsonError(400, parsed.error ?? "Шүүлтүүр буруу байна.");
   const { page, pageSize, skip, take } = getApiPageInfo(searchParams, { defaultSize: 20 });
-  const catalog = await getDiscoveryCatalog(parsed.filters);
+  // Вэбийн /discover-тэй адил бүх нийтийн газрыг буцаана; апп `bookable`-ээр
+  // «Цаг захиалах»-ыг нуудаг.
+  const catalog = await getDiscoveryCatalog(parsed.filters, { includeNonBookable: true });
   const orgs = catalog.organizations.map((organization) => ({
     slug: organization.slug,
+    bookable: organization.bookable,
     name: organization.name,
     logoUrl: organization.logoUrl,
     branches: organization.branches.map((branch) => ({

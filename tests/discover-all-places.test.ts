@@ -15,11 +15,16 @@ test("isTenantBookable requires the toggle AND a plan with «Цаг захиал
   assert.equal(isTenantBookable({ acceptsOnlineBooking: true, plan: "FREE" as never }, plans), false);
 });
 
-test("web discovery includes non-bookable tenants; mobile API keeps the bookable-only contract", () => {
+test("web discovery and mobile API include non-bookable tenants, flagged by `bookable`", () => {
   assert.match(read("app/api/web/discovery/route.ts"), /includeNonBookable: true/);
   assert.match(read("app/api/web/discovery/map/route.ts"), /includeNonBookable: true/);
-  assert.doesNotMatch(read("app/api/v1/app/orgs/route.ts"), /includeNonBookable/);
-  assert.doesNotMatch(read("app/api/v1/app/orgs/map/route.ts"), /includeNonBookable/);
+  assert.match(read("app/api/v1/app/orgs/route.ts"), /includeNonBookable: true/);
+  assert.match(read("app/api/v1/app/orgs/route.ts"), /bookable: organization\.bookable/);
+  assert.match(read("app/api/v1/app/orgs/map/route.ts"), /includeNonBookable: true/);
+  const detail = read("app/api/v1/app/orgs/[slug]/route.ts");
+  assert.match(detail, /where: \{ slug, \.\.\.PUBLIC_TENANT_WHERE \}/);
+  assert.match(detail, /bookable = isTenantBookable\(/);
+  assert.match(detail, /branches: \{\s*where: \{ isActive: true \}/);
   const catalog = read("lib/discovery-catalog.ts");
   assert.match(catalog, /const includeNonBookable = options\?\.includeNonBookable \?\? false;/);
   assert.match(catalog, /tenant: tenantVisibilityWhere/);

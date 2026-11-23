@@ -5,12 +5,15 @@ import { PLAN_LIMIT_CODES } from "@/lib/plan-limits";
 import { plansWithFeature } from "@/lib/plan-limits-server";
 import { prisma } from "@/lib/prisma";
 import { setBypassContext } from "@/lib/tenant-context";
+import { isTenantBookable, PUBLIC_TENANT_WHERE } from "@/lib/tenant-visibility";
 import { branchScheduleDisplaySelect } from "@/lib/branch-effective-schedule-server";
 
 const PHOTO_ORDER = [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }];
 const PHOTO_SELECT = { id: true, url: true } as const;
 
 // GET /api/v1/app/orgs/[slug] — байгууллагын дэлгэрэнгүй + салбарууд (нийтэд).
+// Вэбийн салбарын хуудастай адил онлайн захиалга авдаггүй газрыг ч буцаана
+// (`bookable: false` — апп «Цаг захиалах»-ыг нуудаг).
 // Booking v2: салбар бүрд санал болгох ангилалуудыг шийдэгдсэн хугацаатай нь
 // (category default ?? 30) хавсаргана.
 export async function GET(
@@ -24,15 +27,10 @@ export async function GET(
   const { slug } = await ctx.params;
   const allowedPlans = await plansWithFeature(PLAN_LIMIT_CODES.ENABLE_APPOINTMENTS);
   const org = await prisma.tenant.findFirst({
-    where: {
-      slug,
-      acceptsOnlineBooking: true,
-      suspended: false,
-      isTest: false,
-      creditHidden: false,
-      plan: { in: allowedPlans },
-    },
+    where: { slug, ...PUBLIC_TENANT_WHERE },
     select: {
+      acceptsOnlineBooking: true,
+      plan: true,
       slug: true,
       name: true,
       logoUrl: true,
@@ -40,6 +38,7 @@ export async function GET(
       // Байгууллагын нийтлэг зураг (салбарын зураг нь branches[].photos). url нь "/uploads/..." (logoUrl-тай адил).
       photos: { where: { branchId: null }, orderBy: PHOTO_ORDER, select: PHOTO_SELECT },
       branches: {
+        where: { isActive: true },
         orderBy: { isPrimary: "desc" },
         select: {
           ratingAvg: true,
@@ -73,7 +72,8 @@ export async function GET(
   });
   if (!org) return jsonError(404, "Байгууллага олдсонгүй.");
 
-  const { categories, branches, ...orgRest } = org;
+  const { categories, branches, acceptsOnlineBooking, plan, ...orgRest } = org;
+  const bookable = isTenantBookable({ acceptsOnlineBooking, plan }, allowedPlans);
 
   // Салбар бүрд: тухайн салбарт хамаарах ангилалуудыг шийдэгдсэн хугацаатай нь.
   const branchesWithCategories = branches.map((b) => {
@@ -95,5 +95,5 @@ export async function GET(
     };
   });
 
-  return jsonOk({ org: { ...orgRest, branches: branchesWithCategories } });
+  return jsonOk({ org: { ...orgRest, bookable, branches: branchesWithCategories } });
 }

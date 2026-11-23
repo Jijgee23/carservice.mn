@@ -196,7 +196,7 @@ export async function getDiscoveryCatalog(
     /**
      * true бол онлайн захиалга авдаггүй (гэхдээ олон нийтэд харагдах) тенантыг
      * ч оруулна — web /discover бүх газрыг газрын зураг дээр харуулдаг.
-     * Mobile API анхдагч (false) хэвээр: хуучин апп `bookable`-ийг мэдэхгүй.
+     * Web болон mobile API (`/api/v1/app/orgs`, `/orgs/map`) хоёулаа true дамжуулна.
      */
     includeNonBookable?: boolean;
   },
