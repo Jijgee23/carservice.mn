@@ -82,6 +82,12 @@ export async function submitQuoteRequestAction(
   const parsed = parseQuoteRequestInput(values);
   if (!parsed.ok) return { ok: false, fieldErrors: parsed.fieldErrors, values };
 
+  // Аль багцын санал авч байгааг админд харагдуулахын тулд тайлбарын эхэнд тэмдэглэнэ.
+  const plan = s(formData, "plan");
+  if (plan === "BUSINESS" || plan === "ENTERPRISE") {
+    parsed.data.message = `[${plan} багц] ${parsed.data.message ?? ""}`.trim();
+  }
+
   await saveQuoteRequest(parsed.data, tenantId);
 
   revalidatePath("/system/quote-requests");

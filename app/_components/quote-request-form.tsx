@@ -21,9 +21,12 @@ type Defaults = {
 export function QuoteRequestForm({
   source,
   defaults = {},
+  plan,
 }: {
   source: "public" | "dashboard";
   defaults?: Defaults;
+  /** Аль багцын санал авч байгаа (BUSINESS/ENTERPRISE) — админд хүсэлтэд тэмдэглэгдэнэ. */
+  plan?: "BUSINESS" | "ENTERPRISE";
 }) {
   // Анхдагчаар бүх модуль сонгогдсон — хэрэггүйгээ хасна.
   const [selected, setSelected] = useState<string[]>([...MODULE_LIMIT_CODES]);
@@ -59,6 +62,7 @@ export function QuoteRequestForm({
   return (
     <form key={state ? JSON.stringify(state.values ?? {}) : "init"} action={formAction} className="flex flex-col gap-5">
       <input type="hidden" name="source" value={source} />
+      {plan ? <input type="hidden" name="plan" value={plan} /> : null}
       {/* Honeypot — хүнд харагдахгүй, bot бөглөвөл хүсэлт хадгалагдахгүй. */}
       <input
         type="text"

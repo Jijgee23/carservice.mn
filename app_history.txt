@@ -2512,3 +2512,9 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 - Super admin: /system/settings «Үнэгүй туршилт» карт (багц бүрийн асаах/хоног, бүртгэлийн туршилт) + «Одоогийн байгууллагуудад олгох» (preview → батлах, SystemAuditLog). `app/_actions/system-trials.ts`.
 - Байгууллага: Багц хуудсанд «Туршиж үзэх» товч; `POST /api/v1/subscription/trial`, `GET /api/v1/subscription` → `trialsAvailable`.
 - Шалгалт: tests/plan-trials.test.ts 5/5, tsc цэвэр. Прод deploy хийгээгүй; deploy-н өмнө pg_dump, cron (expire-subscriptions) хуваарь прод дээр байгааг шалгах. Одоогийн байгууллагуудад туршилт автоматаар олгогдохгүй — super admin «бүгдэд олгох» товчийг дарна.
+
+## 2026-11-23 — Бизнес багцын үнийг нийтэд нуух, туршилтын тохиргоог Багц/Үнэ хуудас руу шилжүүлэх
+- Нүүр хуудас (pricing.tsx): төлбөртэй багцын үнийг нийтэд харуулахгүй («Захиалгат»), Бизнес багцын товч «Үнийн санал авах» → /page/quote?plan=business. PlanPrice хэвээр (нэвтэрсэн тенант өөрийн хуудсанд харна).
+- Үнийн саналын маягт Бизнес/Энтерпрайз хоёуланд: hidden `plan` → хүсэлтийн тайлбарын эхэнд «[BUSINESS багц]» тэмдэглэгдэнэ (schema өөрчлөлтгүй).
+- «Үнэгүй туршилт» тохиргоо /system/settings-оос /system/plan-prices руу шилжсэн (trial-settings-form.tsx, revalidate зам).
+- System ажилтан (STAFF) үүсгэх нь /system/admins дээр аль хэдийн бий (requireSuperAdmin, kind=STAFF).

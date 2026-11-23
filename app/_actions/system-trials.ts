@@ -67,7 +67,7 @@ export async function saveTrialSettingsAction(
     after: { rows, signupTrialEnabled, signupTrialPlan },
   });
 
-  revalidatePath("/system/settings");
+  revalidatePath("/system/plan-prices");
   revalidatePath("/dashboard/settings/subscription");
   return { ok: true, message: "Хадгалагдлаа." };
 }
@@ -135,7 +135,7 @@ export async function grantBulkTrialAction(plan: Plan): Promise<BulkTrialResult>
     after: { plan, granted, skipped },
   });
 
-  revalidatePath("/system/settings");
+  revalidatePath("/system/plan-prices");
   revalidatePath("/system/subscriptions");
   return {
     ok: true,

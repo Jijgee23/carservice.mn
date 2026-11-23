@@ -16,12 +16,19 @@ const plexMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Энтерпрайз — үнийн санал авах",
+  title: "Үнийн санал авах",
   description:
-    "Сүлжээ, олон салбартай автосервисүүдэд: хэрэгтэй модулиудаа сонгоод Энтерпрайз багцын үнийн санал аваарай.",
+    "Хэрэгтэй модулиудаа сонгоод Бизнес эсвэл Энтерпрайз багцын үнийн санал аваарай.",
 };
 
-export default function QuotePage() {
+export default async function QuotePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ plan?: string }>;
+}) {
+  const { plan: planParam } = await searchParams;
+  const plan = planParam === "business" ? "BUSINESS" : planParam === "enterprise" ? "ENTERPRISE" : "";
+  const planLabel = plan === "BUSINESS" ? "Бизнес" : plan === "ENTERPRISE" ? "Энтерпрайз" : "";
   return (
     <div className={`${plexSans.variable} ${plexMono.variable} landing-ops min-h-screen flex flex-col`}>
       <header className="border-b border-[var(--oc-line2)]">
@@ -39,12 +46,14 @@ export default function QuotePage() {
       </header>
 
       <main className="flex-1 mx-auto w-full max-w-3xl px-4 py-12">
-        <h1 className="text-3xl font-bold text-[var(--oc-ink)]">Энтерпрайз — үнийн санал авах</h1>
+        <h1 className="text-3xl font-bold text-[var(--oc-ink)]">
+          {planLabel ? `${planLabel} багц — үнийн санал авах` : "Үнийн санал авах"}
+        </h1>
         <p className="mt-2 mb-8 text-sm text-[var(--oc-muted3)]">
           Хэрэгтэй модулиудаа сонгоод мэдээллээ үлдээгээрэй. Танд тохирсон үнийн саналыг бэлтгээд удахгүй
           холбогдоно.
         </p>
-        <QuoteRequestForm source="public" />
+        <QuoteRequestForm source="public" plan={plan || undefined} />
       </main>
 
       <Footer />

@@ -1,8 +1,5 @@
-import { formatTugrik } from "@/lib/orders";
-import { prisma } from "@/lib/prisma";
 import { planFeatureLines } from "@/lib/plan-modules";
 import { getEnabledModules } from "@/lib/plan-modules-server";
-import { isSelfServePlan } from "@/lib/subscription";
 import { setBypassContext } from "@/lib/tenant-context";
 import { Container, Eyebrow } from "./landing-ops-ui";
 import { PricingCards, type PlanCardData } from "./pricing_card";
@@ -33,8 +30,8 @@ const PLAN_META: Record<
   BUSINESS: {
     name: "Бизнес",
     desc: "Олон мастертай, өсөн нэмэгдэж буй сервисүүдэд.",
-    cta: "Эхлэх",
-    href: "/page/signup?plan=business",
+    cta: "Үнийн санал авах",
+    href: "/page/quote?plan=business",
     highlighted: true,
     fallbackPrice: "Захиалгат",
   },
@@ -50,33 +47,16 @@ const PLAN_META: Record<
 
 export async function Pricing() {
   setBypassContext();
-  const [prices, ...planModules] = await Promise.all([
-    prisma.planPrice.findMany({
-      where: { isActive: true, period: "MONTH" },
-      select: { plan: true, amount: true },
-    }),
-    ...PLAN_ORDER.map((p) => getEnabledModules(p)),
-  ]);
+  const planModules = await Promise.all(PLAN_ORDER.map((p) => getEnabledModules(p)));
   const modulesByPlan = new Map(PLAN_ORDER.map((p, i) => [p, planModules[i]]));
-  const priceByPlan = new Map(prices.map((p) => [p.plan, p.amount]));
 
   const plans: PlanCardData[] = PLAN_ORDER.map((plan) => {
     const meta = PLAN_META[plan];
-    const amount = isSelfServePlan(plan) ? priceByPlan.get(plan) : undefined;
-    const hasPaidPrice = amount != null && Number(amount.toString()) > 0;
 
-    let price: string;
-    let period: string;
-    if (plan === "FREE") {
-      price = "Үнэгүй";
-      period = "";
-    } else if (hasPaidPrice) {
-      price = formatTugrik(amount.toString());
-      period = "/сар";
-    } else {
-      price = meta.fallbackPrice;
-      period = "";
-    }
+    // Төлбөртэй багцын үнийг нийтэд харуулахгүй — «Захиалгат» + үнийн санал авах.
+    // (Бодит үнэ PlanPrice-д хэвээр; нэвтэрсэн тенант өөрийн хуудсанд харна.)
+    const price = plan === "FREE" ? "Үнэгүй" : meta.fallbackPrice;
+    const period = "";
 
     const featureList = planFeatureLines(modulesByPlan.get(plan) ?? new Set());
 
@@ -101,7 +81,7 @@ export async function Pricing() {
           Жижиг сервисээс эхлээд сүлжээ хүртэл
         </h2>
         <p className="mb-10 text-[15.5px] text-[var(--oc-muted2)]">
-          Хэдхэн машинаар эхэлж, бизнесийнхээ хэмжээгээр өс. Үнэ ил тод, нуугдмал төлбөргүй.
+          Хэдхэн машинаар үнэгүй эхэлж, бизнесийнхээ хэмжээгээр өс. Бизнес, Энтерпрайз багцад танай хэрэгцээнд тааруулсан үнийн санал өгнө.
         </p>
 
         <PricingCards plans={plans} />

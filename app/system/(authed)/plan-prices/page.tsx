@@ -3,6 +3,8 @@ import { requireSuperAdmin } from "@/lib/auth/system";
 import { prisma } from "@/lib/prisma";
 import { PlanLimitsManager } from "./plan-limits-manager";
 import { PlanPriceMatrix } from "./plan-price-matrix";
+import { TrialSettingsForm } from "./trial-settings-form";
+import { getTrialSettingsForAdmin } from "@/lib/plan-trials-server";
 
 export const metadata = {
   title: "Багц / Үнэ / Модуль",
@@ -11,13 +13,14 @@ export const metadata = {
 export default async function SystemPlanPricesPage() {
   await requireSuperAdmin();
 
-  const [limits, prices] = await Promise.all([
+  const [limits, prices, trial] = await Promise.all([
     prisma.planLimit.findMany({
       orderBy: [{ plan: "asc" }, { sortOrder: "asc" }],
     }),
     prisma.planPrice.findMany({
       orderBy: [{ plan: "asc" }, { period: "asc" }],
     }),
+    getTrialSettingsForAdmin(),
   ]);
 
   return (
@@ -38,6 +41,10 @@ export default async function SystemPlanPricesPage() {
           notes: p.notes,
         }))}
       />
+
+      <div className="max-w-2xl">
+        <TrialSettingsForm initial={trial} />
+      </div>
 
       <PlanLimitsManager
         limits={limits.map((l) => ({
