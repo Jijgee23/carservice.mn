@@ -236,7 +236,7 @@ const secondaryItems: NavItem[] = [
     children: [
       { href: "/dashboard/settings", label: "Байгууллагын", exact: true },
       { href: "/dashboard/settings/orders", label: "Засварын хуудас" },
-      { href: "/dashboard/settings/roles", label: "Ролийн эрх" },
+      { href: "/dashboard/settings/roles", label: "Эрхийн тохиргоо" },
       { href: "/dashboard/settings/system", label: "Системийн" },
       { href: "/dashboard/settings/subscription", label: "Багц" },
       // `audit.view` эрхтэй (owner биш) ажилтанд бүлэг зөвхөн энэ child-аар харагдана.
