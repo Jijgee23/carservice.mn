@@ -37,7 +37,6 @@ export function StatusControls({
   serviceItemDurationMinutes = null,
   completeBlockedReason = null,
   cancelBlockedReason = null,
-  defaultExpanded = false,
   onChanged,
 }: {
   orderId: string;
@@ -50,7 +49,7 @@ export function StatusControls({
   completeBlockedReason?: string | null;
   /** Set when a paid payment sits in a closed cash session (PAID_PAYMENT_LOCKED): cancel is disabled with this reason. */
   cancelBlockedReason?: string | null;
-  /** Шилжилтийн товчуудыг анхнаасаа дэлгэж харуулах (жагсаалтын «Төлөв өөрчлөх» modal). */
+  /** @deprecated Товчууд үргэлж шууд харагдана; зөвхөн зөрчил гаргахгүйн тулд үлдсэн. */
   defaultExpanded?: boolean;
   /** Амжилттай шилжилтийн дараа (жагсаалтын modal-ыг хаахад). */
   onChanged?: () => void;
@@ -60,10 +59,6 @@ export function StatusControls({
     OrderActionState,
     FormData
   >(changeOrderStatusAction, null);
-  // Бүх статус шилжилтийн товчийг нэг л "Үйлдэл" товчийн ард нуух —
-  // дарахад доор нь гулсаж гарна (grid-template-rows 0fr→1fr trick, өндрийг
-  // JS-ээр хэмжихгүйгээр гөлгөр анимацилна).
-  const [showActions, setShowActions] = useState(defaultExpanded);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmStart, setConfirmStart] = useState(false);
   const [startHours, setStartHours] = useState("");
@@ -82,54 +77,19 @@ export function StatusControls({
     } else toast.error(state.message ?? "Алдаа гарлаа.");
   }, [state, toast, onChanged]);
 
-  // React-ийн зөвлөдөг "render-ийн үед нөхцөлт setState" загвар (useEffect
-  // биш) — амжилттай шилжилтийн дараа "Үйлдэл" жагсаалтыг хаана.
-  const [prevState, setPrevState] = useState<OrderActionState>(null);
-  if (state !== prevState) {
-    setPrevState(state);
-    if (state?.ok) setShowActions(false);
-  }
-
   return (
     <div className="flex flex-col gap-2">
-      <div>
-        <button
-          type="button"
-          onClick={() => setShowActions((v) => !v)}
-          aria-expanded={showActions}
-          className={`w-full flex items-center justify-center gap-1.5 text-sm font-medium px-4 py-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${showActions ? "rounded-t-xl rounded-b-none" : "rounded-xl"} ${STATUS_BTN_STYLE[currentStatus]}`}
-        >
-          {ORDER_STATUS_LABEL[currentStatus]}
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={`transition-transform duration-300 ${showActions ? "rotate-180" : ""}`}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-2 text-sm">
+          <span className="text-[var(--oc-muted3)]">Одоогийн төлөв</span>
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS_BTN_STYLE[currentStatus]}`}
           >
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-        </button>
+            {ORDER_STATUS_LABEL[currentStatus]}
+          </span>
+        </div>
 
-        {/* grid-template-rows 0fr→1fr trick — JS-ээр өндөр хэмжихгүйгээр
-            гөлгөр "гулсаж гарах/орох" анимаци. Дотор нь давхар wrapper
-            (overflow-hidden) заавал хэрэгтэй, эс бөгөөс шилжилтийн явцад
-            дотоод контент тайрагдахгүй харагдана. */}
-        <div
-          className={`grid transition-[grid-template-rows] duration-300 ease-out ${
-            showActions ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-          }`}
-        >
-          <div className="overflow-hidden">
-            <div
-              className={`flex flex-col gap-2 p-2 rounded-b-xl bg-white/[0.03] border border-t-0 border-[var(--oc-line)] transition-[opacity,transform] duration-300 ease-out ${
-                showActions ? "translate-y-0 opacity-100" : "-translate-y-2 opacity-0"
-              }`}
-            >
+        <div className="flex flex-col gap-2">
             {transitions.map((next) =>
               // Цуцлах нь буцаах боломжгүй тул эхлээд диалогоор баталгаажуулна.
               next === "CANCELLED" ? (
@@ -184,8 +144,6 @@ export function StatusControls({
           </ConfirmForm>
         ),
             )}
-            </div>
-          </div>
         </div>
       </div>
 

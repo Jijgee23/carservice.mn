@@ -59,6 +59,7 @@ import { findLockedPaymentIds } from "@/lib/cash/session-attach";
 import { bankRef } from "@/lib/payment-accounts";
 import { listPickerAccounts } from "@/lib/payment-account-service";
 import { StatusControls } from "./status-controls";
+import { formatDuration } from "@/lib/category-duration";
 import { OrderForm } from "../order-form";
 import { vehicleOwnerIsOrganization } from "@/lib/vehicles/owner-kind";
 
@@ -532,7 +533,7 @@ export default async function OrderDetailPage({
               хэдийн байгаа тул давхардана */}
           {allowedTransitions.length > 0 ? (
             <div id="order-status" className="scroll-mt-20 relative rounded-[10px] border border-[var(--oc-line)] bg-[var(--oc-panel)] p-5">
-              <h2 className="font-semibold text-[var(--oc-ink)] mb-4 text-sm">Статус</h2>
+              <h2 className="font-semibold text-[var(--oc-ink)] mb-4 text-sm">Төлөв</h2>
               <StatusControls
                 orderId={order.id}
                 transitions={allowedTransitions}
@@ -721,6 +722,18 @@ export default async function OrderDetailPage({
               {order.completedAt ? (
                 <Row label="Дууссан">
                   {order.completedAt.toLocaleString("mn-MN", { hour12: false })}
+                </Row>
+              ) : null}
+              {order.startedAt ? (
+                <Row label={order.completedAt ? "Нийт үргэлжилсэн" : "Үргэлжилж байна"}>
+                  {formatDuration(
+                    Math.max(
+                      0,
+                      Math.round(
+                        ((order.completedAt ?? new Date()).getTime() - order.startedAt.getTime()) / 60000,
+                      ),
+                    ),
+                  )}
                 </Row>
               ) : null}
               <div className="pt-2 border-t border-[var(--oc-line)]">

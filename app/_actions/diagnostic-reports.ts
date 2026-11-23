@@ -31,6 +31,7 @@ import {
   knownAuthorizationMessage,
   logUnexpectedActionError,
 } from "@/lib/action-errors";
+import { notifyDiagnosticReportCreated } from "@/lib/diagnostic-report-notify";
 import { UploadValidationError } from "@/lib/storage";
 import { assertActiveSubscription } from "@/lib/subscription-server";
 import { canFillDiagnostics, isOrderLocked, type OrderStatus } from "@/lib/orders";
@@ -269,6 +270,9 @@ export async function createReportAction(
   if (!committed.ok) {
     return { ok: false, message: commitFailureMessage(committed.code) };
   }
+
+  // Үйлчлүүлэгчийн апп руу push + мэдэгдлийн төв (best-effort).
+  await notifyDiagnosticReportCreated(committed.report.id);
   const reportId = committed.report.id;
   // Түгжээн дор уншсан захиалгын утга (preflight-аас өөрчлөгдсөн байж болно).
   customerId = committed.report.customerId;

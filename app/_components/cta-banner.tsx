@@ -11,7 +11,7 @@ export function CtaBanner() {
               Сервисээ дараагийн түвшинд гарга
             </h2>
             <p className="mt-3.5 max-w-[560px] text-[16px] leading-relaxed text-[var(--oc-muted)]">
-              Үндсэн багцаар үнэгүй эхлээрэй. Карт хэрэггүй, өсөхөөрөө багцаа ахиулна.
+              Үндсэн багцаар үнэгүй эхлээрэй — төлбөртэй багц бүрийг 30 хоног үнэгүй туршина. Карт хэрэггүй.
             </p>
           </div>
           <div className="flex flex-wrap shrink-0 gap-3">

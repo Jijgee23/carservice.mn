@@ -53,7 +53,7 @@ export function Hero() {
             <ButtonGhost href="#hows">Хэрхэн ажилладаг</ButtonGhost>
           </div>
           <div className="mt-7 text-[13px] text-[var(--oc-muted3)]">
-            Үндсэн багц үнэгүй · карт шаардахгүй
+            Үндсэн багц үнэгүй · Бизнес багц 30 хоног үнэгүй · карт шаардахгүй
           </div>
         </div>
 

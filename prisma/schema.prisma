@@ -1745,7 +1745,16 @@ model PlanLimit {
   @@index([plan, sortOrder])
 }
 
-// --- Subscription (тенант бүрийн багц, түүх + 14 хоногийн trial) ---------
+// --- PlanTrialSetting (багц бүрийн үнэгүй туршилт — super admin засна) ------
+
+model PlanTrialSetting {
+  plan      Plan     @id // BUSINESS / ENTERPRISE
+  enabled   Boolean  @default(true)
+  days      Int      @default(30)
+  updatedAt DateTime @updatedAt
+}
+
+// --- Subscription (тенант бүрийн багц, түүх + үнэгүй туршилт) ---------------
 
 enum SubscriptionStatus {
   TRIAL
@@ -1765,6 +1774,10 @@ model Subscription {
   amount      Decimal?  @db.Decimal(12, 2) // төлсөн дүн (заавал биш)
   notes       String?
   cancelledAt DateTime?
+
+  // Үнэгүй туршилтаар олгосон эсэх. status нь дараа нь EXPIRED болдог тул
+  // "энэ багцыг өмнө туршсан уу" гэдгийг энэ тэмдэглэгээгээр л мэднэ.
+  isTrial Boolean @default(false)
 
   // Хугацаа дуусах сануулга илгээсэн цаг — cron давхар илгээхээс сэргийлнэ.
   reminderSentAt DateTime?
@@ -2326,6 +2339,10 @@ model PlatformSetting {
   // үнэгүй (хэрэглэгч захиалахдаа QPay invoice-гүй, шууд захиална).
   appointmentFeeEnabled Boolean @default(true)
   appointmentFeeAmount  Decimal @default(1000) @db.Decimal(12, 2)
+
+  // Шинэ бүртгэлд автоматаар олгох үнэгүй туршилт (хугацаа нь PlanTrialSetting-ээс).
+  signupTrialEnabled Boolean @default(true)
+  signupTrialPlan    Plan    @default(BUSINESS)
 
   // Credit score-оор автомат блоклох (super admin): босгоос доош бол
   // HIDE = нийтээс нуух, SUSPEND = бүрэн түдгэлзүүлэх.

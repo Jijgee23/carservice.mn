@@ -16,6 +16,7 @@ import {
 } from "@/lib/subscription";
 import { planFeatureLines } from "@/lib/plan-modules";
 import { getEnabledModules } from "@/lib/plan-modules-server";
+import { getAvailableTrials } from "@/lib/plan-trials-server";
 import { PlanCheckout } from "./plan-checkout";
 
 export const metadata = {
@@ -31,7 +32,7 @@ export default async function SubscriptionPage() {
   const user = await requireUser();
   const isOwner = user.isOwner;
 
-  const [subscriptions, planPrices, pendingPayment, payments, businessModules] = await Promise.all([
+  const [subscriptions, planPrices, pendingPayment, payments, businessModules, trials] = await Promise.all([
     prisma.subscription.findMany({
       where: { tenantId: user.tenantId },
       orderBy: { createdAt: "desc" },
@@ -57,6 +58,8 @@ export default async function SubscriptionPage() {
     }),
     // QPay-ээр авах багц (BUSINESS)-ийн модулиуд — картын «юу багтсан» жагсаалт.
     getEnabledModules("BUSINESS"),
+    // Одоо эхлүүлж болох үнэгүй туршилтууд (багц бүр нэг удаа).
+    isOwner ? getAvailableTrials(user.tenantId) : Promise.resolve([]),
   ]);
 
   const active = resolveActiveSubscription(
@@ -87,9 +90,10 @@ export default async function SubscriptionPage() {
             <p className="text-xs text-[var(--oc-muted3)] mb-5">
               {pendingPayment
                 ? "QR-аар төлсний дараа багц автоматаар идэвхжинэ."
-                : "Бизнес багцыг сонгож QPay-ээр төлнө үү. Хугацаа дуусахад үнэгүй FREE багц руу шилжинэ."}
+                : "Бизнес багцыг сонгож QPay-ээр төлнө үү. Хугацаа дуусахад үнэгүй FREE багц руу шилжинэ. Багц бүр нэг удаа 30 хоног үнэгүй туршигдана."}
             </p>
             <PlanCheckout
+              trials={trials}
               prices={planPrices.map((p) => ({
                 id: p.id,
                 plan: p.plan,

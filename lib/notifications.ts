@@ -27,6 +27,7 @@ export const NOTIFICATION_TYPES = [
   "order_payment_received",
   "order_rescheduled",
   "order_assigned",
+  "diagnostic_report_created",
   "service_reminder",
   "appointment_rescheduled",
   "appointment_rescheduled_by_account",
@@ -66,6 +67,7 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   order_payment_received: "Төлбөр хүлээн авсан",
   order_rescheduled: "Товлосон огноо шилжсэн",
   order_assigned: "Засвар оноогдлоо",
+  diagnostic_report_created: "Оношилгооны тайлан",
   service_reminder: "Үйлчилгээний сануулга",
   appointment_rescheduled: "Цаг шилжсэн",
   appointment_rescheduled_by_account: "Хэрэглэгч цагаа шилжүүлсэн",
@@ -363,6 +365,21 @@ export const NOTIFICATION_REGISTRY: Record<NotificationType, NotificationDef> = 
       // байх ёстой тул dedupeKey ашиглахгүй.
     }),
     href: (d) => (d.orderId ? `/dashboard/orders/${d.orderId}` : "/dashboard/orders"),
+  },
+  // Ажилтан оношилгооны тайлан үүсгэхэд үйлчлүүлэгчийн апп руу (lib/diagnostic-report-notify.ts).
+  diagnostic_report_created: {
+    realm: "account",
+    build: (i) => ({
+      title: "Оношилгооны тайлан бэлэн боллоо",
+      body: i.body ?? "Таны машины оношилгооны тайланг үзнэ үү.",
+      data: {
+        type: "diagnostic_report_created",
+        reportId: i.reportId ?? "",
+        orderId: i.orderId ?? "",
+      },
+      dedupeKey: i.reportId ? `diagnostic_report_created:${i.reportId}` : undefined,
+    }),
+    href: (d) => (d.reportId ? `/account/diagnostics/${d.reportId}` : "/account/diagnostics"),
   },
   // Үйлчлүүлэгч дууссан засварт үнэлгээ өгсөн (lib/reviews.ts).
   review_received: {

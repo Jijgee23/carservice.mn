@@ -7,6 +7,7 @@ import {
   checkSubscriptionPaymentAction,
   createSubscriptionPaymentAction,
 } from "@/app/_actions/subscription-payments";
+import { type StartTrialState, startPlanTrialAction } from "@/app/_actions/plan-trials";
 import { ConfirmButton } from "@/app/_components/confirm-form";
 import { Btn } from "@/app/_components/landing-ops-ui";
 import { QPayBankGrid } from "@/app/_components/qpay-bank-grid";
@@ -40,31 +41,47 @@ export type PendingPayment = {
   period: "MONTH" | "QUARTER" | "YEAR";
 };
 
+/** Одоо эхлүүлж болох үнэгүй туршилтууд (багц бүр нэг удаа) — карт бүрийн үндсэн товч болно. */
+export type AvailableTrial = { plan: string; days: number };
+
 export function PlanCheckout({
   prices,
   pending,
+  trials = [],
 }: {
   prices: PlanPriceOption[];
   pending: PendingPayment | null;
+  trials?: AvailableTrial[];
 }) {
   if (pending) {
     return <QRPanel pending={pending} />;
   }
-  return <PlanList prices={prices} />;
+  return <PlanList prices={prices} trials={trials} />;
 }
 
-function PlanList({ prices }: { prices: PlanPriceOption[] }) {
+function PlanList({ prices, trials }: { prices: PlanPriceOption[]; trials: AvailableTrial[] }) {
   const toast = useToast();
   const [state, formAction, formPending] = useActionState<
     PaymentActionState,
     FormData
   >(createSubscriptionPaymentAction, null);
+  const [trialState, trialAction, trialPending] = useActionState<StartTrialState, FormData>(
+    startPlanTrialAction,
+    null,
+  );
+  const trialByPlan = new Map(trials.map((t) => [t.plan, t]));
 
   useEffect(() => {
     if (state?.message && !state.ok) {
       toast.error("Төлбөр үүсгэх боломжгүй", state.message);
     }
   }, [state, toast]);
+
+  useEffect(() => {
+    if (!trialState?.message) return;
+    if (trialState.ok) toast.success(trialState.message);
+    else toast.error(trialState.message);
+  }, [trialState, toast]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -113,19 +130,48 @@ function PlanList({ prices }: { prices: PlanPriceOption[] }) {
                 ))}
               </ul>
             ) : null}
-            <Btn type="submit" disabled={formPending} className="mt-auto w-full">
-              {formPending ? "Үүсгэж..." : "Багц авах"}
-            </Btn>
+            <input type="hidden" name="plan" value={p.plan} />
+            {trialByPlan.get(p.plan) ? (
+              <div className="mt-auto flex flex-col gap-2">
+                {/* formAction: энэ товч карт доторх төлбөрийн form-ыг биш туршилтын action-ыг дуудна. */}
+                <Btn type="submit" formAction={trialAction} disabled={trialPending || formPending} className="w-full">
+                  {trialPending ? "Эхлүүлж..." : `${trialByPlan.get(p.plan)!.days} хоног үнэгүй туршиж үзэх`}
+                </Btn>
+                <button
+                  type="submit"
+                  disabled={formPending || trialPending}
+                  className="text-xs text-[var(--oc-muted3)] hover:text-[var(--oc-ink2)] underline underline-offset-2 disabled:opacity-60"
+                >
+                  {formPending ? "Үүсгэж..." : "Эсвэл шууд багц авах"}
+                </button>
+              </div>
+            ) : (
+              <Btn type="submit" disabled={formPending} className="mt-auto w-full">
+                {formPending ? "Үүсгэж..." : "Багц авах"}
+              </Btn>
+            )}
           </form>
         ))}
-        <EnterpriseCard />
+        <EnterpriseCard
+          trial={trialByPlan.get("ENTERPRISE") ?? null}
+          trialAction={trialAction}
+          trialPending={trialPending}
+        />
       </div>
     </div>
   );
 }
 
 /** ENTERPRISE тогтсон үнэгүй — модулиудаа сонгоод үнийн санал авна (super admin хариу өгч олгоно). */
-function EnterpriseCard() {
+function EnterpriseCard({
+  trial,
+  trialAction,
+  trialPending,
+}: {
+  trial: AvailableTrial | null;
+  trialAction: (payload: FormData) => void;
+  trialPending: boolean;
+}) {
   return (
     <div className="rounded-[10px] border border-dashed border-[var(--oc-line)] bg-[var(--oc-panel2)] p-4 flex flex-col gap-3">
       <div>
@@ -140,12 +186,22 @@ function EnterpriseCard() {
         Сүлжээ, олон салбартай байгууллагад. Хэрэгтэй модулиудаа сонгоод үнийн
         санал аваарай — удахгүй тантай холбогдоно.
       </p>
-      <a
-        href="/dashboard/settings/subscription/quote"
-        className="mt-auto inline-flex w-full items-center justify-center rounded-lg border border-[var(--oc-line)] py-2 text-sm font-semibold text-[var(--oc-ink2)] hover:bg-[var(--oc-panel)]"
-      >
-        Үнийн санал авах
-      </a>
+      <div className="mt-auto flex flex-col gap-2">
+        {trial ? (
+          <form action={trialAction}>
+            <input type="hidden" name="plan" value="ENTERPRISE" />
+            <Btn type="submit" disabled={trialPending} className="w-full">
+              {trialPending ? "Эхлүүлж..." : `${trial.days} хоног үнэгүй туршиж үзэх`}
+            </Btn>
+          </form>
+        ) : null}
+        <a
+          href="/dashboard/settings/subscription/quote"
+          className="inline-flex w-full items-center justify-center rounded-lg border border-[var(--oc-line)] py-2 text-sm font-semibold text-[var(--oc-ink2)] hover:bg-[var(--oc-panel)]"
+        >
+          Үнийн санал авах
+        </a>
+      </div>
     </div>
   );
 }

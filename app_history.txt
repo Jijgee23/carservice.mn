@@ -2490,3 +2490,25 @@ BUG FIX: Ажилтны утас засахад буруу талбарт алд
 [2026-11-18] Прод deploy (0090c78) + docs/mobile-tasks.md
 - Хэрэглэгчийн зөвшөөрлөөр прод deploy: өмнө pg_dump (~/backups/carcare_pre_deploy_20261118_1445_64348f1.dump), дараа нь scripts/deploy.sh (nvm-тэй). 5 migration: role_delegation, tenant_editable_defaults, account_refresh_tokens, system_staff, tenant_photos.
 - docs/mobile-tasks.md: System / Tenant / Customer апп-уудын хийгдээгүй ажлууд + backend-ийн үлдсэн ажлууд.
+
+[2026-11-18] Мобайл (carcare_service_app): System realm нэвтрэлт нэгтгэсэн + System дэлгэцүүд
+- Репо C:\Users\jijge\Documents\GitHub\carcare_service_app (Flutter, tenant апп). Тусдаа апп биш — нэвтрэх карттай нэгтгэсэн: «Бүртгэлгүй» карт (зөвхөн имэйл) → «Системийн ажилтан уу? Нэвтрэх» → system/auth/login. Админ байгаа эсэхийг ил хэлэхгүй.
+- AuthController: AuthRealm {tenant, system}, LoginStep.systemPassword, startSystemLogin/loginSystem/_logoutSystem/updateSystemAdmin; loadUser system сесс сэргээнэ. Тусдаа токен: SystemSessionStore (Hive 'system_auth', JSON), SystemApiService + SystemTokenInterceptor (single-flight refresh, 401/403 → гарна, 429/5xx/сүлжээ → гаргахгүй).
+- Router: /system (харилцагчийн жагсаалт); system сесс /system-ээс гарахгүй, tenant сесс /system-д орохгүй.
+- lib/features/system/**: жагсаалт (хайлт, шүүлт, pagination), дэлгэрэнгүй (эзний SMS код, түр хаах/нээх), бүртгэх/засах форм (регистрээр хайлт, газрын зураг, зөвхөн өөрчилсөн талбарыг PATCH), нууц үг солих, миний бүртгэл (эрх).
+- Шалгалт: 135 шинэ тест (interceptor 10, auth controller 18, controllers 40, repository 14, screens 22, login+router 9, …); flutter analyze цэвэр; бүх тест +1851 -65, 65 алдаа нь өмнөх суурьтай яг ижил (router/notification, өмнөөс байсан), шинэ алдаа 0.
+- Тест 2 бодит UI алдаа илрүүлсэн: "SMS код илгээх" товчны шошго хальж байсан; shared ConfirmSheet-ийн confirm товч урт шошгыг 390dp дээр багтаахгүй (shared widget-ийг өөрчлөөгүй, шошгыг богиносгосон).
+
+## 2026-11-20 — Оношилгооны тайлан үүсэхэд мобайл апп руу мэдэгдэл
+- Шинэ төрөл `diagnostic_report_created` (account realm): тайлан хадгалагдмагц үйлчлүүлэгчийн (Customer.accountId) апп руу push + мэдэгдлийн төвд бичнэ. dedupeKey=reportId (давхар явахгүй).
+- `lib/diagnostic-report-notify.ts` (best-effort; walk-in, тест тенант, дотоод засварт илгээхгүй). Мобайл API `POST /diagnostics/reports` болон вэб `createReportAction` хоёрт commit амжилттай болсны дараа дуудна.
+- Deep link: `/account/diagnostics/{reportId}` (web href, notification-client-href, service worker); FCM data: type, reportId, orderId.
+- Шалгалт: tests/diagnostic-report-notification.test.ts 4/4, tsc цэвэр. Мобайл апп (Customer) талд data.type=diagnostic_report_created-г reportId-аар тайлан руу чиглүүлэх шаардлагатай.
+
+## 2026-11-20 — Багц бүрт үнэгүй туршилт (super admin тохируулдаг)
+- Migration 20261120100000_plan_trials: `PlanTrialSetting` (BUSINESS/ENTERPRISE: enabled, days=30), `PlatformSetting.signupTrialEnabled/signupTrialPlan`, `Subscription.isTrial` (өмнө туршсаныг EXPIRED болсон ч мэдэхийн тулд; хуучин TRIAL мөрүүдийг true болгосон).
+- `lib/plan-trials.ts`: `evaluateTrialEligibility` (pure), `grantTrial(tx, tenantId, plan, …)` — багц бүр нэг удаа, өмнөх TRIAL-ыг EXPIRED болгож, tenant.plan-ыг синк; идэвхтэй төлбөртэй багцыг хэзээ ч дарахгүй (force ч). `TRIAL_DAYS`=30, `trialEndDate(start, days)`.
+- Шинэ бүртгэл: `createTenantWithOwner` дотор signupTrialEnabled бол signupTrialPlan-ы туршилт автоматаар.
+- Super admin: /system/settings «Үнэгүй туршилт» карт (багц бүрийн асаах/хоног, бүртгэлийн туршилт) + «Одоогийн байгууллагуудад олгох» (preview → батлах, SystemAuditLog). `app/_actions/system-trials.ts`.
+- Байгууллага: Багц хуудсанд «Туршиж үзэх» товч; `POST /api/v1/subscription/trial`, `GET /api/v1/subscription` → `trialsAvailable`.
+- Шалгалт: tests/plan-trials.test.ts 5/5, tsc цэвэр. Прод deploy хийгээгүй; deploy-н өмнө pg_dump, cron (expire-subscriptions) хуваарь прод дээр байгааг шалгах. Одоогийн байгууллагуудад туршилт автоматаар олгогдохгүй — super admin «бүгдэд олгох» товчийг дарна.

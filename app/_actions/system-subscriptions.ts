@@ -59,7 +59,7 @@ export async function createSubscriptionAction(formData: FormData): Promise<void
 
   const startsAt = parseDate(startsAtRaw) ?? new Date();
   let endsAt = parseDate(endsAtRaw);
-  // TRIAL үед төгсгөл заавал — оруулаагүй бол 14 хоног нэмж тогтооно
+  // TRIAL үед төгсгөл заавал — оруулаагүй бол default (TRIAL_DAYS) хоног нэмж тогтооно
   if (status === "TRIAL" && !endsAt) {
     endsAt = trialEndDate(startsAt);
   }
@@ -82,6 +82,7 @@ export async function createSubscriptionAction(formData: FormData): Promise<void
         tenantId,
         plan: plan as "FREE" | "BUSINESS" | "ENTERPRISE",
         status: status as "TRIAL" | "ACTIVE",
+        isTrial: status === "TRIAL",
         startsAt,
         endsAt,
         amount,

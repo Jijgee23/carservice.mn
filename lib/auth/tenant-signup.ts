@@ -15,6 +15,7 @@ import {
   DEFAULT_INTAKE_TEMPLATE_SCHEMA,
 } from "@/lib/diagnostics";
 import { ensureCashAccount } from "@/lib/payment-accounts";
+import { grantTrial } from "@/lib/plan-trials";
 import { isValidPhone, normalizePhone } from "@/lib/phone";
 import { prisma, withBookingTransaction } from "@/lib/prisma";
 import { setBypassContext } from "@/lib/tenant-context";
@@ -315,7 +316,15 @@ export async function createTenantWithOwner(
         },
       });
 
-      // Subscription үүсгэхгүй: шинэ тенант үргэлж үнэгүй FREE багцтай эхэлнэ.
+      // Шинэ тенант FREE-ээр эхэлж, super admin асаасан бол бүртгэлийн үнэгүй туршилт
+      // (PlatformSetting.signupTrialPlan, хугацаа нь PlanTrialSetting) автоматаар олгогдоно.
+      const platform = await tx.platformSetting.findUnique({
+        where: { id: "default" },
+        select: { signupTrialEnabled: true, signupTrialPlan: true },
+      });
+      if (platform?.signupTrialEnabled ?? true) {
+        await grantTrial(tx, tenant.id, platform?.signupTrialPlan ?? "BUSINESS", { source: "signup" });
+      }
 
       // Үндсэн салбар — тенантын утсыг өвлүүлж, газрын зураг дээр тэмдэглэсэн
       // байршил (+ geocode-ийн хаяг). Ажлын цаг анхдагч 09:00–18:00, Даваа–Баасан.

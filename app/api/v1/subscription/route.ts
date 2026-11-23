@@ -18,7 +18,9 @@
 //     pendingPayment: { id, plan, period, amount, currency, qrImage, qrText,
 //                       urls, createdAt } | null,   // зөвхөн эзэмшигчид (бусдад null)
 //     payments: [{ id, plan, period, amount, method, status, createdAt, paidAt }],  // сүүлийн 50
-//     canManage: boolean                         // = isOwner (QPay төлөх, үнийн санал илгээх)
+//     canManage: boolean,                        // = isOwner (QPay төлөх, үнийн санал илгээх)
+//     trialsAvailable: [{ plan, days }]          // одоо эхлүүлж болох үнэгүй туршилтууд
+//                                                // (POST /api/v1/subscription/trial)
 //   }
 //   Алдаа: 401.
 
@@ -27,6 +29,7 @@ import type { Plan } from "@/app/generated/prisma/enums";
 import { MODULE_LIMIT_CODES, PLAN_LIMIT_META } from "@/lib/plan-limits";
 import { planFeatureLines } from "@/lib/plan-modules";
 import { getEnabledModules } from "@/lib/plan-modules-server";
+import { getAvailableTrials } from "@/lib/plan-trials-server";
 import { prisma } from "@/lib/prisma";
 import { BILLING_PERIOD_LABEL, SELF_SERVE_PLANS } from "@/lib/subscription";
 import { toSubscriptionQPayPaymentDto } from "@/lib/subscription-payments";
@@ -119,5 +122,6 @@ export async function GET(req: Request) {
     pendingPayment: pending ? toSubscriptionQPayPaymentDto(pending) : null,
     payments: payments.map((p) => ({ ...p, amount: p.amount.toString() })),
     canManage: isOwner,
+    trialsAvailable: await getAvailableTrials(tenantId),
   });
 }

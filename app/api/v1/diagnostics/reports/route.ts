@@ -20,6 +20,7 @@ import {
   commitDiagnosticReportCommand,
   type DiagnosticReportCommitFailureCode,
 } from "@/lib/diagnostic-report-commit";
+import { notifyDiagnosticReportCreated } from "@/lib/diagnostic-report-notify";
 import { canFillDiagnostics, isOrderLocked, type OrderStatus } from "@/lib/orders";
 import { UploadValidationError } from "@/lib/storage";
 import { requireActiveSubscriptionApi } from "@/lib/subscription-server";
@@ -316,6 +317,9 @@ export async function POST(req: Request) {
     (result) => result.ok,
   );
   if (!committed.ok) return commitFailureResponse(committed.code);
+
+  // Үйлчлүүлэгчийн апп руу push + мэдэгдлийн төв (best-effort).
+  await notifyDiagnosticReportCreated(committed.report.id);
 
   return jsonOk({ report: committed.report }, { status: 201 });
 }

@@ -58,8 +58,12 @@ export function isSelfServePlan(plan: Plan): boolean {
   return SELF_SERVE_PLANS.includes(plan);
 }
 
-// Super admin-ий гараар олгох туршилтын (TRIAL) default хугацаа.
-export const TRIAL_DAYS = 14;
+// Үнэгүй туршилтын (TRIAL) default хугацаа — багц бүрийн бодит хугацааг
+// super admin PlanTrialSetting-ээр тохируулна (lib/plan-trials.ts).
+export const TRIAL_DAYS = 30;
+
+// Үнэгүй туршиж болох (төлбөртэй) багцууд.
+export const TRIALABLE_PLANS: readonly Plan[] = ["BUSINESS", "ENTERPRISE"];
 
 // Идэвхтэй subscription дуусахад ийм өдрөөс цөөн үлдвэл "удахгүй дуусна"
 // сэрэмжлүүлэг харуулна.
@@ -134,10 +138,12 @@ export type ActiveSubscriptionInfo = {
   expiresAt: Date | null;
 };
 
-export function trialEndDate(startsAt: Date = new Date()): Date {
-  const end = new Date(startsAt);
-  end.setDate(end.getDate() + TRIAL_DAYS);
-  return end;
+export function trialEndDate(
+  startsAt: Date = new Date(),
+  days: number = TRIAL_DAYS,
+): Date {
+  // Улаанбаатар DST-гүй тул 24 цагаар нэмнэ (серверийн цагийн бүсээс үл хамаарна).
+  return new Date(startsAt.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
 /**

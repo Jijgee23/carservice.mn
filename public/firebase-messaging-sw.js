@@ -52,6 +52,8 @@ function hrefForNotificationData(data) {
     case "appointment_reminder":
     case "appointment_expired":
       return d.appointmentId ? `/account/appointments/${d.appointmentId}` : "/account";
+    case "diagnostic_report_created":
+      return d.reportId ? `/account/diagnostics/${d.reportId}` : "/account/diagnostics";
     case "feedback_replied_account":
     case "broadcast_account":
       return "/account/notifications";
