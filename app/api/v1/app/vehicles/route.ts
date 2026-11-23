@@ -2,7 +2,8 @@ import { Prisma } from "@/app/generated/prisma/client";
 import { jsonError, jsonOk } from "@/lib/api";
 import { getApiAccountFromRequest } from "@/lib/auth/account-api-token";
 import { prisma } from "@/lib/prisma";
-import { customerOwnershipFilters, resolveVehicleForOwner } from "@/lib/vehicles";
+import { isNoPlate } from "@/lib/vehicle-plate";
+import { customerOwnershipFilters, isValidVin, resolveVehicleForOwner } from "@/lib/vehicles";
 
 // GET /api/v1/app/vehicles — миний машинууд (auth).
 export async function GET(req: Request) {
@@ -102,6 +103,18 @@ export async function POST(req: Request) {
   }
   if (!plate || !make || !model) {
     return jsonError(400, "plate, make, model шаардлагатай.");
+  }
+  // Улсын дугааргүй (гаальтай, транзит) машин: plate = NO_PLATE тэмдэг, VIN-ээр
+  // ялгана — staff талын createVehicle-тэй (lib/vehicles/vehicle-commands.ts) адил.
+  if (isNoPlate(plate)) {
+    if (!vin) {
+      const message = "Улсын дугааргүй машинд арлын дугаар (VIN) заавал.";
+      return jsonError(400, message, { code: "VIN_REQUIRED", fieldErrors: { vin: message } });
+    }
+    if (!isValidVin(vin)) {
+      const message = "VIN 17 тэмдэгт эсвэл Япон рамын дугаар (9–14 тэмдэгт) байна.";
+      return jsonError(400, message, { code: "VIN_INVALID", fieldErrors: { vin: message } });
+    }
   }
   let year: number | null = null;
   if (b.year != null && b.year !== "") {

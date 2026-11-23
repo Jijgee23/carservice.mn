@@ -29,6 +29,13 @@ export async function GET(request: Request) {
       longitude: branch.lng,
       serviceKeyIds: branch.serviceKeyIds,
       tags: branch.tags,
+      // Вэбийн /discover, /book-ийн картуудтай адил: одоо нээлттэй эсэх
+      // (Asia/Ulaanbaatar), өнөөдрийн цаг, утас (салбарын, эс бөгөөс байгууллагын).
+      open: branch.open,
+      hours: branch.hours,
+      phone: branch.phone ?? organization.phone ?? null,
+      // Бүтэн хаяг (хот, дүүрэг, хороо, гудамж) — вэбийн /book картын адил.
+      address: branch.address,
       ...(branch.distanceKm == null ? {} : { distanceKm: branch.distanceKm }),
     })),
   }));

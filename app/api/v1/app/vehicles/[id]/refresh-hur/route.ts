@@ -2,6 +2,7 @@ import { jsonError, jsonOk } from "@/lib/api";
 import { getApiAccountFromRequest } from "@/lib/auth/account-api-token";
 import { prisma } from "@/lib/prisma";
 import { refreshVehicleFieldsFromHur } from "@/lib/vehicle-hur-refresh";
+import { isNoPlate } from "@/lib/vehicle-plate";
 
 // POST /api/v1/app/vehicles/[id]/refresh-hur — миний машины мэдээллийг
 // HUR-аас гар аргаар дахин татах (auth). `id` = AccountVehicle link id
@@ -19,6 +20,9 @@ export async function POST(
     select: { vehicle: { select: { id: true, plate: true } } },
   });
   if (!link) return jsonError(404, "Машин олдсонгүй.");
+  if (isNoPlate(link.vehicle.plate)) {
+    return jsonError(422, "Улсын дугааргүй машиныг ХУР-аас шинэчлэх боломжгүй.", { code: "NO_PLATE" });
+  }
 
   const result = await refreshVehicleFieldsFromHur(link.vehicle.id, link.vehicle.plate);
   if (!result.ok) {
