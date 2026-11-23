@@ -1,5 +1,4 @@
 import { enforceRateLimit, jsonOk, PUBLIC_CATALOG_RATE_LIMIT } from "@/lib/api";
-import { bookableServiceKeyWhere } from "@/lib/bookable-service-keys";
 import { prisma } from "@/lib/prisma";
 import { setBypassContext } from "@/lib/tenant-context";
 
@@ -12,11 +11,11 @@ export async function GET(req: Request) {
   const limited = enforceRateLimit(req, "public-catalog", PUBLIC_CATALOG_RATE_LIMIT);
   if (limited) return limited;
   setBypassContext();
-  // Онлайн захиалга авдаг газарт байхгүй түлхүүрийг ШҮҮНЭ ГАРГАНА — сонговол
-  // баталгаатай хоосон салбарын жагсаалт буцаах сонголтыг харуулахгүй (харах:
-  // web-ийн app/(app)/discover/page.tsx-ийн ижил шийдвэр).
+  // Web /book-тэй (app/(app)/book/page.tsx) ЯГ ижил жагсаалт: системийн бүх
+  // идэвхтэй ажлын төрөл. Апп ч мөн бүх нийтийн газрыг харуулж, онлайн захиалга
+  // авдаггүйг «Дэлгэрэнгүй»-тэй гаргадаг (/api/v1/app/orgs, includeNonBookable).
   const serviceKeys = await prisma.systemServiceKey.findMany({
-    where: await bookableServiceKeyWhere(),
+    where: { isActive: true },
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });

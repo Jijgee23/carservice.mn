@@ -68,7 +68,5 @@ test("discovery search and mobile key list honour tenant-selected service types"
   assert.match(catalog, /\.\.\.tenant\.serviceKeys\.map\(\(key\) => key\.id\)/);
   assert.match(catalog, /\{ serviceKeys: \{ some: \{ isActive: true, name: \{ contains: filters\.query/);
   assert.match(read("app/(app)/discover/page.tsx"), /\.\.\.t\.serviceKeys\.map\(\(k\) => k\.name\)/);
-  const mobile = read("lib/bookable-service-keys.ts");
-  assert.match(mobile, /\{ tenants: \{ some: bookableTenant \} \}/);
-  assert.match(read("app/api/v1/app/service-keys/route.ts"), /where: await bookableServiceKeyWhere\(\),/);
+  assert.match(read("app/api/v1/app/service-keys/route.ts"), /where: \{ isActive: true \},/);
 });

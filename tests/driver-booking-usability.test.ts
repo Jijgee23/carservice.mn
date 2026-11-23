@@ -56,13 +56,11 @@ test("booking fee and the payment window are shown before submitting", () => {
 
 // 2026-11-17: web /book нь системийн БҮХ төрлийг харуулдаг болсон (захиалга
 // авдаггүй газрыг «Дэлгэрэнгүй»-тэй гаргана — tests/tenant-service-keys.test.ts).
-// Mobile нь зөвхөн онлайн захиалга авдаг газрыг харуулдаг тул шүүлт хэвээр.
-test("mobile work chips come only from shops that take online bookings", () => {
-  const helper = read("lib/bookable-service-keys.ts");
-  assert.match(helper, /acceptsOnlineBooking: true,\s*plan: \{ in: allowedPlans \}/);
-  assert.match(helper, /\.\.\.PUBLIC_TENANT_WHERE/);
-  assert.match(helper, /\.\.\.BOOKABLE_CATEGORY_WHERE/);
-  assert.match(read("app/api/v1/app/service-keys/route.ts"), /where: await bookableServiceKeyWhere\(\),/);
+// 2026-11-23: mobile ч бүх нийтийн газрыг харуулдаг болсон тул ажлын төрлийн
+// жагсаалт нь web /book-тэй яг ижил.
+test("mobile work chips use the same list as web /book (all active system types)", () => {
+  assert.match(read("app/(app)/book/page.tsx"), /where: \{ isActive: true \},/);
+  assert.match(read("app/api/v1/app/service-keys/route.ts"), /where: \{ isActive: true \},/);
   assert.match(read("app/(app)/book/booking-flow.tsx"), /serviceKeys\.length === 0 \?/);
 });
 
